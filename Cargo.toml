@@ -1,0 +1,41 @@
+[package]
+name = "nour"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "High-performance Bitcoin SV toolkit for transactions, scripts, P2P, and wallets"
+repository = "https://github.com/murphsicles/nour"
+keywords = ["bitcoin-sv", "blockchain", "crypto", "transactions", "p2p"]
+categories = ["cryptography", "network-programming"]
+readme = "README.md"
+
+[dependencies]
+bitcoin_hashes = "0.35" # Required for SHA256/Hash160
+secp256k1 = { version = "0.30", features = ["rand-std", "global-context"] } # ECDSA
+base58 = "0.2" # Address encoding
+hex = "0.4" # Hex encoding
+log = "0.4" # Logging
+rand = "0.8" # Key generation, nonces
+murmur3 = "0.5" # Required for bloom filters
+num-bigint = "0.4" # Big int arithmetic
+num-traits = "0.2" # Numeric traits for num-bigint
+snowflake = "0.1" # Retain for IDs
+tokio = { version = "1.40", features = ["net", "rt"], optional = true } # Async P2P
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] } # Benchmarks
+cargo-fuzz = "0.12" # Fuzzing
+rand = "0.8" # Test utilities
+pretty_assertions = "1.4.0" # Enhanced assertions
+
+[features]
+async = ["tokio"] # Enable async P2P
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
