@@ -5,19 +5,13 @@ use std::time::SystemTime;
 #[allow(dead_code)]
 mod bits;
 mod bloom_filter;
-#[allow(dead_code)]
-mod future;
-#[allow(dead_code)]
 pub mod hash160;
 mod hash256;
-#[allow(dead_code)]
-mod latch;
 mod result;
 pub mod rx;
 mod serdes;
 pub(crate) mod var_int;
 
-// Original: pub(crate) use self::bits::{lshift, rshift, Bits};
 pub(crate) use self::bits::{lshift, rshift};
 
 #[allow(dead_code)]
