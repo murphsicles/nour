@@ -12,7 +12,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// Specifies the minimum transaction fee this node accepts.
 ///
 /// Typically ~250 sats/1000 bytes (0.25 sats/byte) on standard BSV nodes, or as low as
-/// 10 sats/1000 bytes (0.01 sats/byte) with Teranode for high-throughput apps.
+/// 10 sats/1000 bytes (0.01 sats/byte) with Galaxy or Teranode for high-throughput apps.
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct FeeFilter {
     /// Minimum fee accepted by the node in satoshis per 1000 bytes.
