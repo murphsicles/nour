@@ -12,7 +12,7 @@ use std::time::UNIX_EPOCH;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Protocol version supported by this library (BSV standard).
-pub const PROTOCOL_VERSION: u32 = 70015;
+pub const PROTOCOL_VERSION: u32 = 70016;
 
 /// Minimum protocol version supported by this library.
 pub const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = 70001;
