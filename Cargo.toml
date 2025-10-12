@@ -1,6 +1,6 @@
 [package]
 name = "nour"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 license = "MIT"
 description = "High-performance Bitcoin SV toolkit for transactions, scripts, P2P, and wallets"
