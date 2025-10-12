@@ -15,9 +15,9 @@ secp256k1 = { version = "0.31.1", features = ["rand-std", "global-context"] } # 
 base58 = "0.2.0" # Address encoding
 hex = "0.4.3" # Hex encoding
 log = "0.4.28" # Logging
-rand = "0.8" # Key generation, nonces
-murmur3 = "0.5" # Required for bloom filters
-num-bigint = "0.4" # Big int arithmetic
+rand = "0.9.2" # Key generation, nonces
+murmur3 = "0.5.2" # Required for bloom filters
+num-bigint = "0.4.6" # Big int arithmetic
 num-traits = "0.2" # Numeric traits for num-bigint
 snowflake = "0.1" # Retain for IDs
 tokio = { version = "1.40", features = ["net", "rt"], optional = true } # Async P2P
