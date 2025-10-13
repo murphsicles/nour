@@ -1,21 +1,21 @@
-//! Script opcodes and interpreter for Bitcoin SV.
-//!
-//! Supports building and evaluating transaction scripts with checkers for validation.
-//! Aligned with BSV consensus (pre-Genesis rules via flags).
-//!
-//! # Examples
-//!
-//! Evaluate a script that divides two numbers:
-//! ```
-//! use nour::script::{op_codes::*, Script, TransactionlessChecker, NO_FLAGS};
-//!
-//! let mut script = Script::new();
-//! script.append(OP_10);
-//! script.append(OP_5);
-//! script.append(OP_DIV);
-//!
-//! script.eval(&mut TransactionlessChecker::default(), NO_FLAGS).unwrap();
-//! ```
+/// Script opcodes and interpreter for Bitcoin SV.
+///
+/// Supports building and evaluating transaction scripts with checkers for validation.
+/// Aligned with BSV consensus (pre-Genesis rules via flags).
+///
+/// # Examples
+///
+/// Evaluate a script that divides two numbers:
+/// ```
+/// use nour::script::{op_codes::*, Script, TransactionlessChecker, NO_FLAGS};
+///
+/// let mut script = Script::new();
+/// script.append(OP_10);
+/// script.append(OP_5);
+/// script.append(OP_DIV);
+///
+/// script.eval(&mut TransactionlessChecker::default(), NO_FLAGS).unwrap();
+/// ```
 
 use crate::script::op_codes::*;
 use crate::util::Result;
