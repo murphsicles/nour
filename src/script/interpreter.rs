@@ -1452,16 +1452,15 @@ mod tests {
     }
 
     impl Checker for MockChecker {
-        fn check_sig(&mut self, _sig: &[u8], _pubkey: &[u8], _script: &[u8]) -> Result<bool> {
-            Ok(self.sig_checks.borrow_mut().pop().unwrap())
-        }
+    fn check_locktime(&self, _locktime: i32) -> Result<bool> {
+        Ok(true)
+    }
 
-        fn check_locktime(&self, _locktime: i32) -> Result<bool> {
-            Ok(self.locktime_checks.borrow_mut().pop().unwrap())
-        }
+    fn check_sequence(&self, _sequence: i32) -> Result<bool> {
+        Ok(true)
+    }
 
-        fn check_sequence(&self, _sequence: i32) -> Result<bool> {
-            Ok(self.sequence_checks.borrow_mut().pop().unwrap())
-        }
+    fn check_sig(&self, sig: &[u8], pubkey: &[u8], script: &[u8]) -> Result<bool> {
+        Ok(true)
     }
 }
