@@ -3,7 +3,7 @@
 use crate::messages::{Block, BlockHeader, OutPoint, Tx, TxIn, TxOut};
 use crate::network::SeedIter;
 use crate::script::Script;
-use crate::util::{Result, Hash256};
+use crate::util::{Error, Hash256, Result};
 use hex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -169,7 +169,7 @@ impl NetworkConfig {
     pub fn addr_script_flag(&self) -> u8 {
         match self.network {
             Network::Mainnet => 0x05,
-            Network::Testnet => 0x c4,
+            Network::Testnet => 0xc4,
             Network::STN => 0xc4,
         }
     }
