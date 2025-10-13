@@ -1,14 +1,14 @@
-//! Script opcodes for Bitcoin SV consensus execution.
+/// Script opcodes for Bitcoin SV consensus execution.
 ///
 /// Constants grouped by category, matching BIP-16/34/65/68/112/143 and BSV Genesis upgrades (e.g., OP_CAT re-enabled).
-//!
-//! Use in interpreter: `match op { OP_IF => ..., _ => err }`.
-//!
-//! # Examples
-//! ```
-//! use nour::script::op_codes::*;
-//! assert_eq!(OP_IF, 99);
-//! ```
+///
+/// Use in interpreter: `match op { OP_IF => ..., _ => err }`.
+///
+/// # Examples
+/// ```
+/// use nour::script::op_codes::*;
+/// assert_eq!(OP_IF, 99);
+/// ```
 
 // Pushdata and Constants
 /// Pushes empty array (0/false) onto the stack.
