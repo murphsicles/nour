@@ -20,7 +20,7 @@ murmur3 = "0.5.2" # Required for bloom filters
 num-bigint = "0.4.6" # Big int arithmetic
 num-traits = "0.2.19" # Numeric traits for num-bigint
 snowflake = "1.3.0" # Retain for IDs
-tokio = { version = "1.47.1", features = ["net", "rt"], optional = true } # Async P2P
+tokio = { version = "1.48.0", features = ["net", "rt"], optional = true } # Async P2P
 
 [dev-dependencies]
 criterion = { version = "0.7.0", features = ["html_reports"] } # Benchmarks
