@@ -23,7 +23,7 @@ snowflake = "1.3.0" # Retain for IDs
 tokio = { version = "1.48.0", features = ["net", "rt"], optional = true } # Async P2P
 byteorder = "1.5.0" # LE/BE read/write
 linked_hash_map = "0.5.4" # LinkedHashMap for tx validation
-dns_lookup = "1.0.8" # DNS seed resolution
+dns-lookup = "3.0.1" # DNS seed resolution
 ripemd = "0.1.3" # Ripemd160 for script
 
 [dev-dependencies]
