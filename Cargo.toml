@@ -10,8 +10,8 @@ categories = ["cryptography", "network-programming"]
 readme = "README.md"
 
 [dependencies]
-bitcoin_hashes = "0.16.0" # Required for SHA256/Hash160
-secp256k1 = { version = "0.29.1", features = ["rand-std", "global-context"] } # ECDSA
+bitcoin_hashes = "0.17.0" # Required for SHA256/Hash160
+secp256k1 = { version = "0.31.1", features = ["rand-std", "global-context"] } # ECDSA
 base58 = "0.2.0" # Address encoding
 hex = "0.4.3" # Hex encoding
 log = "0.4.28" # Logging
