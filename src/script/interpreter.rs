@@ -3,7 +3,8 @@
 use crate::script::{op_codes::*, stack::*, Checker};
 use crate::transaction::sighash::SIGHASH_FORKID;
 use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
-use bitcoin_hashes::{ripemd160 as bh_ripemd160, sha1 as bh_sha1, sha256 as bh_sha256, Hash as BHHash};
+use std::cell::RefCell;
+use bitcoin_hashes::{sha1 as bh_sha1, sha256 as bh_sha256, ripemd160 as bh_ripemd160};
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 use std::borrow::Cow;
@@ -106,7 +107,7 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
             OP_TOALTSTACK => {
                 check_stack_size(1, &stack)?;
                 alt_stack.push_back(stack.pop_back().unwrap());
-                666
+            }
             OP_FROMALTSTACK => {
                 check_stack_size(1, &alt_stack)?;
                 stack.push_back(alt_stack.pop_back().unwrap());
@@ -679,7 +680,6 @@ fn check_multisig<T: Checker>(
     for _ in 0..total {
         keys.push(stack.pop_back().unwrap().into_owned());
     }
-
     let required = pop_num(stack)?;
     if required < 0 || required > total {
         let msg = "required out of range".to_string();
@@ -690,17 +690,14 @@ fn check_multisig<T: Checker>(
     for _ in 0..required {
         sigs.push(stack.pop_back().unwrap().into_owned());
     }
-
     check_stack_size(1, stack)?;
     stack.pop_back();
-
     let mut cleaned_script = script.to_vec();
     for sig in &sigs {
         if prefork(sig) {
             cleaned_script = remove_sig(sig, &cleaned_script);
         }
     }
-
     let mut key = 0;
     let mut sig = 0;
     while sig < sigs.len() {
@@ -810,7 +807,6 @@ mod tests {
     use crate::util::Hash256;
     use pretty_assertions::assert_eq;
     use hex;
-
     #[test]
     fn test_op_push() {
         let mut s = Script::new();
@@ -882,7 +878,7 @@ fn encode_bigint(n: BigInt) -> Vec<u8> {
 }
 
 #[inline]
-fn decode_bigint(v: &mut Vec<u8>) -> BigInt {
+fn decode_bigint(v: &mut [u8]) -> BigInt {
     // ... (implementation omitted for brevity)
     BigInt::zero()
 }
@@ -895,7 +891,7 @@ fn pop_num(stack: &mut VecDeque<Cow<[u8]>>) -> Result<i32> {
 }
 
 #[inline]
-fn decode_num(v: &mut Vec<u8>) -> Result<i32> {
+fn decode_num(v: &mut [u8]) -> Result<i32> {
     // ... (implementation omitted for brevity)
     Ok(0)
 }
