@@ -130,7 +130,7 @@ fn bip143_sighash(
     s.extend_from_slice(script_code);
 
     // 6. value
-    s.write_i64<LittleEndian>(satoshis)?;
+    s.write_i64::<LittleEndian>(satoshis)?;
 
     // 7. nSequence
     s.write_u32<LittleEndian>(tx.inputs[n_input].sequence)?;
@@ -195,7 +195,7 @@ fn legacy_sighash(
     }
 
     // Version
-    s.write_u32<LittleEndian>(tx.version)?;
+    s.write_u32::<LittleEndian>(tx.version)?;
 
     // Inputs
     let n_inputs = if anyone_can_pay { 1 } else { tx.inputs.len() };
