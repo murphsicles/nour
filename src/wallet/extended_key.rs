@@ -3,7 +3,7 @@
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
 use base58::{ToBase58, FromBase58};
-use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash, hmac::HmacEngine, hmac::Hmac}; // Use bitcoin_hashes for HMAC_SHA512
+use bitcoin_hashes::hmac::{Hmac, HmacEngine, Mac}; // Use bitcoin_hashes for HMAC_SHA512
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use std::io::{self, Read, Write};
 use std::fmt;
@@ -141,9 +141,9 @@ impl ExtendedKey {
         hmac_input.extend_from_slice(&index.to_be_bytes());
 
         let chain_code = self.chain_code();
-        let mut hmac_engine = HmacEngine::<sha256d::Hash>::new(&chain_code);
+        let mut hmac_engine = HmacEngine::<sha512::Hash>::new(&chain_code);
         hmac_engine.update(&hmac_input);
-        let result = hmac_engine.finalize().into_inner();
+        let result = hmac_engine.finalize().into_bytes();
         if result.len() != 64 {
             return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
         }
