@@ -11,7 +11,7 @@ readme = "README.md"
 
 [dependencies]
 bitcoin_hashes = "0.17.0" # Required for SHA256/Hash160
-secp256k1 = { version = "0.31.1", features = ["rand-std", "global-context"] } # ECDSA
+secp256k1 = { version = "0.31.1", features = ["rand", "global-context"] } # ECDSA
 base58 = "0.2.0" # Address encoding
 hex = "0.4.3" # Hex encoding
 log = "0.4.28" # Logging
@@ -21,6 +21,10 @@ num-bigint = "0.4.6" # Big int arithmetic
 num-traits = "0.2.19" # Numeric traits for num-bigint
 snowflake = "1.3.0" # Retain for IDs
 tokio = { version = "1.48.0", features = ["net", "rt"], optional = true } # Async P2P
+byteorder = "1.5.0" # LE/BE read/write
+linked_hash_map = "0.5.4" # LinkedHashMap for tx validation
+dns_lookup = "1.0.8" # DNS seed resolution
+ripemd = "0.1.3" # Ripemd160 for script
 
 [dev-dependencies]
 criterion = { version = "0.7.0", features = ["html_reports"] } # Benchmarks
