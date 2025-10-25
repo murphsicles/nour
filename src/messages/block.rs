@@ -1,9 +1,8 @@
 //! Block message for Bitcoin SV P2P, with validation for consensus.
-
 use crate::messages::{BlockHeader, OutPoint, Payload, Tx, TxOut};
 use crate::network::Network;
 use crate::util::{
-    sha256d, var_int, Error, Hash256, Result, Serializable, BITCOIN_CASH_FORK_HEIGHT_MAINNET,
+    var_int, Error, Hash256, Result, Serializable, BITCOIN_CASH_FORK_HEIGHT_MAINNET,
     BITCOIN_CASH_FORK_HEIGHT_TESTNET, GENESIS_UPGRADE_HEIGHT_MAINNET,
     GENESIS_UPGRADE_HEIGHT_TESTNET,
 };
@@ -12,14 +11,11 @@ use linked_hash_map::LinkedHashMap;
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::io;
-use std::io::{Read, Write};
-
+use std::io::{Cursor, Read, Write};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Default max transactions in block. (100 Billion)
 const MAX_TXNS_COUNT: usize = 100_000_000_000;
-
 /// Block of transactions.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct Block {
@@ -28,7 +24,6 @@ pub struct Block {
     /// Block transactions.
     pub txns: Vec<Tx>,
 }
-
 impl Block {
     /// Returns a set of the inputs spent in this block.
     ///
@@ -47,7 +42,6 @@ impl Block {
         }
         Ok(inputs)
     }
-
     /// Returns a map of the new outputs generated from this block including those spent within the block.
     pub fn outputs(&self) -> LinkedHashMap<OutPoint, TxOut> {
         let mut outputs = LinkedHashMap::new();
@@ -59,7 +53,6 @@ impl Block {
         }
         outputs
     }
-
     /// Checks that the block is valid.
     ///
     /// # Errors
@@ -80,7 +73,6 @@ impl Block {
         if self.merkle_root() != self.header.merkle_root {
             return Err(Error::BadData("Bad merkle root".to_string()));
         }
-
         let mut has_coinbase = false;
         let require_sighash_forkid = match network {
             Network::Mainnet => height >= BITCOIN_CASH_FORK_HEIGHT_MAINNET,
@@ -112,7 +104,6 @@ impl Block {
         }
         Ok(())
     }
-
     /// Calculates the merkle root from the transactions.
     #[must_use]
     pub fn merkle_root(&self) -> Hash256 {
@@ -141,7 +132,6 @@ impl Block {
         row.pop_front().unwrap()
     }
 }
-
 impl Serializable<Block> for Block {
     fn read(reader: &mut dyn Read) -> Result<Block> {
         let header = BlockHeader::read(reader)?;
@@ -155,7 +145,6 @@ impl Serializable<Block> for Block {
         }
         Ok(Block { header, txns })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         self.header.write(writer)?;
         var_int::write(self.txns.len() as u64, writer)?;
@@ -165,7 +154,6 @@ impl Serializable<Block> for Block {
         Ok(())
     }
 }
-
 #[cfg(feature = "async")]
 impl AsyncSerializable<Block> for Block {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<Block> {
@@ -180,7 +168,6 @@ impl AsyncSerializable<Block> for Block {
         }
         Ok(Block { header, txns })
     }
-
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         self.header.write_async(writer).await?;
         var_int::write_async(self.txns.len() as u64, writer).await?;
@@ -190,13 +177,11 @@ impl AsyncSerializable<Block> for Block {
         Ok(())
     }
 }
-
 impl Payload<Block> for Block {
     fn size(&self) -> usize {
         BlockHeader::SIZE + var_int::size(self.txns.len() as u64) + self.txns.iter().map(Tx::size).sum::<usize>()
     }
 }
-
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.txns.len() <= 3 {
@@ -213,7 +198,6 @@ impl fmt::Debug for Block {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,7 +207,6 @@ mod tests {
     use hex;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn read_bytes() {
         let b = hex::decode("010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd610101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d010bffffffff0100f2052a010000004341047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77ac00000000").unwrap();
@@ -268,7 +251,6 @@ mod tests {
             }
         );
     }
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
