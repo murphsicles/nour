@@ -2,16 +2,13 @@
 ///
 /// Supports legacy (pre-2017) and BIP-143 (post-fork with forkid) algorithms.
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
-
 use crate::messages::{OutPoint, Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
 use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
 use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash}; // SIMD opt
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io::Write;
-
 const FORK_ID: u32 = 0; // 24-bit BSV fork ID
-
 /// Signs all outputs.
 pub const SIGHASH_ALL: u8 = 0x01;
 /// Signs no outputs (anyone spend).
@@ -22,7 +19,6 @@ pub const SIGHASH_SINGLE: u8 = 0x03;
 pub const SIGHASH_ANYONECANPAY: u8 = 0x80;
 /// BSV/BCH fork flag (post-2017).
 pub const SIGHASH_FORKID: u8 = 0x40;
-
 /// Computes sighash digest for signing.
 ///
 /// Uses BIP-143 if FORKID set, legacy otherwise.
@@ -50,7 +46,6 @@ pub fn sighash(
         legacy_sighash(tx, n_input, script_code, sighash_type)
     }
 }
-
 /// Cache for sighash intermediates (prevouts/sequences/outputs).
 ///
 /// Reuse for multi-sig in same tx (O(1) after first).
@@ -60,7 +55,6 @@ pub struct SigHashCache {
     hash_sequence: Option<Hash256>,
     hash_outputs: Option<Hash256>,
 }
-
 impl SigHashCache {
     /// Creates a new empty cache.
     #[must_use]
@@ -68,7 +62,6 @@ impl SigHashCache {
         Self::default()
     }
 }
-
 /// BIP-143 sighash (post-2017, forkid).
 ///
 /// Serializes: version | hash_prevouts/sequence | outpoint | script | value | sequence | hash_outputs | locktime | type|FORK_ID<<8.
@@ -86,14 +79,11 @@ fn bip143_sighash(
     if n_input >= tx.inputs.len() {
         return Err(Error::BadArgument("Input index out of range".to_string()));
     }
-
     let mut s = Vec::with_capacity(200); // Est for small tx
     let base_type = sighash_type & 0x1f;
     let anyone_can_pay = sighash_type & SIGHASH_ANYONECANPAY != 0;
-
     // 1. nVersion
     s.write_u32::<LittleEndian>(tx.version)?;
-
     // 2. hashPrevouts
     if !anyone_can_pay {
         if cache.hash_prevouts.is_none() {
@@ -107,7 +97,6 @@ fn bip143_sighash(
     } else {
         s.extend_from_slice(&[0u8; 32]);
     }
-
     // 3. hashSequence
     if !anyone_can_pay && base_type != SIGHASH_SINGLE && base_type != SIGHASH_NONE {
         if cache.hash_sequence.is_none() {
@@ -121,20 +110,15 @@ fn bip143_sighash(
     } else {
         s.extend_from_slice(&[0u8; 32]);
     }
-
     // 4. outpoint
     tx.inputs[n_input].prev_output.write(&mut s)?;
-
     // 5. scriptCode len + code
     var_int::write(script_code.len() as u64, &mut s)?;
     s.extend_from_slice(script_code);
-
     // 6. value
     s.write_i64::<LittleEndian>(satoshis)?;
-
     // 7. nSequence
-    s.write_u32<LittleEndian>(tx.inputs[n_input].sequence)?;
-
+    s.write_u32::<LittleEndian>(tx.inputs[n_input].sequence)?;
     // 8. hashOutputs
     if base_type != SIGHASH_SINGLE && base_type != SIGHASH_NONE {
         if cache.hash_outputs.is_none() {
@@ -156,18 +140,13 @@ fn bip143_sighash(
     } else {
         s.extend_from_slice(&[0u8; 32]);
     }
-
     // 9. nLockTime
-    s.write_u32<LittleEndian>(tx.lock_time)?;
-
+    s.write_u32::<LittleEndian>(tx.lock_time)?;
     // 10. sighash_type
-    s.write_u32<LittleEndian>(((FORK_ID as u32) << 8) | (sighash_type as u32))?;
-
+    s.write_u32::<LittleEndian>(((FORK_ID as u32) << 8) | (sighash_type as u32))?;
     Ok(sha256d(&s))
 }
-
 /// Legacy sighash (pre-2017).
-
 /// Serializes modified tx copy: version | inputs (sub_script or empty, seq=0 for NONE/SINGLE) | outputs (truncated/empty) | locktime | type.
 fn legacy_sighash(
     tx: &Tx,
@@ -178,11 +157,9 @@ fn legacy_sighash(
     if n_input >= tx.inputs.len() {
         return Err(Error::BadArgument("Input index out of range".to_string()));
     }
-
     let mut s = Vec::with_capacity(tx.size());
     let base_type = sighash_type & 0x1f;
     let anyone_can_pay = sighash_type & SIGHASH_ANYONECANPAY != 0;
-
     // Sub-script (remove OP_CODESEPARATOR)
     let mut sub_script = Vec::with_capacity(script_code.len());
     let mut i = 0;
@@ -193,10 +170,8 @@ fn legacy_sighash(
         }
         i = next;
     }
-
     // Version
     s.write_u32::<LittleEndian>(tx.version)?;
-
     // Inputs
     let n_inputs = if anyone_can_pay { 1 } else { tx.inputs.len() };
     var_int::write(n_inputs as u64, &mut s)?;
@@ -216,7 +191,6 @@ fn legacy_sighash(
             break;
         }
     }
-
     // Outputs
     let tx_out_list = if base_type == SIGHASH_NONE {
         vec![]
@@ -237,16 +211,12 @@ fn legacy_sighash(
             out.write(&mut s)?;
         }
     }
-
     // Locktime
-    s.write_u32<LittleEndian>(tx.lock_time)?;
-
+    s.write_u32::<LittleEndian>(tx.lock_time)?;
     // Sighash type
-    s.write_u32<LittleEndian>(sighash_type as u32)?;
-
+    s.write_u32::<LittleEndian>(sighash_type as u32)?;
     Ok(sha256d(&s))
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,7 +225,6 @@ mod tests {
     use crate::transaction::p2pkh;
     use hex;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn bip143_sighash_test() -> Result<()> {
         let lock_script = hex::decode("76a91402b74813b047606b4b3fbdfb1a6e8e053fdb8dab88ac")?;
@@ -296,7 +265,6 @@ mod tests {
         assert!(cache.hash_outputs.is_some());
         Ok(())
     }
-
     #[test]
     fn legacy_sighash_test() -> Result<()> {
         let lock_script = hex::decode("76a914d951eb562f1ff26b6cbe89f04eda365ea6bd95ce88ac")?;
