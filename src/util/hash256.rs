@@ -34,7 +34,7 @@ impl Hash256 {
         Ok(Hash256(hash_bytes))
     }
 }
-impl Serializable for Hash256 {
+impl Serializable<Hash256> for Hash256 {
     fn read(reader: &mut dyn Read) -> Result<Hash256> {
         let mut bytes = [0; 32];
         reader.read_exact(&mut bytes).map_err(|e| Error::IOError(e))?;
