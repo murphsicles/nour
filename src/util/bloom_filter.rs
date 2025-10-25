@@ -1,16 +1,19 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
+
 use crate::util::{var_int, Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use murmur3::murmur3_32;
-use rand::{thread_rng, RngCore, Rng};
+use rand::{RngCore, Rng};
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
 use std::num::Wrapping;
+
 /// Maximum number of bytes in the bloom filter bit field.
 pub const BLOOM_FILTER_MAX_FILTER_SIZE: usize = 36_000;
 /// Maximum number of hash functions for the bloom filter.
 pub const BLOOM_FILTER_MAX_HASH_FUNCS: usize = 50;
+
 /// Bloom filter used by SPV nodes to limit transactions received.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct BloomFilter {
@@ -21,6 +24,7 @@ pub struct BloomFilter {
     /// Random tweak to generate the hash functions.
     pub tweak: u32,
 }
+
 impl BloomFilter {
     /// Creates a new bloom filter.
     ///
@@ -44,13 +48,14 @@ impl BloomFilter {
         let size = (-1.0 / ln2.powi(2) * insert * pr_false_pos.ln()) / 8.0;
         let size = size.min(BLOOM_FILTER_MAX_FILTER_SIZE as f64).ceil() as usize;
         let num_hash_funcs = ((size as f64 * 8.0 / insert * ln2).min(BLOOM_FILTER_MAX_HASH_FUNCS as f64)).ceil() as usize;
-        let tweak = rand::thread_rng().gen::<u32>();
+        let tweak = rand::thread_rng().r#gen::<u32>();
         Ok(BloomFilter {
             filter: vec![0; size],
             num_hash_funcs,
             tweak,
         })
     }
+
     /// Adds data to the bloom filter.
     ///
     /// # Errors
@@ -66,6 +71,7 @@ impl BloomFilter {
         }
         Ok(())
     }
+
     /// Probabilistically checks if the bloom filter contains the data.
     ///
     /// False positives possible, but no false negatives.
@@ -80,6 +86,7 @@ impl BloomFilter {
         }
         true
     }
+
     /// Validates the bloom filter against max size/funcs.
     ///
     /// # Errors
@@ -94,29 +101,35 @@ impl BloomFilter {
         Ok(())
     }
 }
-impl Serializable for BloomFilter {
+
+impl Serializable<BloomFilter> for BloomFilter {
     fn read(reader: &mut dyn Read) -> Result<BloomFilter> {
         let filter_len = var_int::read(reader)? as usize;
         if filter_len > BLOOM_FILTER_MAX_FILTER_SIZE {
             return Err(Error::BadData("Filter too long".to_string()));
         }
         let mut filter = vec![0; filter_len];
-        reader.read_exact(&mut filter)?;
-        let num_hash_funcs = reader.read_u32::<LittleEndian>()? as usize;
+        reader.read_exact(&mut filter).map_err(|e| Error::IOError(e))?;
+        let mut num_hash_funcs = [0u8; 4];
+        reader.read_exact(&mut num_hash_funcs).map_err(|e| Error::IOError(e))?;
+        let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         if num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
             return Err(Error::BadData("Too many hash funcs".to_string()));
         }
-        let tweak = reader.read_u32::<LittleEndian>()?;
+        let mut tweak = [0u8; 4];
+        reader.read_exact(&mut tweak).map_err(|e| Error::IOError(e))?;
+        let tweak = u32::from_le_bytes(tweak);
         Ok(BloomFilter { filter, num_hash_funcs, tweak })
     }
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         var_int::write(self.filter.len() as u64, writer)?;
         writer.write_all(&self.filter)?;
-        writer.write_u32::<LittleEndian>(self.num_hash_funcs as u32)?;
-        writer.write_u32::<LittleEndian>(self.tweak)?;
+        writer.write_all(&(self.num_hash_funcs as u32).to_le_bytes())?;
+        writer.write_all(&self.tweak.to_le_bytes())?;
         Ok(())
     }
 }
+
 impl fmt::Debug for BloomFilter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("BloomFilter")
@@ -126,6 +139,7 @@ impl fmt::Debug for BloomFilter {
             .finish()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
