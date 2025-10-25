@@ -11,16 +11,12 @@ use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash};
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Checksum to use when there is an empty payload.
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
-
 /// Max message payload size (4GB for BSV post-Genesis).
 pub const MAX_PAYLOAD_SIZE: u64 = 0x100000000; // 4GB
-
 /// Bitcoin peer-to-peer message with its payload.
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Message {
@@ -50,7 +46,6 @@ pub enum Message {
     Verack,
     Version(Version),
 }
-
 impl Message {
     /// Reads a Bitcoin P2P message with its payload from bytes.
     ///
@@ -73,7 +68,6 @@ impl Message {
             }
         }
     }
-
     /// Reads the complete message given a message header.
     ///
     /// # Errors
@@ -103,31 +97,29 @@ impl Message {
                 }
             };
         }
-
-        read_payload!(commands::ADDR, Message::Addr);
-        read_payload!(commands::BLOCK, Message::Block);
-        read_payload!(commands::FEEFILTER, Message::FeeFilter);
-        read_payload!(commands::FILTERADD, Message::FilterAdd, validate);
+        read_payload!(commands::ADDR, Addr);
+        read_payload!(commands::BLOCK, Block);
+        read_payload!(commands::FEEFILTER, FeeFilter);
+        read_payload!(commands::FILTERADD, FilterAdd, validate);
         read_payload!(commands::FILTERCLEAR, FilterClear);
-        read_payload!(commands::FILTERLOAD, Message::FilterLoad, validate);
+        read_payload!(commands::FILTERLOAD, FilterLoad, validate);
         read_payload!(commands::GETADDR, GetAddr);
-        read_payload!(commands::GETBLOCKS, Message::GetBlocks);
-        read_payload!(commands::GETDATA, Message::GetData);
-        read_payload!(commands::GETHEADERS, Message::GetHeaders);
-        read_payload!(commands::HEADERS, Message::Headers);
-        read_payload!(commands::INV, Message::Inv);
+        read_payload!(commands::GETBLOCKS, BlockLocator);
+        read_payload!(commands::GETDATA, Inv);
+        read_payload!(commands::GETHEADERS, BlockLocator);
+        read_payload!(commands::HEADERS, Headers);
+        read_payload!(commands::INV, Inv);
         read_payload!(commands::MEMPOOL, Mempool);
-        read_payload!(commands::MERKLEBLOCK, Message::MerkleBlock);
-        read_payload!(commands::NOTFOUND, Message::NotFound);
-        read_payload!(commands::PING, Message::Ping);
-        read_payload!(commands::PONG, Message::Pong);
-        read_payload!(commands::REJECT, Message::Reject);
-        read_payload!(commands::SENDCMPCT, Message::SendCmpct);
+        read_payload!(commands::MERKLEBLOCK, MerkleBlock);
+        read_payload!(commands::NOTFOUND, Inv);
+        read_payload!(commands::PING, Ping);
+        read_payload!(commands::PONG, Ping);
+        read_payload!(commands::REJECT, Reject);
+        read_payload!(commands::SENDCMPCT, SendCmpct);
         read_payload!(commands::SENDHEADERS, SendHeaders);
-        read_payload!(commands::TX, Message::Tx);
+        read_payload!(commands::TX, Tx);
         read_payload!(commands::VERACK, Verack);
-        read_payload!(commands::VERSION, Message::Version, validate);
-
+        read_payload!(commands::VERSION, Version, validate);
         if header.payload_size > 0 {
             header.payload(reader)?;
         }
@@ -135,7 +127,6 @@ impl Message {
             .map_err(|_| Error::BadData("Invalid command string".to_string()))?;
         Ok(Message::Other(command))
     }
-
     /// Writes a Bitcoin P2P message with its payload to bytes.
     ///
     /// # Errors
@@ -149,7 +140,6 @@ impl Message {
                 write_without_payload(writer, $cmd, magic)
             };
         }
-
         match self {
             Message::Addr(p) => write_payload!(commands::ADDR, p),
             Message::Block(p) => write_payload!(commands::BLOCK, p),
@@ -181,7 +171,6 @@ impl Message {
             Message::Version(v) => write_payload!(commands::VERSION, v),
         }
     }
-
     #[cfg(feature = "async")]
     async fn write_async(&self, writer: &mut dyn AsyncWrite, magic: [u8; 4]) -> io::Result<()> {
         macro_rules! write_payload {
@@ -192,7 +181,6 @@ impl Message {
                 write_without_payload_async(writer, $cmd, magic).await
             };
         }
-
         match self {
             Message::Addr(p) => write_payload!(commands::ADDR, p),
             Message::Block(p) => write_payload!(commands::BLOCK, p),
@@ -225,7 +213,6 @@ impl Message {
         }
     }
 }
-
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -267,7 +254,6 @@ impl fmt::Debug for Message {
         }
     }
 }
-
 fn write_without_payload(writer: &mut dyn Write, command: [u8; 12], magic: [u8; 4]) -> io::Result<()> {
     let header = MessageHeader {
         magic,
@@ -277,7 +263,6 @@ fn write_without_payload(writer: &mut dyn Write, command: [u8; 12], magic: [u8; 
     };
     header.write(writer)
 }
-
 fn write_with_payload<T: Serializable<T>>(
     writer: &mut dyn Write,
     command: [u8; 12],
@@ -288,18 +273,15 @@ fn write_with_payload<T: Serializable<T>>(
     payload.write(&mut bytes)?;
     let hash = bh_sha256d::Hash::hash(&bytes).to_byte_array();
     let checksum = [hash[0], hash[1], hash[2], hash[3]];
-
     let header = MessageHeader {
         magic,
         command,
         payload_size: payload.size() as u32,
         checksum,
     };
-
     header.write(writer)?;
-    payload.write(writer)
+    writer.write_all(&bytes)
 }
-
 #[cfg(feature = "async")]
 async fn write_without_payload_async(
     writer: &mut dyn AsyncWrite,
@@ -314,7 +296,6 @@ async fn write_without_payload_async(
     };
     header.write_async(writer).await
 }
-
 #[cfg(feature = "async")]
 async fn write_with_payload_async<T: Serializable<T>>(
     writer: &mut dyn AsyncWrite,
@@ -326,107 +307,89 @@ async fn write_with_payload_async<T: Serializable<T>>(
     payload.write(&mut bytes)?;
     let hash = bh_sha256d::Hash::hash(&bytes).to_byte_array();
     let checksum = [hash[0], hash[1], hash[2], hash[3]];
-
     let header = MessageHeader {
         magic,
         command,
         payload_size: payload.size() as u32,
         checksum,
     };
-
     header.write_async(writer).await?;
-    payload.write_async(writer).await
+    writer.write_all(&bytes).await
 }
-
 /// Message payload that is writable to bytes.
 pub trait Payload<T>: Serializable<T> + fmt::Debug {
     fn size(&self) -> usize;
 }
-
 impl From<Addr> for Message {
     fn from(p: Addr) -> Self {
         Message::Addr(p)
     }
 }
-
 impl From<Block> for Message {
     fn from(p: Block) -> Self {
         Message::Block(p)
     }
 }
-
 impl From<FeeFilter> for Message {
     fn from(p: FeeFilter) -> Self {
         Message::FeeFilter(p)
     }
 }
-
 impl From<FilterAdd> for Message {
     fn from(p: FilterAdd) -> Self {
         Message::FilterAdd(p)
     }
 }
-
 impl From<FilterLoad> for Message {
     fn from(p: FilterLoad) -> Self {
         Message::FilterLoad(p)
     }
 }
-
 impl From<BlockLocator> for Message {
     fn from(p: BlockLocator) -> Self {
         Message::GetBlocks(p)
     }
 }
-
 impl From<Inv> for Message {
     fn from(p: Inv) -> Self {
         Message::Inv(p)
     }
 }
-
 impl From<Headers> for Message {
     fn from(p: Headers) -> Self {
         Message::Headers(p)
     }
 }
-
 impl From<MerkleBlock> for Message {
     fn from(p: MerkleBlock) -> Self {
         Message::MerkleBlock(p)
     }
 }
-
 impl From<Ping> for Message {
     fn from(p: Ping) -> Self {
         Message::Ping(p)
     }
 }
-
 impl From<Reject> for Message {
     fn from(p: Reject) -> Self {
         Message::Reject(p)
     }
 }
-
 impl From<SendCmpct> for Message {
     fn from(p: SendCmpct) -> Self {
         Message::SendCmpct(p)
     }
 }
-
 impl From<Tx> for Message {
     fn from(p: Tx) -> Self {
         Message::Tx(p)
     }
 }
-
 impl From<Version> for Message {
     fn from(p: Version) -> Self {
         Message::Version(p)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,11 +400,9 @@ mod tests {
     use std::net::Ipv6Addr;
     use std::time::UNIX_EPOCH;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn write_read() {
         let magic = [7, 8, 9, 0];
-
         // Addr
         let mut v = Vec::new();
         let a = NodeAddrEx {
@@ -456,7 +417,6 @@ mod tests {
         let m = Message::Addr(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Block
         let mut v = Vec::new();
         let p = Block {
@@ -510,27 +470,23 @@ mod tests {
         let m = Message::Block(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // FeeFilter
         let mut v = Vec::new();
         let p = FeeFilter { minfee: 1234 };
         let m = Message::FeeFilter(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // FilterAdd
         let mut v = Vec::new();
         let p = FilterAdd { data: vec![15; 45] };
         let m = Message::FilterAdd(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // FilterClear
         let mut v = Vec::new();
         let m = Message::FilterClear;
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // FilterLoad
         let mut v = Vec::new();
         let p = FilterLoad {
@@ -544,13 +500,11 @@ mod tests {
         let m = Message::FilterLoad(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // GetAddr
         let mut v = Vec::new();
         let m = Message::GetAddr;
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // GetBlocks
         let mut v = Vec::new();
         let p = BlockLocator {
@@ -561,7 +515,6 @@ mod tests {
         let m = Message::GetBlocks(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // GetData
         let mut v = Vec::new();
         let p = Inv {
@@ -573,7 +526,6 @@ mod tests {
         let m = Message::GetData(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // GetHeaders
         let mut v = Vec::new();
         let p = BlockLocator {
@@ -584,7 +536,6 @@ mod tests {
         let m = Message::GetHeaders(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Headers
         let mut v = Vec::new();
         let p = Headers {
@@ -595,13 +546,11 @@ mod tests {
         let m = Message::Headers(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Mempool
         let mut v = Vec::new();
         let m = Message::Mempool;
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // MerkleBlock
         let mut v = Vec::new();
         let p = MerkleBlock {
@@ -624,7 +573,6 @@ mod tests {
         let m = Message::MerkleBlock(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // NotFound
         let mut v = Vec::new();
         let p = Inv {
@@ -636,7 +584,6 @@ mod tests {
         let m = Message::NotFound(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Inv
         let mut v = Vec::new();
         let p = Inv {
@@ -648,21 +595,18 @@ mod tests {
         let m = Message::Inv(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Ping
         let mut v = Vec::new();
         let p = Ping { nonce: 7890 };
         let m = Message::Ping(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Pong
         let mut v = Vec::new();
         let p = Ping { nonce: 7890 };
         let m = Message::Pong(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Reject
         let mut v = Vec::new();
         let p = Reject {
@@ -674,20 +618,17 @@ mod tests {
         let m = Message::Reject(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // SendHeaders
         let mut v = Vec::new();
         let m = Message::SendHeaders;
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // SendCmpct
         let mut v = Vec::new();
         let p = SendCmpct { enable: 1, version: 1 };
         let m = Message::SendCmpct(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Tx
         let mut v = Vec::new();
         let p = Tx {
@@ -709,13 +650,11 @@ mod tests {
         let m = Message::Tx(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Verack
         let mut v = Vec::new();
         let m = Message::Verack;
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
-
         // Version
         let mut v = Vec::new();
         let p = Version {
@@ -733,14 +672,12 @@ mod tests {
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
     }
-
     #[test]
     fn write_other_errors() {
         let mut v = Vec::new();
         let m = Message::Other("Unknown message".to_string());
         assert!(m.write(&mut v, [7, 8, 9, 0]).is_err());
     }
-
     #[test]
     fn read_other() {
         let magic = [7, 8, 9, 0];
