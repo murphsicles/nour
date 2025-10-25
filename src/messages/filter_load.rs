@@ -1,21 +1,17 @@
 //! FilterLoad message for Bitcoin SV P2P, setting bloom filters (BIP-37).
-
 use crate::messages::message::Payload;
-use crate::util::{var_int, BloomFilter, Result, Serializable};
+use crate::util::{var_int, BloomFilter, Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Filter is not adjusted when a match is found.
 pub const BLOOM_UPDATE_NONE: u8 = 0;
 /// Filter is updated to include the serialized outpoint if any data elements matched in its script pubkey.
 pub const BLOOM_UPDATE_ALL: u8 = 1;
 /// Filter is updated similar to BLOOM_UPDATE_ALL but only for P2PK or multisig transactions.
 pub const BLOOM_UPDATE_P2PUBKEY_ONLY: u8 = 2;
-
 /// Loads a bloom filter using the specified parameters.
 #[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FilterLoad {
@@ -24,7 +20,6 @@ pub struct FilterLoad {
     /// Flags controlling how matched items are added to the filter (0-2).
     pub flags: u8,
 }
-
 impl FilterLoad {
     /// Returns whether the FilterLoad message is valid.
     ///
@@ -38,7 +33,6 @@ impl FilterLoad {
         Ok(())
     }
 }
-
 impl Serializable<FilterLoad> for FilterLoad {
     fn read(reader: &mut dyn Read) -> Result<FilterLoad> {
         let num_filters = var_int::read(reader)?;
@@ -60,7 +54,6 @@ impl Serializable<FilterLoad> for FilterLoad {
             flags,
         })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         var_int::write(self.bloom_filter.filter.len() as u64, writer)?;
         writer.write_all(&self.bloom_filter.filter)?;
@@ -70,7 +63,6 @@ impl Serializable<FilterLoad> for FilterLoad {
         Ok(())
     }
 }
-
 #[cfg(feature = "async")]
 impl AsyncSerializable<FilterLoad> for FilterLoad {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<FilterLoad> {
@@ -93,7 +85,6 @@ impl AsyncSerializable<FilterLoad> for FilterLoad {
             flags,
         })
     }
-
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         var_int::write_async(self.bloom_filter.filter.len() as u64, writer).await?;
         writer.write_all(&self.bloom_filter.filter).await?;
@@ -103,20 +94,17 @@ impl AsyncSerializable<FilterLoad> for FilterLoad {
         Ok(())
     }
 }
-
 impl Payload<FilterLoad> for FilterLoad {
     fn size(&self) -> usize {
         var_int::size(self.bloom_filter.filter.len() as u64) + self.bloom_filter.filter.len() + 9
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn read_bytes() {
         let b = hex::decode("02b50f0b0000000000000001").unwrap();
@@ -126,7 +114,6 @@ mod tests {
         assert_eq!(f.bloom_filter.tweak, 0);
         assert_eq!(f.flags, BLOOM_UPDATE_ALL);
     }
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
@@ -142,7 +129,6 @@ mod tests {
         assert_eq!(v.len(), p.size());
         assert_eq!(FilterLoad::read(&mut Cursor::new(&v)).unwrap(), p);
     }
-
     #[test]
     fn validate() {
         let p = FilterLoad {
@@ -154,7 +140,6 @@ mod tests {
             flags: BLOOM_UPDATE_ALL,
         };
         assert!(p.validate().is_ok());
-
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 36001], // Exceeds max
@@ -164,7 +149,6 @@ mod tests {
             flags: BLOOM_UPDATE_ALL,
         };
         assert_eq!(p.validate().unwrap_err().to_string(), "Filter too long");
-
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
@@ -174,7 +158,6 @@ mod tests {
             flags: BLOOM_UPDATE_ALL,
         };
         assert_eq!(p.validate().unwrap_err().to_string(), "Too many hash funcs");
-
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
