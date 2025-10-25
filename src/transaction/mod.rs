@@ -1,5 +1,4 @@
 //! Transaction building and signing for Bitcoin SV.
-
 ///
 /// Supports P2PKH/P2SH, sighash computation (BIP-143 + forkid), and ECDSA signing.
 ///
@@ -13,8 +12,8 @@
 ///
 /// // Use real values
 /// let mut tx = Tx {
-///     inputs: vec![TxIn { ..Default::default() }],
-///     ..Default::default()
+/// inputs: vec![TxIn { ..Default::default() }],
+/// ..Default::default()
 /// };
 /// let private_key = [1; 32];
 /// let public_key = [1; 33];
@@ -28,10 +27,8 @@
 /// ```
 pub mod p2pkh;
 pub mod sighash;
-
-use crate::util::{Hash256, Result};
+use crate::util::{Error, Hash256, Result};
 use secp256k1::{ecdsa::{Signature, SerializedSignature}, Message, PublicKey, Secp256k1, SecretKey};
-
 /// Generates DER-encoded ECDSA signature for sighash + type.
 ///
 /// Normalizes S (low); errors on invalid key.
@@ -42,7 +39,7 @@ use secp256k1::{ecdsa::{Signature, SerializedSignature}, Message, PublicKey, Sec
 #[inline]
 pub fn generate_signature(private_key: &[u8; 32], sighash: &Hash256, sighash_type: u8) -> Result<Vec<u8>> {
     let secp = Secp256k1::signing_only();
-    let secret_key = SecretKey::from_slice(private_key).map_err(|_| Error::ScriptError("Invalid private key".to_string()))?;
+    let secret_key = SecretKey::from_slice(private_key).map_err(|_| Error::BadData("Invalid private key".to_string()))?;
     let message = Message::from_digest(&sighash.0);
     let mut signature = secp.sign_ecdsa(&message, &secret_key);
     signature.normalize_s();
