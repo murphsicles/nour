@@ -14,6 +14,7 @@
 /// Pushes empty array (0/false) onto the stack.
 pub const OP_0: u8 = 0;
 pub const OP_FALSE: u8 = 0;
+pub const OP_PUSH: u8 = 0;
 
 /// Offset to push n bytes (n: 1-75).
 pub const OP_PUSHBYTES_1_TO_75: u8 = 1; // OP_PUSH implicit
