@@ -1,6 +1,6 @@
 //! Network address for Bitcoin SV P2P node discovery.
 
-use crate::util::{Result, Serializable};
+use crate::util::{Error, Result, Serializable};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
