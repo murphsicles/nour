@@ -1,6 +1,6 @@
 # 💡 Nour
 
-A Rust library for building Bitcoin SV (BSV) applications and infrastructure, providing robust tools for P2P networking, address handling, transaction processing, script evaluation, node connections, and wallet management. Nour is optimized for BSV’s massive on-chain scaling, supporting millionss of transactions per second (TPS) with async networking, efficient cryptography (via `bitcoin_hashes`), and compatibility with Galaxy’s high-throughput capabilities.
+A Rust library for building Bitcoin SV (BSV) applications and infrastructure, providing robust tools for P2P networking, address handling, transaction processing, script evaluation, node connections, and wallet management. Nour is optimized for BSV’s massive on-chain scaling, supporting millions of transactions per second (TPS) with async networking, efficient cryptography, and compatibility with Galaxy’s high-throughput capabilities.
 
 [![Crates.io](https://img.shields.io/crates/v/nour.svg)](https://crates.io/crates/nour)
 [![Documentation](https://docs.rs/nour/badge.svg)](https://docs.rs/nour/)
