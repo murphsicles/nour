@@ -18,7 +18,7 @@
 /// ```
 
 use crate::script::op_codes::*;
-use crate::util::Result;
+use crate::util::{Error, Result};
 use hex;
 use std::fmt;
 
@@ -65,7 +65,7 @@ impl Script {
         match len {
             0 => self.0.push(OP_0),
             1..=75 => {
-                self.0.push(OP_PUSH as u8 + len as u8);
+                self.0.push(len as u8);
                 self.0.extend_from_slice(data);
             }
             76..=255 => {
