@@ -1,14 +1,16 @@
 //! Script interpreter for Bitcoin SV consensus evaluation.
-
 use crate::script::{op_codes::*, stack::*, Checker};
 use crate::transaction::sighash::SIGHASH_FORKID;
 use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
+use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::cell::RefCell;
 use bitcoin_hashes::{sha1 as bh_sha1, sha256 as bh_sha256, ripemd160 as bh_ripemd160};
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
-use std::borrow::Cow;
-use std::collections::VecDeque;
+
+const STACK_CAPACITY: usize = 1000;
+const ALT_STACK_CAPACITY: usize = 1000;
 
 /// Execute the script with genesis rules
 pub const NO_FLAGS: u32 = 0x00;
@@ -531,7 +533,6 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
                 }
             }
             OP_NUM2BIN => {
-                check_stack_size(2, &stack)?;
                 let m = pop_bigint(&mut stack)?;
                 let mut n = stack.pop_back().unwrap().into_owned();
                 if m < BigInt::one() {
@@ -563,7 +564,6 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
                 stack.push_back(v.into());
             }
             OP_BIN2NUM => {
-                check_stack_size(1, &stack)?;
                 let mut v = stack.pop_back().unwrap().into_owned();
                 v.reverse();
                 let n = decode_bigint(&mut v);
@@ -572,9 +572,7 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
             OP_RIPEMD160 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().unwrap();
-                let mut ripemd = bh_ripemd160::Hash::engine();
-                ripemd.update(v.as_ref());
-                let h = ripemd.finalize().to_byte_array();
+                let h = bh_ripemd160::Hash::hash(v.as_ref()).to_byte_array();
                 stack.push_back(h.to_vec().into());
             }
             OP_SHA1 => {
@@ -663,7 +661,6 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
     }
     Ok(())
 }
-
 #[inline]
 fn check_multisig<T: Checker>(
     stack: &mut VecDeque<Cow<[u8]>>,
@@ -711,12 +708,10 @@ fn check_multisig<T: Checker>(
     }
     Ok(sig == required as usize)
 }
-
 #[inline]
 fn prefork(sig: &[u8]) -> bool {
     sig.len() > 0 && sig[sig.len() - 1] & SIGHASH_FORKID == 0
 }
-
 #[inline]
 fn remove_sig(sig: &[u8], script: &[u8]) -> Vec<u8> {
     if sig.is_empty() {
@@ -737,7 +732,6 @@ fn remove_sig(sig: &[u8], script: &[u8]) -> Vec<u8> {
     result.extend_from_slice(&script[start..]);
     result
 }
-
 #[inline]
 fn check_stack_size(minsize: usize, stack: &VecDeque<Cow<[u8]>>) -> Result<()> {
     if stack.len() < minsize {
@@ -746,7 +740,6 @@ fn check_stack_size(minsize: usize, stack: &VecDeque<Cow<[u8]>>) -> Result<()> {
     }
     Ok(())
 }
-
 #[inline]
 fn remains(i: usize, len: usize, script: &[u8]) -> Result<()> {
     if i + len > script.len() {
@@ -755,7 +748,6 @@ fn remains(i: usize, len: usize, script: &[u8]) -> Result<()> {
         Ok(())
     }
 }
-
 /// Gets the next operation index in the script, or the script length if at the end
 pub fn next_op(i: usize, script: &[u8]) -> usize {
     if i >= script.len() {
@@ -782,7 +774,6 @@ pub fn next_op(i: usize, script: &[u8]) -> usize {
         _ => i + 1,
     }
 }
-
 /// Skips the current branch to the matching ELSE or ENDIF.
 fn skip_branch(script: &[u8], mut i: usize) -> usize {
     let mut depth = 0;
@@ -799,12 +790,94 @@ fn skip_branch(script: &[u8], mut i: usize) -> usize {
     }
     script.len()
 }
-
+fn encode_num(n: i64) -> Result<Vec<u8>> {
+    if n == 0 {
+        return Ok(vec![]);
+    }
+    let mut abs_n = n.abs() as u64;
+    let negative = n < 0;
+    let mut result = vec![];
+    while abs_n > 0 {
+        result.push((abs_n & 0xff) as u8);
+        abs_n >>= 8;
+    }
+    if result.last().unwrap() & 0x80 != 0 {
+        if negative {
+            result.push(0x80);
+        } else {
+            result.push(0);
+        }
+    } else if negative {
+        let last = result.last_mut().unwrap();
+        *last |= 0x80;
+    }
+    Ok(result)
+}
+fn encode_bigint(mut n: BigInt) -> Vec<u8> {
+    if n == BigInt::zero() {
+        return vec![];
+    }
+    let negative = n < BigInt::zero();
+    if negative {
+        n = -n;
+    }
+    let mut result = vec![];
+    while n > BigInt::zero() {
+        result.push((n.clone() & BigInt::from(0xffu8)).to_u8().unwrap());
+        n >>= 8;
+    }
+    if result.last().unwrap() & 0x80 != 0 {
+        if negative {
+            result.push(0x80);
+        } else {
+            result.push(0);
+        }
+    } else if negative {
+        let last = result.last_mut().unwrap();
+        *last |= 0x80;
+    }
+    result
+}
+fn decode_bigint(v: &mut [u8]) -> BigInt {
+    let mut result = BigInt::zero();
+    for &b in v.iter().rev() {
+        result <<= 8;
+        result |= BigInt::from(b);
+    }
+    let negative = v.last().unwrap_or(&0) & 0x80 != 0;
+    if negative {
+        result &= !BigInt::from(0x80u8);
+        -result
+    } else {
+        result
+    }
+}
+fn pop_num(stack: &mut VecDeque<Cow<[u8]>>) -> Result<i32> {
+    let item = stack.pop_back().unwrap();
+    let mut v = item.to_vec();
+    decode_num(&mut v)
+}
+fn decode_num(v: &mut [u8]) -> Result<i32> {
+    let mut result = 0i64;
+    for &b in v.iter().rev() {
+        result <<= 8;
+        result |= b as i64;
+    }
+    let negative = v.last().unwrap_or(&0) & 0x80 != 0;
+    if negative {
+        result &= !0x80i64;
+        Ok(-(result as i32))
+    } else {
+        Ok(result as i32)
+    }
+}
+fn decode_bool(item: &Cow<[u8]>) -> bool {
+    !item.is_empty() && item[item.len() - 1] != 0x80 && item.iter().any(|&b| b != 0)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::script::Script;
-    use crate::util::Hash256;
     use pretty_assertions::assert_eq;
     use hex;
     #[test]
@@ -817,28 +890,23 @@ mod tests {
     }
     // Additional tests omitted for brevity; add pretty_assertions as needed.
 }
-
 #[derive(Default, Clone)]
 struct MockChecker {
     sig_checks: RefCell<Vec<bool>>,
     locktime_checks: RefCell<Vec<bool>>,
     sequence_checks: RefCell<Vec<bool>>,
 }
-
 impl Checker for MockChecker {
     fn check_locktime(&self, _locktime: i32) -> Result<bool> {
         Ok(self.locktime_checks.borrow_mut().pop().unwrap_or(true))
     }
-
     fn check_sequence(&self, _sequence: i32) -> Result<bool> {
         Ok(self.sequence_checks.borrow_mut().pop().unwrap_or(true))
     }
-
-    fn check_sig(&self, _sig: &[u8], _pubkey: &[u8], _script: &[u8]) -> Result<bool> {
+    fn check_sig(&mut self, _sig: &[u8], _pubkey: &[u8], _script: &[u8]) -> Result<bool> {
         Ok(self.sig_checks.borrow_mut().pop().unwrap_or(true))
     }
 }
-
 #[inline]
 fn arith_unary(stack: &mut VecDeque<Cow<[u8]>>, op: fn(BigInt) -> BigInt) -> Result<()> {
     check_stack_size(1, stack)?;
@@ -847,7 +915,6 @@ fn arith_unary(stack: &mut VecDeque<Cow<[u8]>>, op: fn(BigInt) -> BigInt) -> Res
     stack.push_back(encode_bigint(x).into());
     Ok(())
 }
-
 #[inline]
 fn arith_binary_num(stack: &mut VecDeque<Cow<[u8]>>, op: fn(BigInt, BigInt) -> BigInt) -> Result<()> {
     check_stack_size(2, stack)?;
@@ -857,68 +924,14 @@ fn arith_binary_num(stack: &mut VecDeque<Cow<[u8]>>, op: fn(BigInt, BigInt) -> B
     stack.push_back(encode_bigint(result).into());
     Ok(())
 }
-
 #[inline]
 fn pop_bigint(stack: &mut VecDeque<Cow<[u8]>>) -> Result<BigInt> {
     let item = stack.pop_back().unwrap();
     let mut v = item.to_vec();
     decode_bigint(&mut v)
 }
-
 #[inline]
-fn encode_num(n: i64) -> Result<Vec<u8>> {
-    // ... (implementation omitted for brevity)
-    Ok(vec![])
-}
-
-#[inline]
-fn encode_bigint(n: BigInt) -> Vec<u8> {
-    // ... (implementation omitted for brevity)
-    vec![]
-}
-
-#[inline]
-fn decode_bigint(v: &mut [u8]) -> BigInt {
-    // ... (implementation omitted for brevity)
-    BigInt::zero()
-}
-
-#[inline]
-fn pop_num(stack: &mut VecDeque<Cow<[u8]>>) -> Result<i32> {
+fn pop_bool(stack: &mut VecDeque<Cow<[u8]>>) -> Result<bool> {
     let item = stack.pop_back().unwrap();
-    let mut v = item.to_vec();
-    decode_num(&mut v)
-}
-
-#[inline]
-fn decode_num(v: &mut [u8]) -> Result<i32> {
-    // ... (implementation omitted for brevity)
-    Ok(0)
-}
-
-#[inline]
-fn decode_bool(item: &Cow<[u8]>) -> bool {
-    !item.is_empty() && item[item.len() - 1] != 0x80 && item.iter().any(|&b| b != 0)
-}
-
-fn arith_binary(stack: &mut VecDeque<Cow<[u8]>>, op: fn(&[u8], &[u8]) -> Result<Vec<u8>>) -> Result<()> {
-    check_stack_size(2, stack)?;
-    let a = stack.pop_back().unwrap();
-    let b = stack.pop_back().unwrap();
-    let result = op(a.as_ref(), b.as_ref())?;
-    stack.push_back(result.into());
-    Ok(())
-}
-
-fn bit_shift(stack: &mut VecDeque<Cow<[u8]>>, shift_fn: fn(&[u8], usize) -> Vec<u8>) -> Result<()> {
-    check_stack_size(2, stack)?;
-    let n = pop_num(stack)?;
-    let v = stack.pop_back().unwrap().into_owned();
-    if n < 0 {
-        let msg = "n must be non-negative".to_string();
-        return Err(Error::ScriptError(msg));
-    }
-    let result = shift_fn(&v, n as usize);
-    stack.push_back(result.into());
-    Ok(())
+    Ok(decode_bool(&item))
 }
