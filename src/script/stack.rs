@@ -1,8 +1,8 @@
 //! Stack utilities for script numbers and booleans in Bitcoin SV consensus.
-
 use crate::util::{Error, Result};
 use num_bigint::{BigInt, Sign};
 use num_traits::Zero;
+
 /// Pops a bool from the stack, decoding the top item.
 ///
 /// # Errors
@@ -22,6 +22,7 @@ pub fn pop_bool(stack: &mut Vec<Vec<u8>>) -> Result<bool> {
     }
     Ok(decode_bool(&top))
 }
+
 /// Pops a number from the stack, decoding to i32.
 ///
 /// Range: [-2^31 + 1, 2^31 - 1]. Errors on non-minimal >4B.
@@ -44,6 +45,7 @@ pub fn pop_num(stack: &mut Vec<Vec<u8>>) -> Result<i32> {
     }
     decode_num(&top).map(|n| n as i32)
 }
+
 /// Pops a bigint from the stack.
 ///
 /// No range limit; full arbitrary precision.
@@ -61,6 +63,7 @@ pub fn pop_bigint(stack: &mut Vec<Vec<u8>>) -> Result<BigInt> {
     let mut top = stack.pop().ok_or(Error::ScriptError("Empty stack for bigint".to_string()))?;
     Ok(decode_bigint(&mut top))
 }
+
 /// Decodes a stack item to bool (non-zero true).
 ///
 /// Ignores leading zeros; MSB &127 determines truthy.
@@ -71,7 +74,7 @@ pub fn pop_bigint(stack: &mut Vec<Vec<u8>>) -> Result<BigInt> {
 /// assert_eq!(decode_bool(&[0, 0, 128]), false);
 /// ```
 #[inline]
-pub fn decode_bool Baz(s: &[u8]) -> bool {
+pub fn decode_bool(s: &[u8]) -> bool {
     if s.is_empty() {
         return false;
     }
@@ -82,6 +85,7 @@ pub fn decode_bool Baz(s: &[u8]) -> bool {
     }
     (s[s.len() - 1] & 127) != 0
 }
+
 /// Decodes a stack item to i64 number.
 ///
 /// Minimal representation; errors on non-canonical >4B.
@@ -153,8 +157,8 @@ pub fn encode_num(val: i64) -> Result<Vec<u8>> {
 ///
 /// # Examples
 /// ```
-/// let mut bytes = vec![1];
-/// assert_eq!(decode_bigint(&mut bytes), BigInt::from(1u8));
+/// let mut bytes = vec![1, 2, 3, 4];
+/// assert_eq!(decode_bigint(&mut bytes), BigInt::from(1_234u32));
 /// ```
 #[inline]
 pub fn decode_bigint(s: &mut [u8]) -> BigInt {
