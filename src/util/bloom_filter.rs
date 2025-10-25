@@ -1,20 +1,16 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
-
 use crate::util::{var_int, Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use murmur3::murmur3_32;
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, RngCore, Rng};
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
 use std::num::Wrapping;
-
 /// Maximum number of bytes in the bloom filter bit field.
 pub const BLOOM_FILTER_MAX_FILTER_SIZE: usize = 36_000;
-
 /// Maximum number of hash functions for the bloom filter.
 pub const BLOOM_FILTER_MAX_HASH_FUNCS: usize = 50;
-
 /// Bloom filter used by SPV nodes to limit transactions received.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct BloomFilter {
@@ -25,7 +21,6 @@ pub struct BloomFilter {
     /// Random tweak to generate the hash functions.
     pub tweak: u32,
 }
-
 impl BloomFilter {
     /// Creates a new bloom filter.
     ///
@@ -56,7 +51,6 @@ impl BloomFilter {
             tweak,
         })
     }
-
     /// Adds data to the bloom filter.
     ///
     /// # Errors
@@ -72,7 +66,6 @@ impl BloomFilter {
         }
         Ok(())
     }
-
     /// Probabilistically checks if the bloom filter contains the data.
     ///
     /// False positives possible, but no false negatives.
@@ -87,7 +80,6 @@ impl BloomFilter {
         }
         true
     }
-
     /// Validates the bloom filter against max size/funcs.
     ///
     /// # Errors
@@ -102,7 +94,6 @@ impl BloomFilter {
         Ok(())
     }
 }
-
 impl Serializable for BloomFilter {
     fn read(reader: &mut dyn Read) -> Result<BloomFilter> {
         let filter_len = var_int::read(reader)? as usize;
@@ -111,23 +102,21 @@ impl Serializable for BloomFilter {
         }
         let mut filter = vec![0; filter_len];
         reader.read_exact(&mut filter)?;
-        let num_hash_funcs = reader.read_u32<LittleEndian>()? as usize;
+        let num_hash_funcs = reader.read_u32::<LittleEndian>()? as usize;
         if num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
             return Err(Error::BadData("Too many hash funcs".to_string()));
         }
-        let tweak = reader.read_u32<LittleEndian>()?;
+        let tweak = reader.read_u32::<LittleEndian>()?;
         Ok(BloomFilter { filter, num_hash_funcs, tweak })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         var_int::write(self.filter.len() as u64, writer)?;
         writer.write_all(&self.filter)?;
-        writer.write_u32<LittleEndian>(self.num_hash_funcs as u32)?;
-        writer.write_u32<LittleEndian>(self.tweak)?;
+        writer.write_u32::<LittleEndian>(self.num_hash_funcs as u32)?;
+        writer.write_u32::<LittleEndian>(self.tweak)?;
         Ok(())
     }
 }
-
 impl fmt::Debug for BloomFilter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("BloomFilter")
@@ -137,13 +126,11 @@ impl fmt::Debug for BloomFilter {
             .finish()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn write_read() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
@@ -154,7 +141,6 @@ mod tests {
         bf.write(&mut v).unwrap();
         assert_eq!(BloomFilter::read(&mut Cursor::new(&v)).unwrap(), bf);
     }
-
     #[test]
     fn contains() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
@@ -162,7 +148,6 @@ mod tests {
         assert!(bf.contains(&vec![5; 32]));
         assert!(!bf.contains(&vec![6; 32]));
     }
-
     #[test]
     fn invalid() {
         assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Invalid insert value");
@@ -172,7 +157,6 @@ mod tests {
         assert!(BloomFilter::new(1.0, f64::NAN).is_err());
         assert!(BloomFilter::new(f64::NAN, 0.5).is_err());
     }
-
     #[test]
     fn validate() {
         let bf = BloomFilter {
@@ -181,16 +165,13 @@ mod tests {
             tweak: 100,
         };
         assert!(bf.validate().is_ok());
-
         let mut bf_clone = bf.clone();
         bf_clone.filter = vec![0; BLOOM_FILTER_MAX_FILTER_SIZE + 1];
         assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Filter too long");
-
         let mut bf_clone = bf.clone();
         bf_clone.num_hash_funcs = BLOOM_FILTER_MAX_HASH_FUNCS + 1;
         assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Too many hash funcs");
     }
-
     #[test]
     fn add_too_large() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
