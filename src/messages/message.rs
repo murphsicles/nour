@@ -23,15 +23,15 @@ pub enum Message {
     Block(Block),
     FeeFilter(FeeFilter),
     FilterAdd(FilterAdd),
-    FilterClear(FilterClear),
+    FilterClear,
     FilterLoad(FilterLoad),
-    GetAddr(GetAddr),
+    GetAddr,
     GetBlocks(BlockLocator),
     GetData(Inv),
     GetHeaders(BlockLocator),
     Headers(Headers),
     Inv(Inv),
-    Mempool(Mempool),
+    Mempool,
     MerkleBlock(MerkleBlock),
     NotFound(Inv),
     Other(String),
@@ -39,15 +39,15 @@ pub enum Message {
     Ping(Ping),
     Pong(Ping),
     Reject(Reject),
-    SendHeaders(SendHeaders),
+    SendHeaders,
     SendCmpct(SendCmpct),
     Tx(Tx),
-    Verack(Verack),
+    Verack,
     Version(Version),
 }
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct FilterClear;
-impl Serializable for FilterClear {
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+struct FilterClear;
+impl Serializable<FilterClear> for FilterClear {
     fn read(_: &mut dyn Read) -> Result<FilterClear> {
         Ok(FilterClear)
     }
@@ -55,9 +55,9 @@ impl Serializable for FilterClear {
         Ok(())
     }
 }
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct GetAddr;
-impl Serializable for GetAddr {
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+struct GetAddr;
+impl Serializable<GetAddr> for GetAddr {
     fn read(_: &mut dyn Read) -> Result<GetAddr> {
         Ok(GetAddr)
     }
@@ -65,9 +65,9 @@ impl Serializable for GetAddr {
         Ok(())
     }
 }
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Mempool;
-impl Serializable for Mempool {
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+struct Mempool;
+impl Serializable<Mempool> for Mempool {
     fn read(_: &mut dyn Read) -> Result<Mempool> {
         Ok(Mempool)
     }
@@ -75,9 +75,9 @@ impl Serializable for Mempool {
         Ok(())
     }
 }
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct SendHeaders;
-impl Serializable for SendHeaders {
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+struct SendHeaders;
+impl Serializable<SendHeaders> for SendHeaders {
     fn read(_: &mut dyn Read) -> Result<SendHeaders> {
         Ok(SendHeaders)
     }
@@ -85,9 +85,9 @@ impl Serializable for SendHeaders {
         Ok(())
     }
 }
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Verack;
-impl Serializable for Verack {
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+struct Verack;
+impl Serializable<Verack> for Verack {
     fn read(_: &mut dyn Read) -> Result<Verack> {
         Ok(Verack)
     }
