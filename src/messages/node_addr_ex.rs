@@ -1,14 +1,12 @@
 //! Extended network address for Bitcoin SV P2P node discovery.
 
 use crate::messages::node_addr::NodeAddr;
-use crate::util::{Result, Serializable};
+use crate::util::{Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Node network address extended with a last connected time.
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct NodeAddrEx {
@@ -17,11 +15,9 @@ pub struct NodeAddrEx {
     /// Node address.
     pub addr: NodeAddr,
 }
-
 impl NodeAddrEx {
     /// Size of the NodeAddrEx in bytes (4 + NodeAddr::SIZE = 30).
     pub const SIZE: usize = NodeAddr::SIZE + 4;
-
     /// Returns the size of the address in bytes.
     #[must_use]
     #[inline]
@@ -29,7 +25,6 @@ impl NodeAddrEx {
         Self::SIZE
     }
 }
-
 impl Serializable<NodeAddrEx> for NodeAddrEx {
     fn read(reader: &mut dyn Read) -> Result<NodeAddrEx> {
         let mut time = [0u8; 4];
@@ -38,14 +33,12 @@ impl Serializable<NodeAddrEx> for NodeAddrEx {
         let addr = NodeAddr::read(reader)?;
         Ok(NodeAddrEx { last_connected_time, addr })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.last_connected_time.to_le_bytes())?;
         self.addr.write(writer)?;
         Ok(())
     }
 }
-
 #[cfg(feature = "async")]
 impl AsyncSerializable<NodeAddrEx> for NodeAddrEx {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<NodeAddrEx> {
@@ -55,21 +48,18 @@ impl AsyncSerializable<NodeAddrEx> for NodeAddrEx {
         let addr = NodeAddr::read_async(reader).await?;
         Ok(NodeAddrEx { last_connected_time, addr })
     }
-
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         writer.write_all(&self.last_connected_time.to_le_bytes()).await?;
         self.addr.write_async(writer).await?;
         Ok(())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
     use std::net::Ipv6Addr;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
