@@ -13,15 +13,15 @@
 //! use std::io::Cursor;
 //!
 //! let bytes = [
-//!     227, 225, 243, 232, 104, 101, 97, 100, 101, 114, 115,
-//!     0, 0, 0, 0, 0, 1, 0, 0, 0, 20, 6, 224, 88, 0,
+//! 227, 225, 243, 232, 104, 101, 97, 100, 101, 114, 115,
+//! 0, 0, 0, 0, 0, 1, 0, 0, 0, 20, 6, 224, 88, 0,
 //! ];
 //! let magic = NetworkConfig::new(0).unwrap().magic(); // Mainnet
 //! let message = Message::read(&mut Cursor::new(&bytes), magic).unwrap();
 //!
 //! match message {
-//!     Message::Headers(headers) => { /* Handle headers message */ },
-//!     _ => { /* All other messages */ }
+//! Message::Headers(headers) => { /* Handle headers message */ },
+//! _ => { /* All other messages */ }
 //! }
 //! ```
 //!
@@ -36,29 +36,28 @@
 //! let signature = [0; 72];
 //! let public_key = [0; 33];
 //! let prev_output = OutPoint {
-//!     hash: Hash256([0; 32]),
-//!     index: 0,
+//! hash: Hash256([0; 32]),
+//! index: 0,
 //! };
 //!
 //! let inputs = vec![TxIn {
-//!     prev_output,
-//!     unlock_script: create_unlock_script(&signature, &public_key),
-//!     sequence: 0,
+//! prev_output,
+//! unlock_script: create_unlock_script(&signature, &public_key),
+//! sequence: 0,
 //! }];
 //!
 //! let outputs = vec![TxOut {
-//!     satoshis: 1000,
-//!     lock_script: create_lock_script(&hash160(&public_key)),
+//! satoshis: 1000,
+//! lock_script: create_lock_script(&hash160(&public_key)),
 //! }];
 //!
 //! let tx = Tx {
-//!     version: 2,
-//!     inputs,
-//!     outputs,
-//!     lock_time: 0,
+//! version: 2,
+//! inputs,
+//! outputs,
+//! lock_time: 0,
 //! };
 //! ```
-
 mod addr;
 mod block;
 mod block_header;
@@ -82,7 +81,6 @@ mod tx;
 mod tx_in;
 mod tx_out;
 mod version;
-
 pub use self::addr::Addr;
 pub use self::block::Block;
 pub use self::block_header::BlockHeader;
@@ -99,7 +97,7 @@ pub use self::inv_vect::{
     INV_VECT_TX,
 };
 pub use self::merkle_block::MerkleBlock;
-pub use self::message::{commands, Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
+pub use self::message::{Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;
 pub use self::node_addr_ex::NodeAddrEx;
