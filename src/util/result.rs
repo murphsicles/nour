@@ -1,11 +1,11 @@
 //! Standard error and result types for the library.
-
 use hex::FromHexError;
-use base58::FromBase58Error as FromBase58Error;
+use base58::FromBase58Error;
 use secp256k1::Error as Secp256k1Error;
 use std::io;
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
+
 /// Standard error type used in the library
 #[derive(Debug)]
 pub enum Error {
@@ -36,25 +36,27 @@ pub enum Error {
     /// The data or functionality is not supported by this library
     Unsupported(String),
 }
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Error::BadArgument(s) => f.write_str(&format!("Bad argument: {}", s)),
-            Error::BadData(s) => f.write_str(&format!("Bad data: {}", s)),
-            Error::FromBase58Error(e) => f.write_str(&format!("Base58 decoding error: {:?}", e)),
-            Error::FromHexError(e) => f.write_str(&format!("Hex decoding error: {}", e)),
-            Error::FromUtf8Error(e) => f.write_str(&format!("Utf8 parsing error: {}", e)),
-            Error::IllegalState(s) => f.write_str(&format!("Illegal state: {}", s)),
-            Error::InvalidOperation(s) => f.write_str(&format!("Invalid operation: {}", s)),
-            Error::IOError(e) => f.write_str(&format!("IO error: {}", e)),
-            Error::ParseIntError(e) => f.write_str(&format!("ParseIntError: {}", e)),
-            Error::ScriptError(s) => f.write_str(&format!("Script error: {}", s)),
-            Error::Secp256k1Error(e) => f.write_str(&format!("Secp256k1 error: {}", e)),
-            Error::Timeout => f.write_str("Timeout"),
-            Error::Unsupported(s) => f.write_str(&format!("Unsupported: {}", s)),
+            Error::BadArgument(s) => write!(f, "Bad argument: {}", s),
+            Error::BadData(s) => write!(f, "Bad data: {}", s),
+            Error::FromBase58Error(e) => write!(f, "Base58 decoding error: {:?}", e),
+            Error::FromHexError(e) => write!(f, "Hex decoding error: {}", e),
+            Error::FromUtf8Error(e) => write!(f, "Utf8 parsing error: {}", e),
+            Error::IllegalState(s) => write!(f, "Illegal state: {}", s),
+            Error::InvalidOperation(s) => write!(f, "Invalid operation: {}", s),
+            Error::IOError(e) => write!(f, "IO error: {}", e),
+            Error::ParseIntError(e) => write!(f, "ParseIntError: {}", e),
+            Error::ScriptError(s) => write!(f, "Script error: {}", s),
+            Error::Secp256k1Error(e) => write!(f, "Secp256k1 error: {}", e),
+            Error::Timeout => write!(f, "Timeout"),
+            Error::Unsupported(s) => write!(f, "Unsupported: {}", s),
         }
     }
 }
+
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -67,35 +69,42 @@ impl std::error::Error for Error {
         }
     }
 }
+
 impl From<FromBase58Error> for Error {
     fn from(e: FromBase58Error) -> Self {
         Error::FromBase58Error(e)
     }
 }
+
 impl From<FromHexError> for Error {
     fn from(e: FromHexError) -> Self {
         Error::FromHexError(e)
     }
 }
+
 impl From<FromUtf8Error> for Error {
     fn from(e: FromUtf8Error) -> Self {
         Error::FromUtf8Error(e)
     }
 }
+
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::IOError(e)
     }
 }
+
 impl From<ParseIntError> for Error {
     fn from(e: ParseIntError) -> Self {
         Error::ParseIntError(e)
     }
 }
+
 impl From<Secp256k1Error> for Error {
     fn from(e: Secp256k1Error) -> Self {
         Error::Secp256k1Error(e)
     }
 }
+
 /// Standard Result used in the library
 pub type Result<T> = std::result::Result<T, Error>;
