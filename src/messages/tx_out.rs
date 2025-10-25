@@ -1,20 +1,16 @@
 //! Transaction output for Bitcoin SV P2P messages.
 
 use crate::script::Script;
-use crate::util::{var_int, Result, Serializable};
+use crate::util::{var_int, Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Maximum lock script length (520 bytes, consensus rule).
 const MAX_LOCK_SCRIPT_LEN: usize = 520;
-
 /// Maximum satoshis (21M BSV).
 const MAX_SATOSHIS: i64 = 21_000_000 * 100_000_000;
-
 /// Transaction output.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct TxOut {
@@ -23,7 +19,6 @@ pub struct TxOut {
     /// Public key script to claim the output.
     pub lock_script: Script,
 }
-
 impl TxOut {
     /// Returns the size of the transaction output in bytes.
     #[must_use]
@@ -31,7 +26,6 @@ impl TxOut {
     pub fn size(&self) -> usize {
         8 + var_int::size(self.lock_script.0.len() as u64) + self.lock_script.0.len()
     }
-
     /// Validates the transaction output.
     ///
     /// # Errors
@@ -49,7 +43,6 @@ impl TxOut {
         Ok(())
     }
 }
-
 impl Serializable<TxOut> for TxOut {
     fn read(reader: &mut dyn Read) -> Result<TxOut> {
         let mut satoshis = [0u8; 8];
@@ -68,7 +61,6 @@ impl Serializable<TxOut> for TxOut {
         tx_out.validate()?;
         Ok(tx_out)
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.satoshis.to_le_bytes())?;
         var_int::write(self.lock_script.0.len() as u64, writer)?;
@@ -76,7 +68,6 @@ impl Serializable<TxOut> for TxOut {
         Ok(())
     }
 }
-
 #[cfg(feature = "async")]
 impl AsyncSerializable<TxOut> for TxOut {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<TxOut> {
@@ -96,7 +87,6 @@ impl AsyncSerializable<TxOut> for TxOut {
         tx_out.validate()?;
         Ok(tx_out)
     }
-
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         writer.write_all(&self.satoshis.to_le_bytes()).await?;
         var_int::write_async(self.lock_script.0.len() as u64, writer).await?;
@@ -104,14 +94,12 @@ impl AsyncSerializable<TxOut> for TxOut {
         Ok(())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
@@ -123,7 +111,6 @@ mod tests {
         assert_eq!(v.len(), t.size());
         assert_eq!(TxOut::read(&mut Cursor::new(&v)).unwrap(), t);
     }
-
     #[test]
     fn validate() {
         let t = TxOut {
@@ -131,26 +118,22 @@ mod tests {
             lock_script: Script(vec![1; 100]),
         };
         assert!(t.validate().is_ok());
-
         let t = TxOut {
             satoshis: -1,
             lock_script: Script(vec![1; 100]),
         };
         assert_eq!(t.validate().unwrap_err().to_string(), "Negative satoshis");
-
         let t = TxOut {
             satoshis: MAX_SATOSHIS + 1,
             lock_script: Script(vec![1; 100]),
         };
         assert_eq!(t.validate().unwrap_err().to_string(), "Satoshis exceeds max");
-
         let t = TxOut {
             satoshis: 1000,
             lock_script: Script(vec![1; MAX_LOCK_SCRIPT_LEN + 1]),
         };
         assert_eq!(t.validate().unwrap_err().to_string(), format!("Lock script too long: {}", MAX_LOCK_SCRIPT_LEN + 1));
     }
-
     #[test]
     fn read_invalid() {
         let b = hex::decode("00e1f50500000000fe050100000000000000000000").unwrap(); // Large script len
