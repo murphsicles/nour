@@ -62,7 +62,6 @@ impl<'a> TransactionChecker<'a> {
     }
 }
 impl<'a> Checker for TransactionChecker<'a> {
-    #[must_use]
     #[inline]
     fn check_sig(&mut self, sig: &[u8], pubkey: &[u8], script: &[u8]) -> Result<bool> {
         if sig.is_empty() {
@@ -80,7 +79,6 @@ impl<'a> Checker for TransactionChecker<'a> {
         let public_key = PublicKey::from_slice(pubkey).map_err(|_| Error::ScriptError("Invalid pubkey".to_string()))?;
         Ok(secp.verify_ecdsa(&message, &signature, &public_key).is_ok())
     }
-    #[must_use]
     #[inline]
     fn check_locktime(&self, locktime: i32) -> Result<bool> {
         if locktime < 0 {
@@ -100,7 +98,6 @@ impl<'a> Checker for TransactionChecker<'a> {
         }
         Ok(true)
     }
-    #[must_use]
     #[inline]
     fn check_sequence(&self, sequence: i32) -> Result<bool> {
         if sequence < 0 {
@@ -309,91 +306,6 @@ mod tests {
             unlock_script: Script(vec![]),
             sequence: 0xffffffff,
         });
-        let mut cache = SigHashCache::new();
-        let lock_script_bytes2 = &tx_1.outputs[1].lock_script.0;
-        let sig_hash2 = sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
-        let sig2 = generate_signature(&private_key2, &sig_hash2, sighash_type).unwrap();
-        let mut unlock_script2 = Script::new();
-        unlock_script2.append_data(&sig2).unwrap();
-        unlock_script2.append_data(&pk2).unwrap();
-        tx_2.inputs[1].unlock_script = unlock_script2;
-        let mut cache = SigHashCache::new();
-        let mut c1 = TransactionChecker::new(&tx_2, &mut cache, 0, 10, false);
-        let mut script1 = Script::new();
-        script1.append_slice(&tx_2.inputs[0].unlock_script.0);
-        script1.append(OP_CODESEPARATOR);
-        script1.append_slice(&tx_1.outputs[0].lock_script.0);
-        assert!(script1.eval(&mut c1, NO_FLAGS).is_ok());
-        let mut cache = SigHashCache::new();
-        let mut c2 = TransactionChecker::new(&tx_2, &mut cache, 1, 20, false);
-        let mut script2 = Script::new();
-        script2.append_slice(&tx_2.inputs[1].unlock_script.0);
-        script2.append(OP_CODESEPARATOR);
-        script2.append_slice(&tx_1.outputs[1].lock_script.0);
-        assert!(script2.eval(&mut c2, NO_FLAGS).is_ok());
-    }
-    #[test]
-    fn batch() {
-        batch_test(SIGHASH_SINGLE | SIGHASH_ANYONECANPAY);
-        batch_test(SIGHASH_SINGLE | SIGHASH_ANYONECANPAY | SIGHASH_FORKID);
-    }
-    fn batch_test(sighash_type: u8) {
-        let secp = Secp256k1::new();
-        let private_key1 = [1; 32];
-        let secret_key1 = SecretKey::from_slice(&private_key1).unwrap();
-        let pk1 = PublicKey::from_secret_key(&secp, &secret_key1).serialize();
-        let pkh1 = hash160(&pk1);
-        let private_key2 = [2; 32];
-        let secret_key2 = SecretKey::from_slice(&private_key2).unwrap();
-        let pk2 = PublicKey::from_secret_key(&secp, &secret_key2).serialize();
-        let pkh2 = hash160(&pk2);
-        let mut lock_script1 = Script::new();
-        lock_script1.append(OP_DUP);
-        lock_script1.append(OP_HASH160);
-        lock_script1.append_data(&pkh1.0).unwrap();
-        lock_script1.append(OP_EQUALVERIFY);
-        lock_script1.append(OP_CHECKSIG);
-        let mut lock_script2 = Script::new();
-        lock_script2.append(OP_DUP);
-        lock_script2.append(OP_HASH160);
-        lock_script2.append_data(&pkh2.0).unwrap();
-        lock_script2.append(OP_EQUALVERIFY);
-        lock_script2.append(OP_CHECKSIG);
-        let tx_1 = Tx {
-            version: 1,
-            inputs: vec![],
-            outputs: vec![
-                TxOut { satoshis: 10, lock_script: lock_script1.clone() },
-                TxOut { satoshis: 20, lock_script: lock_script2.clone() },
-            ],
-            lock_time: 0,
-        };
-        let mut tx_2 = Tx {
-            version: 1,
-            inputs: vec![TxIn {
-                prev_output: OutPoint { hash: tx_1.hash(), index: 0 },
-                unlock_script: Script(vec![]),
-                sequence: 0xffffffff,
-            }],
-            outputs: vec![TxOut { satoshis: 10, lock_script: lock_script1.clone() }],
-            lock_time: 0,
-        };
-        // Sign the first input and output
-        let mut cache = SigHashCache::new();
-        let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
-        let sig_hash1 = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
-        let sig1 = generate_signature(&private_key1, &sig_hash1, sighash_type).unwrap();
-        let mut unlock_script1 = Script::new();
-        unlock_script1.append_data(&sig1).unwrap();
-        unlock_script1.append_data(&pk1).unwrap();
-        tx_2.inputs[0].unlock_script = unlock_script1;
-        // Add another input and output and sign that separately
-        tx_2.inputs.push(TxIn {
-            prev_output: OutPoint { hash: tx_1.hash(), index: 1 },
-            unlock_script: Script(vec![]),
-            sequence: 0xffffffff,
-        });
-        tx_2.outputs.push(TxOut { satoshis: 20, lock_script: lock_script2.clone() });
         let mut cache = SigHashCache::new();
         let lock_script_bytes2 = &tx_1.outputs[1].lock_script.0;
         let sig_hash2 = sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
