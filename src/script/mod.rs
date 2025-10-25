@@ -1,4 +1,4 @@
-/// Script opcodes and interpreter for Bitcoin SV.
+//! Script opcodes and interpreter for Bitcoin SV.
 ///
 /// Supports building and evaluating transaction scripts with checkers for validation.
 /// Aligned with BSV consensus (pre-Genesis rules via flags).
