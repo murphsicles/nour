@@ -1,5 +1,4 @@
 //! Bitcoin SV P2P message handling with serialization/deserialization.
-
 use crate::messages::{
     addr::Addr, block::Block, block_locator::BlockLocator, fee_filter::FeeFilter,
     filter_add::FilterAdd, filter_load::FilterLoad, headers::Headers, inv::Inv,
@@ -24,15 +23,15 @@ pub enum Message {
     Block(Block),
     FeeFilter(FeeFilter),
     FilterAdd(FilterAdd),
-    FilterClear,
+    FilterClear(FilterClear),
     FilterLoad(FilterLoad),
-    GetAddr,
+    GetAddr(GetAddr),
     GetBlocks(BlockLocator),
     GetData(Inv),
     GetHeaders(BlockLocator),
     Headers(Headers),
     Inv(Inv),
-    Mempool,
+    Mempool(Mempool),
     MerkleBlock(MerkleBlock),
     NotFound(Inv),
     Other(String),
@@ -40,11 +39,87 @@ pub enum Message {
     Ping(Ping),
     Pong(Ping),
     Reject(Reject),
-    SendHeaders,
+    SendHeaders(SendHeaders),
     SendCmpct(SendCmpct),
     Tx(Tx),
-    Verack,
+    Verack(Verack),
     Version(Version),
+}
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct FilterClear;
+impl Serializable for FilterClear {
+    fn read(_: &mut dyn Read) -> Result<FilterClear> {
+        Ok(FilterClear)
+    }
+    fn write(&self, _: &mut dyn Write) -> io::Result<()> {
+        Ok(())
+    }
+}
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct GetAddr;
+impl Serializable for GetAddr {
+    fn read(_: &mut dyn Read) -> Result<GetAddr> {
+        Ok(GetAddr)
+    }
+    fn write(&self, _: &mut dyn Write) -> io::Result<()> {
+        Ok(())
+    }
+}
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Mempool;
+impl Serializable for Mempool {
+    fn read(_: &mut dyn Read) -> Result<Mempool> {
+        Ok(Mempool)
+    }
+    fn write(&self, _: &mut dyn Write) -> io::Result<()> {
+        Ok(())
+    }
+}
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct SendHeaders;
+impl Serializable for SendHeaders {
+    fn read(_: &mut dyn Read) -> Result<SendHeaders> {
+        Ok(SendHeaders)
+    }
+    fn write(&self, _: &mut dyn Write) -> io::Result<()> {
+        Ok(())
+    }
+}
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Verack;
+impl Serializable for Verack {
+    fn read(_: &mut dyn Read) -> Result<Verack> {
+        Ok(Verack)
+    }
+    fn write(&self, _: &mut dyn Write) -> io::Result<()> {
+        Ok(())
+    }
+}
+/// Command strings as [u8; 12], padded with \0.
+pub mod commands {
+    pub const ADDR: [u8; 12] = *b"addr\0\0\0\0\0\0\0\0";
+    pub const BLOCK: [u8; 12] = *b"block\0\0\0\0\0\0\0";
+    pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
+    pub const FILTERADD: [u8; 12] = *b"filteradd\0\0\0";
+    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0";
+    pub const FILTERLOAD: [u8; 12] = *b"filterload\0\0";
+    pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
+    pub const GETBLOCKS: [u8; 12] = *b"getblocks\0\0\0";
+    pub const GETDATA: [u8; 12] = *b"getdata\0\0\0\0\0";
+    pub const GETHEADERS: [u8; 12] = *b"getheaders\0\0";
+    pub const HEADERS: [u8; 12] = *b"headers\0\0\0\0\0";
+    pub const INV: [u8; 12] = *b"inv\0\0\0\0\0\0\0\0\0\0";
+    pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
+    pub const MERKLEBLOCK: [u8; 12] = *b"merkleblock\0";
+    pub const NOTFOUND: [u8; 12] = *b"notfound\0\0\0\0";
+    pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
+    pub const PONG: [u8; 12] = *b"pong\0\0\0\0\0\0\0\0";
+    pub const REJECT: [u8; 12] = *b"reject\0\0\0\0\0\0";
+    pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0";
+    pub const SENDHEADERS: [u8; 12] = *b"sendheaders\0";
+    pub const TX: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
+    pub const VERACK: [u8; 12] = *b"verack\0\0\0\0\0\0";
+    pub const VERSION: [u8; 12] = *b"version\0\0\0\0\0";
 }
 impl Message {
     /// Reads a Bitcoin P2P message with its payload from bytes.
