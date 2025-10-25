@@ -1,18 +1,14 @@
 //! Transaction input for Bitcoin SV P2P messages.
-
 use crate::messages::out_point::OutPoint;
 use crate::script::Script;
-use crate::util::{var_int, Result, Serializable};
+use crate::util::{var_int, Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Maximum unlock script length (520 bytes, consensus rule).
 const MAX_UNLOCK_SCRIPT_LEN: usize = 520;
-
 /// Transaction input.
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct TxIn {
@@ -23,7 +19,6 @@ pub struct TxIn {
     /// Transaction version as defined by the sender for replacement or negotiation.
     pub sequence: u32,
 }
-
 impl TxIn {
     /// Returns the size of the transaction input in bytes.
     #[must_use]
@@ -32,7 +27,6 @@ impl TxIn {
         OutPoint::SIZE + var_int::size(self.unlock_script.0.len() as u64) + self.unlock_script.0.len() + 4
     }
 }
-
 impl Serializable<TxIn> for TxIn {
     fn read(reader: &mut dyn Read) -> Result<TxIn> {
         let prev_output = OutPoint::read(reader)?;
@@ -51,7 +45,6 @@ impl Serializable<TxIn> for TxIn {
             sequence,
         })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         self.prev_output.write(writer)?;
         var_int::write(self.unlock_script.0.len() as u64, writer)?;
@@ -60,7 +53,6 @@ impl Serializable<TxIn> for TxIn {
         Ok(())
     }
 }
-
 #[cfg(feature = "async")]
 impl AsyncSerializable<TxIn> for TxIn {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<TxIn> {
@@ -80,7 +72,6 @@ impl AsyncSerializable<TxIn> for TxIn {
             sequence,
         })
     }
-
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         self.prev_output.write_async(writer).await?;
         var_int::write_async(self.unlock_script.0.len() as u64, writer).await?;
@@ -89,7 +80,6 @@ impl AsyncSerializable<TxIn> for TxIn {
         Ok(())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,7 +88,6 @@ mod tests {
     use crate::util::Hash256;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
@@ -114,7 +103,6 @@ mod tests {
         assert_eq!(v.len(), t.size());
         assert_eq!(TxIn::read(&mut Cursor::new(&v)).unwrap(), t);
     }
-
     #[test]
     fn too_long_unlock_script() {
         let mut cursor = Cursor::new(vec![0; MAX_UNLOCK_SCRIPT_LEN + 1]);
