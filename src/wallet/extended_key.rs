@@ -1,34 +1,29 @@
 //! BIP-32 extended keys for Bitcoin SV wallets (xpub/xprv).
-
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
 use base58::{ToBase58, FromBase58};
-use bitcoin_hashes::hmac::{Hmac, HmacEngine, Mac}; // Use bitcoin_hashes for HMAC_SHA512
+use bitcoin_hashes::hmac::{Hmac, HmacEngine}; // Use bitcoin_hashes for HMAC_SHA512
+use bitcoin_hashes::{sha256d as bh_sha256d, sha512};
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use std::io::{self, Read, Write};
 use std::fmt;
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 // Version bytes for extended keys
 pub const MAINNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xAD, 0xE4]; // xprv
 pub const MAINNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xB2, 0x1E]; // xpub
 pub const TESTNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x83, 0x94]; // tprv
 pub const TESTNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x87, 0xCF]; // tpub
 pub const HARDENED_KEY: u32 = 0x80000000;
-
 /// Type of extended key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtendedKeyType {
     Private,
     Public,
 }
-
 /// Represents a BIP-32 extended key (private or public).
 #[derive(Clone, PartialEq, Eq)]
 pub struct ExtendedKey(pub [u8; 78]);
-
 impl ExtendedKey {
     /// Returns the version bytes.
     #[must_use]
@@ -38,14 +33,12 @@ impl ExtendedKey {
         version.copy_from_slice(&self.0[0..4]);
         version
     }
-
     /// Returns the depth of the key.
     #[must_use]
     #[inline]
     pub fn depth(&self) -> u8 {
         self.0[4]
     }
-
     /// Returns the parent fingerprint.
     #[must_use]
     #[inline]
@@ -54,14 +47,12 @@ impl ExtendedKey {
         fingerprint.copy_from_slice(&self.0[5..9]);
         fingerprint
     }
-
     /// Returns the child number.
     #[must_use]
     #[inline]
     pub fn child_number(&self) -> u32 {
         u32::from_be_bytes(self.0[9..13].try_into().unwrap())
     }
-
     /// Returns the chain code.
     #[must_use]
     #[inline]
@@ -70,7 +61,6 @@ impl ExtendedKey {
         chain_code.copy_from_slice(&self.0[13..45]);
         chain_code
     }
-
     /// Returns the key data (private key or public key).
     #[must_use]
     #[inline]
@@ -79,7 +69,6 @@ impl ExtendedKey {
         key.copy_from_slice(&self.0[45..78]);
         key
     }
-
     /// Checks if the key is private.
     #[must_use]
     #[inline]
@@ -87,7 +76,6 @@ impl ExtendedKey {
         let version = self.version();
         version == MAINNET_PRIVATE_EXTENDED_KEY || version == TESTNET_PRIVATE_EXTENDED_KEY
     }
-
     /// Encodes an extended key into a base58 string.
     #[must_use]
     pub fn encode(&self) -> String {
@@ -97,7 +85,6 @@ impl ExtendedKey {
         v[78..82].copy_from_slice(&checksum[0..4]);
         v.to_base58()
     }
-
     /// Decodes an extended key from a base58 string.
     ///
     /// # Errors
@@ -115,7 +102,6 @@ impl ExtendedKey {
         extended_key.0.copy_from_slice(&v[..78]);
         Ok(extended_key)
     }
-
     /// Derives a child key (hardened or normal).
     ///
     /// # Errors
@@ -123,7 +109,6 @@ impl ExtendedKey {
     pub fn derive_child(&self, index: u32, secp: &Secp256k1<secp256k1::All>) -> Result<ExtendedKey> {
         let is_private = self.is_private();
         let is_hardened = index >= HARDENED_KEY;
-
         let mut hmac_input = Vec::with_capacity(37);
         if is_private {
             hmac_input.push(0);
@@ -139,7 +124,6 @@ impl ExtendedKey {
             hmac_input.extend_from_slice(&self.key());
         }
         hmac_input.extend_from_slice(&index.to_be_bytes());
-
         let chain_code = self.chain_code();
         let mut hmac_engine = HmacEngine::<sha512::Hash>::new(&chain_code);
         hmac_engine.update(&hmac_input);
@@ -149,7 +133,6 @@ impl ExtendedKey {
         }
         let il = &result[0..32];
         let new_chain_code = &result[32..64];
-
         let mut child_key = ExtendedKey([0; 78]);
         child_key.0[0..4].copy_from_slice(&self.version());
         child_key.0[4] = self.depth().wrapping_add(1);
@@ -164,7 +147,6 @@ impl ExtendedKey {
         child_key.0[5..9].copy_from_slice(&fingerprint[0..4]);
         child_key.0[9..13].copy_from_slice(&index.to_be_bytes());
         child_key.0[13..45].copy_from_slice(new_chain_code);
-
         if is_private {
             let private_key = &self.key()[1..33];
             let secret_key = SecretKey::from_slice(private_key)?;
@@ -178,29 +160,24 @@ impl ExtendedKey {
             let child_pubkey = pubkey.add_exp_tweak(secp, &tweak.into())?;
             child_key.0[45..78].copy_from_slice(&child_pubkey.serialize());
         }
-
         Ok(child_key)
     }
 }
-
 impl Serializable<ExtendedKey> for ExtendedKey {
     fn read(reader: &mut dyn Read) -> Result<ExtendedKey> {
         let mut data = [0u8; 78];
         reader.read_exact(&mut data).map_err(|e| Error::IOError(e))?;
         Ok(ExtendedKey(data))
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.0)
     }
 }
-
 impl fmt::Debug for ExtendedKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ExtendedKey({})", self.encode())
     }
 }
-
 /// Derives an extended key from a seed or parent key.
 pub fn derive_extended_key(
     input: &str,
@@ -212,7 +189,6 @@ pub fn derive_extended_key(
         let seed = hex::decode(input).map_err(|_| Error::BadData("Invalid hex seed".to_string()))?;
         return extended_key_from_seed(&seed, network);
     }
-
     let mut key = ExtendedKey::decode(input)?;
     let path_parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
     for part in path_parts {
@@ -226,20 +202,17 @@ pub fn derive_extended_key(
     }
     Ok(key)
 }
-
 /// Creates an extended private key from a seed.
 pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedKey> {
-    let mut hmac_engine = HmacEngine::<sha256d::Hash>::new(b"Bitcoin seed");
+    let mut hmac_engine = HmacEngine::<bh_sha256d::Hash>::new(b"Bitcoin seed");
     hmac_engine.update(seed);
     let result = hmac_engine.finalize().into_inner();
     if result.len() != 64 {
         return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
     }
-
     let il = &result[0..32];
     let chain_code = &result[32..64];
     let secret_key = SecretKey::from_slice(il)?;
-
     let mut key = ExtendedKey([0; 78]);
     let version = match network {
         Network::Mainnet => MAINNET_PRIVATE_EXTENDED_KEY,
@@ -252,16 +225,13 @@ pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedK
     key.0[13..45].copy_from_slice(chain_code);
     key.0[45] = 0; // private prefix
     key.0[46..78].copy_from_slice(&secret_key[..]);
-
     Ok(key)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn test_hmac() -> Result<()> {
         let key = hex::decode("873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508")?;
@@ -274,8 +244,7 @@ mod tests {
         data[0] = 0;
         data[1..33].copy_from_slice(&private_key[..32]);
         data[33..37].copy_from_slice(&index.to_be_bytes());
-
-        let mut hmac_engine = HmacEngine::<sha256d::Hash>::new(&key);
+        let mut hmac_engine = HmacEngine::<bh_sha256d::Hash>::new(&key);
         hmac_engine.update(&data);
         let result = hmac_engine.finalize().into_inner();
         assert_eq!(
@@ -284,7 +253,6 @@ mod tests {
         );
         Ok(())
     }
-
     #[test]
     fn test_encode_decode() -> Result<()> {
         let seed = hex::decode("000102030405060708090a0b0c0d0e0f")?;
@@ -294,13 +262,11 @@ mod tests {
         assert_eq!(key, decoded);
         Ok(())
     }
-
     #[test]
     fn test_path() -> Result<()> {
         let seed = hex::decode("000102030405060708090a0b0c0d0e0f")?;
         let master = extended_key_from_seed(&seed, Network::Testnet)?;
         let secp = Secp256k1::new();
-
         let child = master.derive_child(HARDENED_KEY, &secp)?; // m/0H
         let encoded = child.encode();
         assert_eq!(
@@ -309,7 +275,6 @@ mod tests {
         );
         Ok(())
     }
-
     #[test]
     fn test_pubkey() -> Result<()> {
         let secp = Secp256k1::new();
