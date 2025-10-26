@@ -189,7 +189,8 @@ pub fn encode_bigint(val: BigInt) -> Vec<u8> {
         }
         Sign::Minus => {
             if !result.is_empty() {
-                result[result.len() - 1] |= 128;
+                let last_idx = result.len() - 1;
+                result[last_idx] |= 128;
             } else {
                 result.push(128);
             }
