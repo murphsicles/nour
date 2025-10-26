@@ -1,5 +1,4 @@
 //! Bit array management for Bitcoin SV script operations (e.g., LSHIFT/RSHIFT).
-
 use std::cmp::min;
 
 const LSHIFT_MASK: [u8; 8] = [0xff, 0x7f, 0x3f, 0x1f, 0x0f, 0x07, 0x03, 0x01];
@@ -100,10 +99,8 @@ impl Bits {
 pub fn lshift(v: &[u8], n: usize) -> Vec<u8> {
     let bit_shift = n % 8;
     let byte_shift = n / 8;
-
     let mask = LSHIFT_MASK[bit_shift];
     let overflow_mask = !mask;
-
     let mut result = vec![0; v.len()];
     for i in (0..v.len()).rev() {
         let k = i.saturating_sub(byte_shift);
@@ -126,10 +123,8 @@ pub fn lshift(v: &[u8], n: usize) -> Vec<u8> {
 pub fn rshift(v: &[u8], n: usize) -> Vec<u8> {
     let bit_shift = n % 8;
     let byte_shift = n / 8;
-
     let mask = RSHIFT_MASK[bit_shift];
     let overflow_mask = !mask;
-
     let mut result = vec![0; v.len()];
     for i in 0..v.len() {
         let k = i + byte_shift;
@@ -174,21 +169,18 @@ mod tests {
     #[test]
     fn lshift_test() {
         // Empty array
-        assert_eq!(lshift(&[], 0), vec![]);
-        assert_eq!(lshift(&[], 1), vec![]);
-        assert_eq!(lshift(&[], 999999), vec![]);
-
+        let expected_empty: Vec<u8> = vec![];
+        assert_eq!(lshift(&[], 0), expected_empty);
+        assert_eq!(lshift(&[], 1), expected_empty);
+        assert_eq!(lshift(&[], 999999), expected_empty);
         // No shifts
         assert_eq!(lshift(&[0x80, 0x10, 0x30, 0x55], 0), vec![0x80, 0x10, 0x30, 0x55]);
         assert_eq!(lshift(&[0xff], 0), vec![0xff]);
-
         // Shift one
         assert_eq!(lshift(&[0x80, 0x00, 0x00, 0x01], 1), vec![0x00, 0x00, 0x00, 0x02]);
         assert_eq!(lshift(&[0x80, 0x00, 0x00, 0x00], 999999), vec![0x00, 0x00, 0x00, 0x00]);
-
         // Shift four
         assert_eq!(lshift(&[0x01, 0x23, 0x45, 0x67], 4), vec![0x12, 0x34, 0x56, 0x70]);
-
         // Shift eight
         assert_eq!(lshift(&[0x01, 0x23, 0x45, 0x67], 8), vec![0x23, 0x45, 0x67, 0x00]);
     }
@@ -196,21 +188,18 @@ mod tests {
     #[test]
     fn rshift_test() {
         // Empty array
-        assert_eq!(rshift(&[], 0), vec![]);
-        assert_eq!(rshift(&[], 1), vec![]);
-        assert_eq!(rshift(&[], 999999), vec![]);
-
+        let expected_empty: Vec<u8> = vec![];
+        assert_eq!(rshift(&[], 0), expected_empty);
+        assert_eq!(rshift(&[], 1), expected_empty);
+        assert_eq!(rshift(&[], 999999), expected_empty);
         // No shifts
         assert_eq!(rshift(&[0x80, 0x10, 0x30, 0x55], 0), vec![0x80, 0x10, 0x30, 0x55]);
         assert_eq!(rshift(&[0xff], 0), vec![0xff]);
-
         // Shift one
         assert_eq!(rshift(&[0x80, 0x00, 0x00, 0x02], 1), vec![0x40, 0x00, 0x00, 0x01]);
         assert_eq!(rshift(&[0x00, 0x00, 0x00, 0x01], 999999), vec![0x00, 0x00, 0x00, 0x00]);
-
         // Shift four
         assert_eq!(rshift(&[0x01, 0x23, 0x45, 0x67], 4), vec![0x00, 0x12, 0x34, 0x56]);
-
         // Shift eight
         assert_eq!(rshift(&[0x01, 0x23, 0x45, 0x67], 8), vec![0x00, 0x01, 0x23, 0x45]);
     }
