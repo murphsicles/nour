@@ -25,30 +25,35 @@ const HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(3);
 /// Event emitted when a connection is established with the peer.
 #[derive(Clone, Debug)]
 pub struct PeerConnected {
+    /// Connected peer.
     pub peer: Arc<Peer>,
 }
 
 /// Event emitted when the connection with the peer is terminated.
 #[derive(Clone, Debug)]
 pub struct PeerDisconnected {
+    /// Disonnected peer.
     pub peer: Arc<Peer>,
 }
 
 /// Event emitted when the peer receives a network message.
 #[derive(Clone, Debug)]
 pub struct PeerMessage {
+    /// Peer message.
     pub peer: Arc<Peer>,
     pub message: Message,
 }
 
 /// Filters peers based on their version information before connecting.
 pub trait PeerFilter: Send + Sync {
+    /// Checks if peer is connectable based on version.
     fn connectable(&self, _: &Version) -> bool;
 }
 
 /// Filters out all peers except for Bitcoin SV full nodes.
 #[derive(Clone, Default, Debug)]
 pub struct SVPeerFilter {
+    /// Minimum start height for chain sync.
     pub min_start_height: i32,
 }
 
