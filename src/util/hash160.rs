@@ -1,6 +1,6 @@
 //! Hash160 computation for Bitcoin SV (SHA256 then RIPEMD160).
 
-use bitcoin_hashes::{hash160 as bh_hash160, Hash as BHHash}; // SIMD opt
+use bitcoin_hashes::hash160 as bh_hash160;
 use std::fmt;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
