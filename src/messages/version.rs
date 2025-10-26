@@ -3,7 +3,7 @@
 use crate::messages::message::Payload;
 use crate::messages::node_addr::NodeAddr;
 use crate::util::{secs_since, var_int, Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
 use std::time::UNIX_EPOCH;
