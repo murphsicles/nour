@@ -763,7 +763,7 @@ fn remove_sig(sig: &[u8], script: &[u8]) -> Vec<u8> {
 }
 
 #[inline]
-fn check_stack_size(minsize: usize, stack: &VecDeque<Cow<'a, [u8]>>) -> Result<()> {
+fn check_stack_size<'a>(minsize: usize, stack: &VecDeque<Cow<'a, [u8]>>) -> Result<()> {
     if stack.len() < minsize {
         let msg = format!("Stack too small: {}", minsize);
         return Err(Error::ScriptError(msg));
