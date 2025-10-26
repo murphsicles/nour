@@ -2,7 +2,7 @@
 ///
 /// It is interpreted as a single little-endian number for display.
 use crate::util::{Error, Result, Serializable};
-use bitcoin_hashes::sha256d::{Hash as Sha256dHash, sha256d as bh_sha256d};
+use bitcoin_hashes::sha256d::{Hash as Sha256dHash, sha256d};
 use hex;
 use std::cmp::Ordering;
 use std::fmt;
