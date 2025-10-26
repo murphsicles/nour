@@ -1,7 +1,7 @@
 //! Ping/Pong payload for Bitcoin SV P2P keepalive messages.
 use crate::messages::message::Payload;
 use crate::util::{Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
