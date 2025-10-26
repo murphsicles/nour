@@ -25,6 +25,7 @@ use std::fmt;
 pub mod checker;
 pub mod interpreter;
 #[allow(dead_code)]
+/// Script opcodes and utilities.
 pub mod op_codes;
 pub mod stack;
 
@@ -98,7 +99,7 @@ impl Script {
     /// # Errors
     /// Returns `Error::BadData` if out of range.
     pub fn append_num(&mut self, n: i32) -> Result<()> {
-        self.append_data(&stack::encode_num(n as i64)?);
+        let _ = self.append_data(&stack::encode_num(n as i64)?);
         Ok(())
     }
 
