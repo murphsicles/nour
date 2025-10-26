@@ -1,4 +1,5 @@
 //! BIP-32 extended keys for Bitcoin SV wallets (xpub/xprv).
+
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
 use base58::{ToBase58, FromBase58};
@@ -9,17 +10,23 @@ use std::fmt;
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
-// Version bytes for extended keys
-pub const MAINNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xAD, 0xE4]; // xprv
-pub const MAINNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xB2, 0x1E]; // xpub
-pub const TESTNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x83, 0x94]; // tprv
-pub const TESTNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x87, 0xCF]; // tpub
+/// Version bytes for Mainnet private extended keys (xprv prefix).
+pub const MAINNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xAD, 0xE4];
+/// Version bytes for Mainnet public extended keys (xpub prefix).
+pub const MAINNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xB2, 0x1E];
+/// Version bytes for Testnet private extended keys (tprv prefix).
+pub const TESTNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x83, 0x94];
+/// Version bytes for Testnet public extended keys (tpub prefix).
+pub const TESTNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x87, 0xCF];
+/// Hardened derivation index offset (BIP-32).
 pub const HARDENED_KEY: u32 = 0x80000000;
 
 /// Type of extended key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtendedKeyType {
+    /// Private extended key (includes secret key).
     Private,
+    /// Public extended key (includes public key only).
     Public,
 }
 
@@ -265,7 +272,7 @@ mod tests {
         data[1..33].copy_from_slice(&private_key[..32]);
         data[33..37].copy_from_slice(&index.to_be_bytes());
         let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<Sha512HashEngine>::new(&key);
-        hmac_engine.update(&data);
+        hmac_engine.input(&data);
         let result = hmac_engine.finalize().to_byte_array();
         assert_eq!(
             hex::encode(result),
@@ -302,7 +309,7 @@ mod tests {
     fn test_pubkey() -> Result<()> {
         let secp = Secp256k1::new();
         let private_key = hex::decode("e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35")?;
-        let secret_key = SecretKey::from_slice(&private_key)?;
+        let secret_key = SecretKey::from_byte_array(private_key.try_into().expect("32 bytes"))?;
         let public_key = PublicKey::from_secret_key(&secp, &secret_key);
         assert_eq!(hex::encode(public_key.serialize()), "0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2");
         Ok(())
