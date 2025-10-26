@@ -4,6 +4,7 @@ use bitcoin_hashes::hash160 as bh_hash160;
 use std::fmt;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+/// 160-bit hash (RIPEMD160(SHA256(data))).
 pub struct Hash160(pub [u8; 20]);
 
 /// Computes Hash160 (RIPEMD160(SHA256(data))).
