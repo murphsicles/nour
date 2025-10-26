@@ -37,7 +37,7 @@ impl MerkleBlock {
         if self.total_transactions == 0 {
             return Err(Error::BadData("No transactions".to_string()));
         }
-        if self.total_transactions > MAX_TOTAL_TX {
+        if self.total_transactions as u64 > MAX_TOTAL_TX {
             return Err(Error::BadData(format!("Too many transactions: {}", self.total_transactions)));
         }
 
