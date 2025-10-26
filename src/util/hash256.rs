@@ -1,7 +1,7 @@
 //! 256-bit hash for blocks and transactions in Bitcoin SV.
 //
 /// It is interpreted as a single little-endian number for display.
-use crate::util::{Error, Result};
+use crate::util::{Error, Result, Serializable};
 use bitcoin_hashes::sha256d as bh_sha256d; // SIMD opt
 use hex;
 use std::cmp::Ordering;
