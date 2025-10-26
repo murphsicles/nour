@@ -1,4 +1,5 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
+
 use crate::util::{var_int, Error, Result, Serializable};
 use murmur3::murmur3_32;
 use rand::rngs::OsRng;
@@ -48,7 +49,7 @@ impl BloomFilter {
         let size = (-1.0 / ln2.powi(2) * insert * pr_false_pos.ln()) / 8.0;
         let size = size.min(BLOOM_FILTER_MAX_FILTER_SIZE as f64).ceil() as usize;
         let num_hash_funcs = ((size as f64 * 8.0 / insert * ln2).min(BLOOM_FILTER_MAX_HASH_FUNCS as f64)).ceil() as usize;
-        let mut rng = OsRng;
+        let mut rng = OsRng::new();
         let tweak = rng.r#gen::<u32>();
         Ok(BloomFilter {
             filter: vec![0; size],
@@ -65,10 +66,11 @@ impl BloomFilter {
         if data.len() > 520 {
             return Err(Error::BadArgument("Data too large for bloom add".to_string()));
         }
+        let bit_size = (self.filter.len() * 8) as u32;
         for i in 0..self.num_hash_funcs {
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.num_hash_funcs as u32);
-            self.filter[c as usize / 8] |= 1 << (c % 8);
+            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % bit_size;
+            self.filter[(c / 8) as usize] |= 1u8 << (c % 8);
         }
         Ok(())
     }
@@ -78,10 +80,11 @@ impl BloomFilter {
     /// False positives possible, but no false negatives.
     #[must_use]
     pub fn contains(&self, data: &[u8]) -> bool {
+        let bit_size = (self.filter.len() * 8) as u32;
         for i in 0..self.num_hash_funcs {
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.num_hash_funcs as u32);
-            if self.filter[c as usize / 8] & (1 << (c % 8)) == 0 {
+            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % bit_size;
+            if self.filter[(c / 8) as usize] & (1u8 << (c % 8)) == 0 {
                 return false;
             }
         }
