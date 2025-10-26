@@ -2,7 +2,7 @@
 use crate::messages::Tx;
 use crate::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID};
 use crate::util::{Error, Result};
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 
 const LOCKTIME_THRESHOLD: i32 = 500_000_000;
 const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
@@ -204,7 +204,7 @@ mod tests {
     fn standard_p2pkh_test(sighash_type: u8) {
         let secp = Secp256k1::new();
         let private_key = [1; 32];
-        let secret_key = SecretKey::from_slice(&private_key).unwrap();
+        let secret_key = SecretKey::from_byte_array(private_key).unwrap();
         let pk = PublicKey::from_secret_key(&secp, &secret_key).serialize();
         let pkh = hash160(&pk);
         let mut lock_script = Script::new();
