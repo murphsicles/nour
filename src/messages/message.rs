@@ -430,7 +430,8 @@ async fn write_with_payload_async<T: Serializable<T>>(
 }
 /// Message payload that is writable to bytes.
 pub trait Payload<T>: Serializable<T> + fmt::Debug {
-    fn size(&self) -> usize;
+/// Returns the serialized size of the message in bytes.
+fn size(&self) -> usize;
 }
 impl From<Addr> for Message {
     fn from(p: Addr) -> Self {
