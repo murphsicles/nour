@@ -1,5 +1,5 @@
 //! Script interpreter for Bitcoin SV consensus evaluation.
-use crate::script::{op_codes::*, stack::*, Checker};
+use crate::script::{op_codes::*, Checker};
 use crate::transaction::sighash::SIGHASH_FORKID;
 use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
 use std::borrow::Cow;
