@@ -16,33 +16,58 @@ use tokio::io::{AsyncRead, AsyncWrite};
 pub const NO_CHECKSUM: [u8; 4] = [0x5d, 0xf6, 0xe0, 0xe2];
 /// Max message payload size (4GB for BSV post-Genesis).
 pub const MAX_PAYLOAD_SIZE: u64 = 0x100000000; // 4GB
-/// Bitcoin peer-to-peer message with its payload.
-#[derive(PartialEq, Eq, Hash, Clone)]
+/// Enum representing Bitcoin P2P messages.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
+    /// Address message (node addresses).
     Addr(Addr),
+    /// Block message (full block data).
     Block(Block),
+    /// Fee filter message (min fee threshold).
     FeeFilter(FeeFilter),
+    /// Filter add message (add data to bloom filter).
     FilterAdd(FilterAdd),
+    /// Filter clear message (clear bloom filter).
     FilterClear,
+    /// Filter load message (load new bloom filter).
     FilterLoad(FilterLoad),
+    /// Get address message (request peer addresses).
     GetAddr,
+    /// Get blocks message (request blocks by locator).
     GetBlocks(BlockLocator),
+    /// Get data message (request inventory items).
     GetData(Inv),
+    /// Get headers message (request block headers).
     GetHeaders(BlockLocator),
+    /// Headers message (block headers).
     Headers(Headers),
+    /// Inventory message (announce data).
     Inv(Inv),
+    /// Mempool message (request mempool contents).
     Mempool,
+    /// Merkle block message (filtered block).
     MerkleBlock(MerkleBlock),
+    /// Not found message (response to getdata).
     NotFound(Inv),
+    /// Other/unknown message type.
     Other(String),
+    /// Partial message (header only).
     Partial(MessageHeader),
+    /// Ping message (keep-alive).
     Ping(Ping),
+    /// Pong message (ping response).
     Pong(Ping),
+    /// Reject message (error response).
     Reject(Reject),
+    /// Send headers message (prefer headers over blocks).
     SendHeaders,
+    /// Send compact message (announce compact blocks).
     SendCmpct(SendCmpct),
+    /// Transaction message (full tx).
     Tx(Tx),
+    /// Verack message (version ack).
     Verack,
+    /// Version message (protocol handshake).
     Version(Version),
 }
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
