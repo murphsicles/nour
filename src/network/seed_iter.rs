@@ -5,13 +5,19 @@ use log::{error, info};
 use rand::{rng, seq::SliceRandom, Rng};
 use std::net::IpAddr;
 
-#[derive(Clone, Debug)]
+/// Iterator over DNS seeds for peer discovery.
 pub struct SeedIter<'a> {
+    /// Port for discovered peers.
     pub port: u16,
+    /// Discover seeds.
     seeds: &'a [String],
+    /// Find node IP addresses.
     nodes: Vec<IpAddr>,
+    /// Seed index.
     seed_index: usize,
+    /// Node index.
     node_index: usize,
+    /// Random offset.
     random_offset: usize,
 }
 
