@@ -162,19 +162,19 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
                 check_stack_size((n as usize) + 1, &stack)?;
                 let index = stack.len() - (n as usize) - 1;
                 let item = stack.remove(index);
-                stack.push_back(item);
+                stack.push_back(item.expect("stack underflow"));
             }
             OP_ROT => {
                 check_stack_size(3, &stack)?;
                 let index = stack.len() - 3;
                 let third = stack.remove(index);
-                stack.push_back(third);
+                stack.push_back(third.expect("stack underflow"));
             }
             OP_SWAP => {
                 check_stack_size(2, &stack)?;
                 let index = stack.len() - 2;
                 let second = stack.remove(index);
-                stack.push_back(second);
+                stack.push_back(second.expect("stack underflow"));
             }
             OP_TUCK => {
                 check_stack_size(2, &stack)?;
@@ -218,16 +218,16 @@ pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()
                 let index = stack.len() - 6;
                 let sixth = stack.remove(index);
                 let fifth = stack.remove(index);
-                stack.push_back(sixth);
-                stack.push_back(fifth);
+                stack.push_back(sixth.expect("stack underflow"));
+                stack.push_back(fifth.expect("stack underflow"));
             }
             OP_2SWAP => {
                 check_stack_size(4, &stack)?;
                 let index = stack.len() - 4;
                 let fourth = stack.remove(index);
                 let third = stack.remove(index);
-                stack.push_back(fourth);
-                stack.push_back(third);
+                stack.push_back(fourth.expect("stack underflow"));
+                stack.push_back(third.expect("stack underflow"));
             }
             OP_CAT => {
                 check_stack_size(2, &stack)?;
@@ -698,8 +698,8 @@ fn check_multisig<T: Checker>(
         let msg = "total out of range".to_string();
         return Err(Error::ScriptError(msg));
     }
-    check_stack_size((total as usize), stack)?;
-    let mut keys = Vec::with_capacity((total as usize));
+    check_stack_size(total as usize, stack)?;
+    let mut keys = Vec::with_capacity(total as usize);
     for _ in 0..total {
         keys.push(stack.pop_back().expect("stack underflow").into_owned());
     }
@@ -708,8 +708,8 @@ fn check_multisig<T: Checker>(
         let msg = "required out of range".to_string();
         return Err(Error::ScriptError(msg));
     }
-    check_stack_size((required as usize), stack)?;
-    let mut sigs = Vec::with_capacity((required as usize));
+    check_stack_size(required as usize, stack)?;
+    let mut sigs = Vec::with_capacity(required as usize);
     for _ in 0..required {
         sigs.push(stack.pop_back().expect("stack underflow").into_owned());
     }
@@ -847,7 +847,10 @@ fn encode_num(n: i64) -> Result<Vec<u8>> {
             result.push(0);
         }
     } else if negative {
-        let last = result.last_mut().unwrap_or(&mut 0);
+        let last = if let Some(last) = result.last_mut() {
+            last
+        } else {
+            result.push(0); result.last_mut().unwrap() };
         *last |= 0x80;
     }
     Ok(result)
@@ -873,7 +876,10 @@ fn encode_bigint(mut n: BigInt) -> Vec<u8> {
             result.push(0);
         }
     } else if negative {
-        let last = result.last_mut().unwrap_or(&mut 0);
+        let last = if let Some(last) = result.last_mut() {
+            last
+        } else {
+            result.push(0); result.last_mut().unwrap() };
         *last |= 0x80;
     }
     result
