@@ -122,7 +122,7 @@ impl Block {
                     n -= 1;
                     row.pop_front().unwrap()
                 };
-                let mut h = [0u8; 64];
+                let mut h = vec![0u8; 64];
                 let mut cursor = Cursor::new(&mut h);
                 h1.write(&mut cursor).unwrap();
                 h2.write(&mut cursor).unwrap();
