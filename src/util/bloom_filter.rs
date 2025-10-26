@@ -1,9 +1,7 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
-
 use crate::util::{var_int, Error, Result, Serializable};
-use byteorder::WriteBytesExt;
 use murmur3::murmur3_32;
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, Rng};
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
@@ -11,6 +9,7 @@ use std::num::Wrapping;
 
 /// Maximum number of bytes in the bloom filter bit field.
 pub const BLOOM_FILTER_MAX_FILTER_SIZE: usize = 36_000;
+
 /// Maximum number of hash functions for the bloom filter.
 pub const BLOOM_FILTER_MAX_HASH_FUNCS: usize = 50;
 
@@ -67,7 +66,7 @@ impl BloomFilter {
         }
         for i in 0..self.num_hash_funcs {
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.n as u32);
+            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.num_hash_funcs as u32);
             self.filter[c as usize / 8] |= 1 << (c % 8);
         }
         Ok(())
@@ -80,7 +79,7 @@ impl BloomFilter {
     pub fn contains(&self, data: &[u8]) -> bool {
         for i in 0..self.num_hash_funcs {
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.n as u32);
+            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % (self.num_hash_funcs as u32);
             if self.filter[c as usize / 8] & (1 << (c % 8)) == 0 {
                 return false;
             }
@@ -122,6 +121,7 @@ impl Serializable<BloomFilter> for BloomFilter {
         let tweak = u32::from_le_bytes(tweak);
         Ok(BloomFilter { filter, num_hash_funcs, tweak })
     }
+
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         var_int::write(self.filter.len() as u64, writer)?;
         writer.write_all(&self.filter)?;
@@ -146,6 +146,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
+
     #[test]
     fn write_read() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
@@ -156,6 +157,7 @@ mod tests {
         bf.write(&mut v).unwrap();
         assert_eq!(BloomFilter::read(&mut Cursor::new(&v)).unwrap(), bf);
     }
+
     #[test]
     fn contains() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
@@ -163,6 +165,7 @@ mod tests {
         assert!(bf.contains(&vec![5; 32]));
         assert!(!bf.contains(&vec![6; 32]));
     }
+
     #[test]
     fn invalid() {
         assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Invalid insert value");
@@ -172,6 +175,7 @@ mod tests {
         assert!(BloomFilter::new(1.0, f64::NAN).is_err());
         assert!(BloomFilter::new(f64::NAN, 0.5).is_err());
     }
+
     #[test]
     fn validate() {
         let bf = BloomFilter {
@@ -187,6 +191,7 @@ mod tests {
         bf_clone.num_hash_funcs = BLOOM_FILTER_MAX_HASH_FUNCS + 1;
         assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Too many hash funcs");
     }
+
     #[test]
     fn add_too_large() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
