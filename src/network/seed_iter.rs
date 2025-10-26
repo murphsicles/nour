@@ -1,8 +1,7 @@
 //! DNS seed iterator for Bitcoin SV peer discovery.
-
 use dns_lookup::lookup_host;
 use log::{error, info};
-use rand::{rngs::ThreadRng, seq::SliceRandom, Rng};
+use rand::{seq::SliceRandom, thread_rng, Rng};
 use std::net::IpAddr;
 
 #[derive(Clone, Debug)]
@@ -19,8 +18,8 @@ impl<'a> SeedIter<'a> {
     /// Creates a new seed iterator with random offset for load balancing.
     #[must_use]
     pub fn new(seeds: &'a [String], port: u16) -> Self {
-        let mut rng = ThreadRng::default();
-        let random_offset = rng.gen_range(0..100);
+        let rng = thread_rng();
+        let random_offset = rng.random_range(0..100);
         Self {
             port,
             seeds,
@@ -41,15 +40,16 @@ impl<'a> Iterator for SeedIter<'a> {
                 let i = (self.seed_index + self.random_offset) % self.seeds.len();
                 info!("Looking up DNS: {}", self.seeds[i]);
                 match lookup_host(&self.seeds[i]) {
-                    Ok(mut ip_iter) => {
-                        if ip_iter.is_empty() {
+                    Ok(ip_iter) => {
+                        let ip_vec: Vec<IpAddr> = ip_iter.collect();
+                        if ip_vec.is_empty() {
                             error!("DNS lookup for {} returned no IPs", self.seeds[i]);
                             self.seed_index += 1;
                             continue;
                         }
-                        let mut rng = ThreadRng::default();
-        ip_iter.shuffle(&mut rng);
-                        self.nodes = ip_iter;
+                        let mut rng = thread_rng();
+                        ip_vec.shuffle(&mut rng);
+                        self.nodes = ip_vec;
                         self.node_index = 0;
                     }
                     Err(e) => {
