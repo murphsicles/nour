@@ -4,7 +4,7 @@
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
 use crate::messages::{Payload, Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
-use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
+use crate::util::{var_int, Error, Hash256, Result, Serializable, hash160::Hash160, sha256d};
 use bitcoin_hashes::sha256d as bh_sha256d;
 use byteorder::{LittleEndian, WriteBytesExt};
 
@@ -12,16 +12,12 @@ const FORK_ID: u32 = 0; // 24-bit BSV fork ID
 
 /// Signs all outputs.
 pub const SIGHASH_ALL: u8 = 0x01;
-
 /// Signs no outputs (anyone spend).
 pub const SIGHASH_NONE: u8 = 0x02;
-
 /// Signs only matching output.
 pub const SIGHASH_SINGLE: u8 = 0x03;
-
 /// Anyone can add inputs.
 pub const SIGHASH_ANYONECANPAY: u8 = 0x80;
-
 /// BSV/BCH fork flag (post-2017).
 pub const SIGHASH_FORKID: u8 = 0x40;
 
@@ -244,6 +240,7 @@ mod tests {
         let addr = "mfmKD4cP6Na7T8D87XRSiR7shA1HNGSaec";
         let (_version, hash160_vec) = decode_address(addr)?;
         let hash160_array: [u8; 20] = hash160_vec.try_into().map_err(|_| Error::BadData("Invalid hash160 length".to_string()))?;
+        let hash160 = Hash160::from(hash160_array);
         let tx = Tx {
             version: 2,
             inputs: vec![TxIn {
@@ -259,11 +256,11 @@ mod tests {
             outputs: vec![
                 TxOut {
                     satoshis: 100,
-                    lock_script: p2pkh::create_lock_script(&hash160_array),
+                    lock_script: p2pkh::create_lock_script(&hash160),
                 },
                 TxOut {
                     satoshis: 259899900,
-                    lock_script: p2pkh::create_lock_script(&hash160_array),
+                    lock_script: p2pkh::create_lock_script(&hash160),
                 },
             ],
             lock_time: 0,
