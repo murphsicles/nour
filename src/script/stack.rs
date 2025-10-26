@@ -271,7 +271,8 @@ mod tests {
     #[test]
     fn bigint_tests() {
         let bi_zero = BigInt::zero();
-        assert_eq!(encode_bigint(bi_zero), vec![]);
+        let expected: Vec<u8> = vec![];
+        assert_eq!(encode_bigint(bi_zero), expected);
         let bi_one = BigInt::from(1u8);
         assert_eq!(encode_bigint(bi_one), vec![1]);
         let bi_neg_one = BigInt::from(-1i8);
