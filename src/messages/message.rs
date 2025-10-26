@@ -325,47 +325,6 @@ impl Message {
         }
     }
 }
-impl fmt::Debug for Message {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Message::Addr(p) => f.debug_struct("Addr").field("addrs", &p.addrs).finish(),
-            Message::Block(p) => f.debug_struct("Block").field("header", &p.header).field("txns", &p.txns).finish(),
-            Message::FeeFilter(p) => f.debug_struct("FeeFilter").field("minfee", &p.minfee).finish(),
-            Message::FilterAdd(p) => f.debug_struct("FilterAdd").field("data", &p.data).finish(),
-            Message::FilterClear => f.write_str("FilterClear"),
-            Message::FilterLoad(p) => f.debug_struct("FilterLoad").field("bloom_filter", &p.bloom_filter).field("flags", &p.flags).finish(),
-            Message::GetAddr => f.write_str("GetAddr"),
-            Message::GetBlocks(p) => f.debug_struct("GetBlocks").field("version", &p.version).field("block_locator_hashes", &p.block_locator_hashes).field("hash_stop", &p.hash_stop).finish(),
-            Message::GetData(p) => f.debug_struct("GetData").field("inv", &p).finish(),
-            Message::GetHeaders(p) => f.debug_struct("GetHeaders").field("version", &p.version).field("block_locator_hashes", &p.block_locator_hashes).field("hash_stop", &p.hash_stop).finish(),
-            Message::Headers(p) => f.debug_struct("Headers").field("headers", &p.headers).finish(),
-            Message::Inv(p) => f.debug_struct("Inv").field("objects", &p.objects).finish(),
-            Message::Mempool => f.write_str("Mempool"),
-            Message::MerkleBlock(p) => f.debug_struct("MerkleBlock").field("header", &p.header).field("total_transactions", &p.total_transactions).field("hashes", &p.hashes).field("flags", &p.flags).finish(),
-            Message::NotFound(p) => f.debug_struct("NotFound").field("inv", &p).finish(),
-            Message::Other(p) => f.debug_struct("Other").field("command", &p).finish(),
-            Message::Partial(h) => f.debug_struct("Partial").field("header", &h).finish(),
-            Message::Ping(p) => f.debug_struct("Ping").field("nonce", &p.nonce).finish(),
-            Message::Pong(p) => f.debug_struct("Pong").field("nonce", &p.nonce).finish(),
-            Message::Reject(p) => f.debug_struct("Reject").field("message", &p.message).field("code", &p.code).field("reason", &p.reason).field("data", &p.data).finish(),
-            Message::SendHeaders => f.write_str("SendHeaders"),
-            Message::SendCmpct(p) => f.debug_struct("SendCmpct").field("enable", &p.enable).field("version", &p.version).finish(),
-            Message::Tx(p) => f.debug_struct("Tx").field("version", &p.version).field("inputs", &p.inputs).field("outputs", &p.outputs).field("lock_time", &p.lock_time).finish(),
-            Message::Verack => f.write_str("Verack"),
-            Message::Version(p) => f.debug_struct("Version")
-                .field("version", &p.version)
-                .field("services", &p.services)
-                .field("timestamp", &p.timestamp)
-                .field("recv_addr", &p.recv_addr)
-                .field("tx_addr", &p.tx_addr)
-                .field("nonce", &p.nonce)
-                .field("user_agent", &p.user_agent)
-                .field("start_height", &p.start_height)
-                .field("relay", &p.relay)
-                .finish(),
-        }
-    }
-}
 fn write_without_payload(writer: &mut dyn Write, command: [u8; 12], magic: [u8; 4]) -> io::Result<()> {
     let header = MessageHeader {
         magic,
