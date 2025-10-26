@@ -101,7 +101,7 @@ pub mod commands {
     pub const BLOCK: [u8; 12] = *b"block\0\0\0\0\0\0\0";
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
     pub const FILTERADD: [u8; 12] = *b"filteradd\0\0\0";
-    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0\0";
+    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0";
     pub const FILTERLOAD: [u8; 12] = *b"filterload\0\0";
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
     pub const GETBLOCKS: [u8; 12] = *b"getblocks\0\0\0";
@@ -115,7 +115,7 @@ pub mod commands {
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
     pub const PONG: [u8; 12] = *b"pong\0\0\0\0\0\0\0\0";
     pub const REJECT: [u8; 12] = *b"reject\0\0\0\0\0\0";
-    pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0\0";
+    pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0";
     pub const SENDHEADERS: [u8; 12] = *b"sendheaders\0";
     pub const TX: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
     pub const VERACK: [u8; 12] = *b"verack\0\0\0\0\0\0";
