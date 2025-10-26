@@ -85,6 +85,7 @@ impl fmt::Debug for Inv {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::messages::{INV_VECT_TX, INV_VECT_BLOCK};
     use crate::util::Hash256;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
