@@ -2,7 +2,7 @@
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
 use base58::{ToBase58, FromBase58};
-use bitcoin_hashes::{sha256d as bh_sha256d, HashEngine};
+use bitcoin_hashes::{sha256d as bh_sha256d, Hash, HashEngine};
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use std::io::{self, Read, Write};
 use std::fmt;
@@ -138,7 +138,7 @@ impl ExtendedKey {
         hmac_input.extend_from_slice(&index.to_be_bytes());
         let chain_code = self.chain_code();
         let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(&chain_code);
-        hmac_engine.update(&hmac_input);
+        hmac_engine.input(&hmac_input);
         let result = hmac_engine.finalize().to_byte_array();
         if result.len() != 64 {
             return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
@@ -222,7 +222,7 @@ pub fn derive_extended_key(
 /// Creates an extended private key from a seed.
 pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedKey> {
     let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(b"Bitcoin seed");
-    hmac_engine.update(seed);
+    hmac_engine.input(seed);
     let result = hmac_engine.finalize().to_byte_array();
     if result.len() != 64 {
         return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
