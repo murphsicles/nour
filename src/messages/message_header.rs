@@ -2,7 +2,7 @@
 
 use crate::util::{Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash};
+use bitcoin_hashes::sha256d as bh_sha256d;
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
