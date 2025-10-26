@@ -13,7 +13,7 @@ use std::io::{Read, Write};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Maximum total transactions in merkle block (safety cap for large BSV blocks).
-const MAX_TOTAL_TX: u32 = 10_000_000_000;
+const MAX_TOTAL_TX: u64 = 10_000_000_000;
 
 /// A block header and partial merkle tree for SPV nodes to validate transactions.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
