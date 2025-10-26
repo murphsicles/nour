@@ -113,7 +113,7 @@ impl<'a> Checker for TransactionChecker<'a> {
         let secp = Secp256k1::verification_only();
         let signature =
             Signature::from_der(der_sig).map_err(|_| Error::ScriptError("Invalid DER".to_string()))?;
-        let message = Message::from_digest(&sig_hash.0);
+        let message = Message::from_digest(sig_hash.0);
         let public_key =
             PublicKey::from_slice(pubkey).map_err(|_| Error::ScriptError("Invalid pubkey".to_string()))?;
 
