@@ -1,4 +1,5 @@
 //! Script interpreter for Bitcoin SV consensus evaluation.
+
 use crate::script::{op_codes::*, Checker};
 use crate::transaction::sighash::SIGHASH_FORKID;
 use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
@@ -20,7 +21,7 @@ pub const PREGENESIS_RULES: u32 = 0x01;
 /// Executes a script
 pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Result<()> {
     let mut stack: VecDeque<Cow<'a, [u8]>> = VecDeque::with_capacity(STACK_CAPACITY);
-    let mut alt_stack: VecDeque<Cow<'static, [u8]>> = VecDeque::with_capacity(ALT_STACK_CAPACITY);
+    let mut alt_stack: VecDeque<Cow<'a, [u8]>> = VecDeque::with_capacity(ALT_STACK_CAPACITY);
     let mut branch_exec: Vec<bool> = Vec::new();
     let mut check_index = 0;
     let mut i = 0;
@@ -688,10 +689,10 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
 }
 
 #[inline]
-fn check_multisig<T: Checker>(
-    stack: &mut VecDeque<Cow<'static, [u8]>>,
+fn check_multisig<'a, T: Checker>(
+    stack: &mut VecDeque<Cow<'a, [u8]>>,
     checker: &mut T,
-    script: &[u8],
+    script: &'a [u8],
 ) -> Result<bool> {
     let total = pop_num(stack)?;
     if total < 0 {
@@ -762,7 +763,7 @@ fn remove_sig(sig: &[u8], script: &[u8]) -> Vec<u8> {
 }
 
 #[inline]
-fn check_stack_size(minsize: usize, stack: &VecDeque<Cow<'static, [u8]>>) -> Result<()> {
+fn check_stack_size(minsize: usize, stack: &VecDeque<Cow<'a, [u8]>>) -> Result<()> {
     if stack.len() < minsize {
         let msg = format!("Stack too small: {}", minsize);
         return Err(Error::ScriptError(msg));
@@ -840,17 +841,19 @@ fn encode_num(n: i64) -> Result<Vec<u8>> {
         result.push((abs_n & 0xff) as u8);
         abs_n >>= 8;
     }
-    if result.last().unwrap_or(&0) & 0x80 != 0 {
+    let last = if let Some(last) = result.last_mut() {
+        last
+    } else {
+        result.push(0);
+        result.last_mut().unwrap()
+    };
+    if *last & 0x80 != 0 {
         if negative {
             result.push(0x80);
         } else {
-            result.push(0);
+            result.insert(0, 0);
         }
     } else if negative {
-        let last = if let Some(last) = result.last_mut() {
-            last
-        } else {
-            result.push(0); result.last_mut().unwrap() };
         *last |= 0x80;
     }
     Ok(result)
@@ -869,17 +872,19 @@ fn encode_bigint(mut n: BigInt) -> Vec<u8> {
         result.push((n.clone() & BigInt::from(0xffu8)).to_u8().unwrap());
         n >>= 8;
     }
-    if result.last().unwrap_or(&0) & 0x80 != 0 {
+    let last = if let Some(last) = result.last_mut() {
+        last
+    } else {
+        result.push(0);
+        result.last_mut().unwrap()
+    };
+    if *last & 0x80 != 0 {
         if negative {
             result.push(0x80);
         } else {
-            result.push(0);
+            result.insert(0, 0);
         }
     } else if negative {
-        let last = if let Some(last) = result.last_mut() {
-            last
-        } else {
-            result.push(0); result.last_mut().unwrap() };
         *last |= 0x80;
     }
     result
@@ -900,7 +905,7 @@ fn decode_bigint(v: &mut [u8]) -> BigInt {
     }
 }
 
-fn pop_num(stack: &mut VecDeque<Cow<'static, [u8]>>) -> Result<i32> {
+fn pop_num<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<i32> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     let mut v = item.to_vec();
@@ -922,18 +927,18 @@ fn decode_num(v: &mut [u8]) -> Result<i32> {
     }
 }
 
-fn decode_bool(item: &Cow<'static, [u8]>) -> bool {
+fn decode_bool<'a>(item: &Cow<'a, [u8]>) -> bool {
     !item.is_empty() && item[item.len() - 1] != 0x80 && item.iter().any(|&b| b != 0)
 }
 
-fn pop_bigint(stack: &mut VecDeque<Cow<'static, [u8]>>) -> Result<BigInt> {
+fn pop_bigint<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<BigInt> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     let mut v = item.to_vec();
     Ok(decode_bigint(&mut v))
 }
 
-fn pop_bool(stack: &mut VecDeque<Cow<'static, [u8]>>) -> Result<bool> {
+fn pop_bool<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<bool> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     Ok(decode_bool(&item))
