@@ -6,7 +6,7 @@ use crate::messages::{
     send_cmpct::SendCmpct, tx::Tx, version::Version,
 };
 use crate::util::{Error, Result, Serializable};
-use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash};
+use bitcoin_hashes::sha256d as bh_sha256d;
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
@@ -101,21 +101,21 @@ pub mod commands {
     pub const BLOCK: [u8; 12] = *b"block\0\0\0\0\0\0\0";
     pub const FEEFILTER: [u8; 12] = *b"feefilter\0\0\0";
     pub const FILTERADD: [u8; 12] = *b"filteradd\0\0\0";
-    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0";
+    pub const FILTERCLEAR: [u8; 12] = *b"filterclear\0\0";
     pub const FILTERLOAD: [u8; 12] = *b"filterload\0\0";
     pub const GETADDR: [u8; 12] = *b"getaddr\0\0\0\0\0";
     pub const GETBLOCKS: [u8; 12] = *b"getblocks\0\0\0";
     pub const GETDATA: [u8; 12] = *b"getdata\0\0\0\0\0";
     pub const GETHEADERS: [u8; 12] = *b"getheaders\0\0";
     pub const HEADERS: [u8; 12] = *b"headers\0\0\0\0\0";
-    pub const INV: [u8; 12] = *b"inv\0\0\0\0\0\0\0\0\0\0";
+    pub const INV: [u8; 12] = *b"inv\0\0\0\0\0\0\0\0\0";
     pub const MEMPOOL: [u8; 12] = *b"mempool\0\0\0\0\0";
     pub const MERKLEBLOCK: [u8; 12] = *b"merkleblock\0";
     pub const NOTFOUND: [u8; 12] = *b"notfound\0\0\0\0";
     pub const PING: [u8; 12] = *b"ping\0\0\0\0\0\0\0\0";
     pub const PONG: [u8; 12] = *b"pong\0\0\0\0\0\0\0\0";
     pub const REJECT: [u8; 12] = *b"reject\0\0\0\0\0\0";
-    pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0";
+    pub const SENDCMPCT: [u8; 12] = *b"sendcmpct\0\0\0\0";
     pub const SENDHEADERS: [u8; 12] = *b"sendheaders\0";
     pub const TX: [u8; 12] = *b"tx\0\0\0\0\0\0\0\0\0\0";
     pub const VERACK: [u8; 12] = *b"verack\0\0\0\0\0\0";
@@ -180,15 +180,27 @@ impl Message {
         read_payload!(commands::FILTERLOAD, FilterLoad, validate);
         read_payload!(commands::GETADDR, GetAddr);
         read_payload!(commands::GETBLOCKS, BlockLocator);
-        read_payload!(commands::GETDATA, Inv);
-        read_payload!(commands::GETHEADERS, BlockLocator);
+        if header.command == commands::GETDATA {
+            let payload = header.payload(reader)?;
+            return Ok(Message::GetData(Inv::read(&mut Cursor::new(payload))?));
+        }
+        if header.command == commands::GETHEADERS {
+            let payload = header.payload(reader)?;
+            return Ok(Message::GetHeaders(BlockLocator::read(&mut Cursor::new(payload))?));
+        }
         read_payload!(commands::HEADERS, Headers);
         read_payload!(commands::INV, Inv);
         read_payload!(commands::MEMPOOL, Mempool);
         read_payload!(commands::MERKLEBLOCK, MerkleBlock);
-        read_payload!(commands::NOTFOUND, Inv);
+        if header.command == commands::NOTFOUND {
+            let payload = header.payload(reader)?;
+            return Ok(Message::NotFound(Inv::read(&mut Cursor::new(payload))?));
+        }
         read_payload!(commands::PING, Ping);
-        read_payload!(commands::PONG, Ping);
+        if header.command == commands::PONG {
+            let payload = header.payload(reader)?;
+            return Ok(Message::Pong(Ping::read(&mut Cursor::new(payload))?));
+        }
         read_payload!(commands::REJECT, Reject);
         read_payload!(commands::SENDCMPCT, SendCmpct);
         read_payload!(commands::SENDHEADERS, SendHeaders);
@@ -415,6 +427,11 @@ impl From<FilterAdd> for Message {
         Message::FilterAdd(p)
     }
 }
+impl From<FilterClear> for Message {
+    fn from(_: FilterClear) -> Self {
+        Message::FilterClear
+    }
+}
 impl From<FilterLoad> for Message {
     fn from(p: FilterLoad) -> Self {
         Message::FilterLoad(p)
@@ -440,6 +457,16 @@ impl From<MerkleBlock> for Message {
         Message::MerkleBlock(p)
     }
 }
+impl From<GetAddr> for Message {
+    fn from(_: GetAddr) -> Self {
+        Message::GetAddr
+    }
+}
+impl From<Mempool> for Message {
+    fn from(_: Mempool) -> Self {
+        Message::Mempool
+    }
+}
 impl From<Ping> for Message {
     fn from(p: Ping) -> Self {
         Message::Ping(p)
@@ -455,9 +482,19 @@ impl From<SendCmpct> for Message {
         Message::SendCmpct(p)
     }
 }
+impl From<SendHeaders> for Message {
+    fn from(_: SendHeaders) -> Self {
+        Message::SendHeaders
+    }
+}
 impl From<Tx> for Message {
     fn from(p: Tx) -> Self {
         Message::Tx(p)
+    }
+}
+impl From<Verack> for Message {
+    fn from(_: Verack) -> Self {
+        Message::Verack
     }
 }
 impl From<Version> for Message {
