@@ -1,7 +1,7 @@
 //! SendCmpct message for Bitcoin SV P2P, signaling compact block support (BIP-152).
 use crate::messages::message::Payload;
 use crate::util::{Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
