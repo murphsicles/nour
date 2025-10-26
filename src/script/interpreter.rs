@@ -948,7 +948,6 @@ fn pop_bool<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<bool> {
 mod tests {
     use super::*;
     use crate::script::{Script, TransactionlessChecker};
-    use hex;
 
     #[test]
     fn test_op_push() {
