@@ -2,7 +2,6 @@
 use crate::messages::out_point::OutPoint;
 use crate::script::Script;
 use crate::util::{var_int, Error, Result, Serializable};
-use byteorder::WriteBytesExt;
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
