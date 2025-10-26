@@ -124,7 +124,7 @@ Defines P2P messages with sync/async serialization/deserialization, optimized fo
 - `COINBASE_OUTPOINT_*`: Coinbase markers.
 - `INV_VECT_*`: Inventory types (ERROR=0, TX=1, BLOCK=2, etc.).
 - `REJECT_*`: Rejection codes (MALFORMED=0x01, INVALID=0x10, etc.).
-- `MAX_INV_ENTRIES=50000`, `MAX_PAYLOAD_SIZE=4GB`, `MAX_TOTAL_TX=10M`, `MAX_BLOCK_LOCATOR_HASHES=2000`, `MAX_HEADERS=2000`.
+- `MAX_INV_ENTRIES=50000`, `MAX_PAYLOAD_SIZE=4GB`, `MAX_TOTAL_TX=10B`, `MAX_BLOCK_LOCATOR_HASHES=2000`, `MAX_HEADERS=2000`.
 
 **Examples**:
 - Decoding a message:
