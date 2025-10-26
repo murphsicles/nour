@@ -5,8 +5,7 @@ use crate::messages::{OutPoint, TxIn, TxOut, COINBASE_OUTPOINT_HASH, COINBASE_OU
 use crate::script::{op_codes, Script, TransactionChecker, NO_FLAGS, PREGENESIS_RULES};
 use crate::transaction::sighash::SigHashCache;
 use crate::util::{sha256d, var_int, Error, Hash256, Result, Serializable};
-use bitcoin_hashes::sha256d as bh_sha256d;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use linked_hash_map::LinkedHashMap;
 use std::collections::HashSet;
 use std::fmt;
