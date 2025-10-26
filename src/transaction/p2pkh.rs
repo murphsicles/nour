@@ -98,7 +98,6 @@ pub fn extract_pubkeyhash(lock_script: &[u8]) -> Result<Hash160> {
 mod tests {
     use super::*;
     use crate::script::op_codes::OP_1;
-    use pretty_assertions::assert_eq;
     #[test]
     fn check_lock_script_test() {
         let mut s = Script::new();
