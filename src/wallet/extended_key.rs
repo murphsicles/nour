@@ -125,7 +125,7 @@ impl ExtendedKey {
         }
         hmac_input.extend_from_slice(&index.to_be_bytes());
         let chain_code = self.chain_code();
-        let mut hmac_engine = HmacEngine::<sha512::Hash>::new(&chain_code);
+        let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::Hash>::new(&chain_code);
         hmac_engine.update(&hmac_input);
         let result = hmac_engine.finalize().into_bytes();
         if result.len() != 64 {
@@ -204,7 +204,7 @@ pub fn derive_extended_key(
 }
 /// Creates an extended private key from a seed.
 pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedKey> {
-    let mut hmac_engine = HmacEngine::<bh_sha256d::Hash>::new(b"Bitcoin seed");
+    let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha256d::Hash>::new(b"Bitcoin seed");
     hmac_engine.update(seed);
     let result = hmac_engine.finalize().into_inner();
     if result.len() != 64 {
