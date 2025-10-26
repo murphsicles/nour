@@ -1,9 +1,9 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
 
 use crate::util::{var_int, Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use murmur3::murmur3_32;
-use rand::{RngCore, Rng};
+use rand::Rng;
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
