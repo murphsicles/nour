@@ -2,23 +2,30 @@
 ///
 /// Supports legacy (pre-2017) and BIP-143 (post-fork with forkid) algorithms.
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
-use crate::messages::{Tx, TxOut};
+use crate::messages::{Payload, Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
 use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
 use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash}; // SIMD opt
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io::Write;
+
 const FORK_ID: u32 = 0; // 24-bit BSV fork ID
+
 /// Signs all outputs.
 pub const SIGHASH_ALL: u8 = 0x01;
+
 /// Signs no outputs (anyone spend).
 pub const SIGHASH_NONE: u8 = 0x02;
+
 /// Signs only matching output.
 pub const SIGHASH_SINGLE: u8 = 0x03;
+
 /// Anyone can add inputs.
 pub const SIGHASH_ANYONECANPAY: u8 = 0x80;
+
 /// BSV/BCH fork flag (post-2017).
 pub const SIGHASH_FORKID: u8 = 0x40;
+
 /// Computes sighash digest for signing.
 ///
 /// Uses BIP-143 if FORKID set, legacy otherwise.
@@ -46,6 +53,7 @@ pub fn sighash(
         legacy_sighash(tx, n_input, script_code, sighash_type)
     }
 }
+
 /// Cache for sighash intermediates (prevouts/sequences/outputs).
 ///
 /// Reuse for multi-sig in same tx (O(1) after first).
@@ -55,6 +63,7 @@ pub struct SigHashCache {
     hash_sequence: Option<Hash256>,
     hash_outputs: Option<Hash256>,
 }
+
 impl SigHashCache {
     /// Creates a new empty cache.
     #[must_use]
@@ -62,6 +71,7 @@ impl SigHashCache {
         Self::default()
     }
 }
+
 /// BIP-143 sighash (post-2017, forkid).
 ///
 /// Serializes: version | hash_prevouts/sequence | outpoint | script | value | sequence | hash_outputs | locktime | type|FORK_ID<<8.
@@ -146,6 +156,7 @@ fn bip143_sighash(
     s.write_u32::<LittleEndian>(((FORK_ID as u32) << 8) | (sighash_type as u32))?;
     Ok(sha256d(&s))
 }
+
 /// Legacy sighash (pre-2017).
 /// Serializes modified tx copy: version | inputs (sub_script or empty, seq=0 for NONE/SINGLE) | outputs (truncated/empty) | locktime | type.
 fn legacy_sighash(
@@ -192,23 +203,24 @@ fn legacy_sighash(
         }
     }
     // Outputs
-    let tx_out_list = if base_type == SIGHASH_NONE {
-        vec![]
+    let num_outputs = if base_type == SIGHASH_NONE {
+        0
     } else if base_type == SIGHASH_SINGLE {
-        if n_input >= tx.outputs.len() {
-            return Err(Error::BadArgument("No matching output for SINGLE".to_string()));
-        }
-        tx.outputs[..=n_input].to_vec()
+        std::cmp::max(1, (n_input + 1) as usize)
     } else {
-        tx.outputs.clone()
+        tx.outputs.len()
     };
-    var_int::write(tx_out_list.len() as u64, &mut s)?;
-    for (i, out) in tx_out_list.iter().enumerate() {
-        if i == n_input && base_type == SIGHASH_SINGLE {
-            let empty = TxOut { satoshis: -1, lock_script: Script(vec![]) };
-            empty.write(&mut s)?;
+    var_int::write(num_outputs as u64, &mut s)?;
+    for i in 0..num_outputs {
+        if i < tx.outputs.len() && !(base_type == SIGHASH_SINGLE && i == n_input) {
+            tx.outputs[i].write(&mut s)?;
         } else {
-            out.write(&mut s)?;
+            // Empty output for SINGLE beyond end or matching
+            let empty = TxOut {
+                satoshis: -1,
+                lock_script: Script(vec![]),
+            };
+            empty.write(&mut s)?;
         }
     }
     // Locktime
@@ -217,6 +229,7 @@ fn legacy_sighash(
     s.write_u32::<LittleEndian>(sighash_type as u32)?;
     Ok(sha256d(&s))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +238,7 @@ mod tests {
     use crate::transaction::p2pkh;
     use hex;
     use pretty_assertions::assert_eq;
+
     #[test]
     fn bip143_sighash_test() -> Result<()> {
         let lock_script = hex::decode("76a91402b74813b047606b4b3fbdfb1a6e8e053fdb8dab88ac")?;
@@ -265,6 +279,7 @@ mod tests {
         assert!(cache.hash_outputs.is_some());
         Ok(())
     }
+
     #[test]
     fn legacy_sighash_test() -> Result<()> {
         let lock_script = hex::decode("76a914d951eb562f1ff26b6cbe89f04eda365ea6bd95ce88ac")?;
