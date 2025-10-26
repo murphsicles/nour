@@ -1,8 +1,7 @@
 //! Block header for Bitcoin SV P2P messages.
 
 use crate::util::{sha256d, Error, Hash256, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use bitcoin_hashes::sha256d as bh_sha256d; // SIMD opt
+use byteorder::{LittleEndian, WriteBytesExt};
 use std::cmp::min;
 use std::io;
 use std::io::{Read, Write};
