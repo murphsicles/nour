@@ -1,7 +1,7 @@
 //! DNS seed iterator for Bitcoin SV peer discovery.
 use dns_lookup::lookup_host;
 use log::{error, info};
-use rand::{seq::SliceRandom, thread_rng, Rng};
+use rand::{rng, seq::SliceRandom, Rng};
 use std::net::IpAddr;
 
 #[derive(Clone, Debug)]
@@ -18,7 +18,7 @@ impl<'a> SeedIter<'a> {
     /// Creates a new seed iterator with random offset for load balancing.
     #[must_use]
     pub fn new(seeds: &'a [String], port: u16) -> Self {
-        let rng = thread_rng();
+        let mut rng = rng();
         let random_offset = rng.random_range(0..100);
         Self {
             port,
@@ -47,7 +47,8 @@ impl<'a> Iterator for SeedIter<'a> {
                             self.seed_index += 1;
                             continue;
                         }
-                        let mut rng = thread_rng();
+                        let mut rng = rng();
+                        let mut ip_vec: Vec<IpAddr> = ip_iter.collect();
                         ip_vec.shuffle(&mut rng);
                         self.nodes = ip_vec;
                         self.node_index = 0;
