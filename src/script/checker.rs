@@ -189,7 +189,7 @@ mod tests {
     use crate::script::{op_codes::*, Script, NO_FLAGS, PREGENESIS_RULES};
     use crate::transaction::generate_signature;
     use crate::transaction::sighash::{
-        SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE, SIGHASH_SINGLE,
+        SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE
     };
     use crate::util::{hash160, Hash256};
     use secp256k1::{PublicKey, Secp256k1, SecretKey};
