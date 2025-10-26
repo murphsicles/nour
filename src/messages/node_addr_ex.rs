@@ -2,7 +2,7 @@
 
 use crate::messages::node_addr::NodeAddr;
 use crate::util::{Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
