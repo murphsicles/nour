@@ -49,7 +49,7 @@ impl BloomFilter {
         let size = (-1.0 / ln2.powi(2) * insert * pr_false_pos.ln()) / 8.0;
         let size = size.min(BLOOM_FILTER_MAX_FILTER_SIZE as f64).ceil() as usize;
         let num_hash_funcs = ((size as f64 * 8.0 / insert * ln2).min(BLOOM_FILTER_MAX_HASH_FUNCS as f64)).ceil() as usize;
-        let mut rng = OsRng::new();
+        let mut rng = OsRng;
         let tweak = rng.r#gen::<u32>();
         Ok(BloomFilter {
             filter: vec![0; size],
