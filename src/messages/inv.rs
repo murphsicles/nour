@@ -1,6 +1,6 @@
 //! Inv message for Bitcoin SV P2P, announcing inventory vectors (e.g., tx, block).
 
-use crate::messages::inv_vect::{InvVect, INV_VECT_BLOCK, INV_VECT_TX};
+use crate::messages::inv_vect::InvVect;
 use crate::messages::message::Payload;
 use crate::util::{var_int, Error, Result, Serializable};
 use std::fmt;
