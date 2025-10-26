@@ -2,7 +2,7 @@
 ///
 /// It is interpreted as a single little-endian number for display.
 use crate::util::{Error, Result, Serializable};
-use bitcoin_hashes::sha256d::{Hash as Sha256dHash, sha256d};
+use bitcoin_hashes::sha256d::{Hash as Sha256dHash, hash as bh_sha256d};
 use hex;
 use std::cmp::Ordering;
 use std::fmt;
@@ -60,7 +60,7 @@ impl Serializable<Hash256> for Hash256 {
 #[must_use]
 #[inline]
 pub fn sha256d(data: &[u8]) -> Hash256 {
-    let h = bh_sha256d::Hash::hash(data).to_byte_array();
+    let h = bh_sha256d(data).to_byte_array();
     Hash256(h)
 }
 
