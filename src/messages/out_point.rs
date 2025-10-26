@@ -57,7 +57,6 @@ impl AsyncSerializable<OutPoint> for OutPoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hex;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
     #[test]
