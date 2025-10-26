@@ -41,6 +41,7 @@ pub struct PeerDisconnected {
 pub struct PeerMessage {
     /// Peer message.
     pub peer: Arc<Peer>,
+    /// Current message being processed from the peer.
     pub message: Message,
 }
 
