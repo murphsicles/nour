@@ -2,7 +2,7 @@
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
 use base58::{ToBase58, FromBase58};
-use bitcoin_hashes::hmac::{Hmac, HmacEngine}; // Use bitcoin_hashes for HMAC_SHA512
+use bitcoin_hashes::hmac::HmacEngine;
 use bitcoin_hashes::{sha256d as bh_sha256d, sha512};
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
 use std::io::{self, Read, Write};
