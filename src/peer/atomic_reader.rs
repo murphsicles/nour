@@ -12,7 +12,7 @@ pub struct AtomicReader<'a> {
 impl<'a> AtomicReader<'a> {
     /// Creates a new atomic reader wrapper.
     #[must_use]
-    pub fn new(reader: &mut dyn Read) -> AtomicReader {
+    pub fn new(reader: &mut dyn Read) -> AtomicReader<'_> {
         AtomicReader { buf: Vec::new(), reader }
     }
 }
