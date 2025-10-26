@@ -1,7 +1,6 @@
 //! FeeFilter message for Bitcoin SV P2P, signaling minimum transaction fee.
 use crate::messages::message::Payload;
 use crate::util::{Error, Result, Serializable};
-use byteorder::WriteBytesExt;
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
