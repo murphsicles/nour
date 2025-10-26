@@ -9,51 +9,61 @@
 /// use nour::script::op_codes::*;
 /// assert_eq!(OP_IF, 99);
 /// ```
-
 // Pushdata and Constants
 /// Pushes empty array (0/false) onto the stack.
 pub const OP_0: u8 = 0;
+/// Alias for OP_0 (pushes false/0).
 pub const OP_FALSE: u8 = 0;
+/// Alias for push operations (0-75 bytes).
 pub const OP_PUSH: u8 = 0;
-
 /// Offset to push n bytes (n: 1-75).
 pub const OP_PUSHBYTES_1_TO_75: u8 = 1; // OP_PUSH implicit
-
 /// Next byte is push length (up to 255 bytes).
 pub const OP_PUSHDATA1: u8 = 76;
 /// Next two bytes are push length (up to 65535 bytes).
 pub const OP_PUSHDATA2: u8 = 77;
 /// Next four bytes are push length (up to 4GB).
 pub const OP_PUSHDATA4: u8 = 78;
-
 /// Pushes -1 onto the stack.
 pub const OP_1NEGATE: u8 = 79;
-
 /// Pushes 1 (true) onto the stack.
 pub const OP_1: u8 = 81;
+/// Alias for OP_1 (pushes true/1).
 pub const OP_TRUE: u8 = 81;
-
 // Numeric constants (2-16)
+/// Pushes 2 onto the stack.
 pub const OP_2: u8 = 82;
+/// Pushes 3 onto the stack.
 pub const OP_3: u8 = 83;
+/// Pushes 4 onto the stack.
 pub const OP_4: u8 = 84;
+/// Pushes 5 onto the stack.
 pub const OP_5: u8 = 85;
+/// Pushes 6 onto the stack.
 pub const OP_6: u8 = 86;
+/// Pushes 7 onto the stack.
 pub const OP_7: u8 = 87;
+/// Pushes 8 onto the stack.
 pub const OP_8: u8 = 88;
+/// Pushes 9 onto the stack.
 pub const OP_9: u8 = 89;
+/// Pushes 10 onto the stack.
 pub const OP_10: u8 = 90;
+/// Pushes 11 onto the stack.
 pub const OP_11: u8 = 91;
+/// Pushes 12 onto the stack.
 pub const OP_12: u8 = 92;
+/// Pushes 13 onto the stack.
 pub const OP_13: u8 = 93;
+/// Pushes 14 onto the stack.
 pub const OP_14: u8 = 94;
+/// Pushes 15 onto the stack.
 pub const OP_15: u8 = 95;
+/// Pushes 16 onto the stack.
 pub const OP_16: u8 = 96;
-
 // Flow Control
 /// Does nothing.
 pub const OP_NOP: u8 = 97;
-
 /// If top stack is true, execute block (pops bool).
 pub const OP_IF: u8 = 99;
 /// If top stack is false, execute block (pops bool).
@@ -66,13 +76,11 @@ pub const OP_ENDIF: u8 = 104;
 pub const OP_VERIFY: u8 = 105;
 /// Ends execution (invalid pre-Genesis unless coinbase).
 pub const OP_RETURN: u8 = 106;
-
 // Stack Operations
 /// Moves top item to alt stack.
 pub const OP_TOALTSTACK: u8 = 107;
 /// Moves top alt stack item to main stack.
 pub const OP_FROMALTSTACK: u8 = 108;
-
 /// Duplicates top if non-zero.
 pub const OP_IFDUP: u8 = 115;
 /// Pushes stack depth.
@@ -95,7 +103,6 @@ pub const OP_ROT: u8 = 123;
 pub const OP_SWAP: u8 = 124;
 /// Copies top under second-top.
 pub const OP_TUCK: u8 = 125;
-
 /// Drops top two.
 pub const OP_2DROP: u8 = 109;
 /// Duplicates top two.
@@ -108,7 +115,6 @@ pub const OP_2OVER: u8 = 112;
 pub const OP_2ROT: u8 = 113;
 /// Swaps top two pairs.
 pub const OP_2SWAP: u8 = 114;
-
 // Splice
 /// Concatenates top two (re-enabled Genesis).
 pub const OP_CAT: u8 = 126;
@@ -116,7 +122,6 @@ pub const OP_CAT: u8 = 126;
 pub const OP_SPLIT: u8 = 127;
 /// Pushes length of top (no pop).
 pub const OP_SIZE: u8 = 130;
-
 // Bitwise Logic
 /// Inverts all bits in top (disabled pre-Genesis).
 pub(crate) const OP_INVERT: u8 = 131;
@@ -130,7 +135,6 @@ pub const OP_XOR: u8 = 134;
 pub const OP_EQUAL: u8 = 135;
 /// Equals + VERIFY.
 pub const OP_EQUALVERIFY: u8 = 136;
-
 // Arithmetic
 /// Adds 1 to top.
 pub const OP_1ADD: u8 = 139;
@@ -186,7 +190,6 @@ pub const OP_WITHIN: u8 = 165;
 pub const OP_NUM2BIN: u8 = 128;
 /// Bin to num.
 pub const OP_BIN2NUM: u8 = 129;
-
 // Cryptography
 /// RIPEMD160(top).
 pub const OP_RIPEMD160: u8 = 166;
@@ -208,18 +211,15 @@ pub const OP_CHECKSIGVERIFY: u8 = 173;
 pub const OP_CHECKMULTISIG: u8 = 174;
 /// CHECKMULTISIG + VERIFY.
 pub const OP_CHECKMULTISIGVERIFY: u8 = 175;
-
 // Locktime
 /// Fails if locktime > tx.lock_time (BIP-65).
 pub const OP_CHECKLOCKTIMEVERIFY: u8 = 177;
 /// Fails if sequence < tx.sequence (BIP-112, relative).
 pub const OP_CHECKSEQUENCEVERIFY: u8 = 178;
-
 // Pseudo-words
 pub(crate) const OP_PUBKEYHASH: u8 = 253;
 pub(crate) const OP_PUBKEY: u8 = 254;
 pub(crate) const OP_INVALIDOPCODE: u8 = 255;
-
 // Reserved (invalid unless unexecuted IF)
 pub(crate) const OP_RESERVED: u8 = 80;
 pub(crate) const OP_VER: u8 = 98;
@@ -227,7 +227,6 @@ pub(crate) const OP_VERIF: u8 = 101;
 pub(crate) const OP_VERNOTIF: u8 = 102;
 pub(crate) const OP_RESERVED1: u8 = 137;
 pub(crate) const OP_RESERVED2: u8 = 138;
-
 // NOPs (ignored)
 pub(crate) const OP_NOP1: u8 = 176;
 pub(crate) const OP_NOP4: u8 = 179;
@@ -237,10 +236,8 @@ pub(crate) const OP_NOP7: u8 = 182;
 pub(crate) const OP_NOP8: u8 = 183;
 pub(crate) const OP_NOP9: u8 = 184;
 pub(crate) const OP_NOP10: u8 = 185;
-
 /// Opcodes >= this are invalid.
 pub(crate) const OP_INVALID_ABOVE: u8 = 186;
-
 // Disabled (pre-Genesis)
 pub(crate) const OP_2MUL: u8 = 141;
 pub(crate) const OP_2DIV: u8 = 142;
