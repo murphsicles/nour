@@ -20,7 +20,7 @@ impl<'a> SeedIter<'a> {
     #[must_use]
     pub fn new(seeds: &'a [String], port: u16) -> Self {
         let mut rng = rng();
-        let random_offset = rng.gen_range(0usize..100);
+        let random_offset = rng.random_range(0usize..100);
         Self {
             port,
             seeds,
