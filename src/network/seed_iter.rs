@@ -1,4 +1,5 @@
 //! DNS seed iterator for Bitcoin SV peer discovery.
+
 use dns_lookup::lookup_host;
 use log::{error, info};
 use rand::{rng, seq::SliceRandom, Rng};
@@ -19,7 +20,7 @@ impl<'a> SeedIter<'a> {
     #[must_use]
     pub fn new(seeds: &'a [String], port: u16) -> Self {
         let mut rng = rng();
-        let random_offset = rng.random_range(0..100);
+        let random_offset = rng.gen_range(0usize..100);
         Self {
             port,
             seeds,
@@ -41,14 +42,13 @@ impl<'a> Iterator for SeedIter<'a> {
                 info!("Looking up DNS: {}", self.seeds[i]);
                 match lookup_host(&self.seeds[i]) {
                     Ok(ip_iter) => {
-                        let ip_vec: Vec<IpAddr> = ip_iter.collect();
+                        let mut ip_vec: Vec<IpAddr> = ip_iter.collect();
                         if ip_vec.is_empty() {
                             error!("DNS lookup for {} returned no IPs", self.seeds[i]);
                             self.seed_index += 1;
                             continue;
                         }
                         let mut rng = rng();
-                        let mut ip_vec: Vec<IpAddr> = ip_iter.collect();
                         ip_vec.shuffle(&mut rng);
                         self.nodes = ip_vec;
                         self.node_index = 0;
