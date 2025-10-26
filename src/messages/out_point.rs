@@ -1,7 +1,6 @@
 //! OutPoint for Bitcoin SV P2P, referencing transaction outputs.
 
 use crate::util::{Error, Hash256, Result, Serializable};
-use byteorder::WriteBytesExt;
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
