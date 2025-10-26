@@ -6,10 +6,14 @@ use crate::script::Script;
 use crate::util::{Error, Hash256, Result};
 use hex;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Bitcoin SV network types (Mainnet, Testnet, STN).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Network {
+    /// BSV Mainnet.
     Mainnet = 0,
+    /// BSV Testnet.
     Testnet = 1,
+    /// BSV Scaling Test Network (STN).
     STN = 2,
 }
 
@@ -182,7 +186,7 @@ impl NetworkConfig {
 
     /// Creates a new DNS seed iterator.
     #[must_use]
-    pub fn seed_iter(&self) -> SeedIter {
+    pub fn seed_iter(&self) -> SeedIter<'_> {
         SeedIter::new(&self.seeds, self.port)
     }
 }
