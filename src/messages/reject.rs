@@ -11,13 +11,21 @@ use std::io::{Cursor, Read, Write};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 // Message rejection error codes
+/// Reject code for malformed messages.
 pub const REJECT_MALFORMED: u8 = 0x01;
+/// Reject code for invalid messages.
 pub const REJECT_INVALID: u8 = 0x10;
+/// Reject code for obsolete features.
 pub const REJECT_OBSOLETE: u8 = 0x11;
+/// Reject code for duplicate items.
 pub const REJECT_DUPLICATE: u8 = 0x12;
+/// Reject code for non-standard transactions.
 pub const REJECT_NONSTANDARD: u8 = 0x40;
+/// Reject code for dust outputs.
 pub const REJECT_DUST: u8 = 0x41;
+/// Reject code for insufficient fees.
 pub const REJECT_INSUFFICIENT_FEE: u8 = 0x42;
+/// Reject code for checkpoint violations.
 pub const REJECT_CHECKPOINT: u8 = 0x43;
 
 /// Maximum length of reject reason string (safety, BSV protocol no cap but small).
