@@ -1,7 +1,7 @@
 //! FilterLoad message for Bitcoin SV P2P, setting bloom filters (BIP-37).
 use crate::messages::message::Payload;
 use crate::util::{var_int, BloomFilter, Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
