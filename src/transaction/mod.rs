@@ -28,7 +28,7 @@
 pub mod p2pkh;
 pub mod sighash;
 use crate::util::{Error, Hash256, Result};
-use secp256k1::{ecdsa::{Signature, SerializedSignature}, Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{ecdsa::Message, Secp256k1, SecretKey, Signature};
 /// Generates DER-encoded ECDSA signature for sighash + type.
 ///
 /// Normalizes S (low); errors on invalid key.
