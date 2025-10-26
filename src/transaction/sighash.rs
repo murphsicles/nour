@@ -2,7 +2,7 @@
 ///
 /// Supports legacy (pre-2017) and BIP-143 (post-fork with forkid) algorithms.
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
-use crate::messages::{OutPoint, Tx, TxOut};
+use crate::messages::{Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
 use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
 use bitcoin_hashes::{sha256d as bh_sha256d, Hash as BHHash}; // SIMD opt
