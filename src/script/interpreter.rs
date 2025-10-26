@@ -18,8 +18,8 @@ pub const NO_FLAGS: u32 = 0x00;
 pub const PREGENESIS_RULES: u32 = 0x01;
 
 /// Executes a script
-pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()> {
-    let mut stack: VecDeque<Cow<'static, [u8]>> = VecDeque::with_capacity(STACK_CAPACITY);
+pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Result<()> {
+    let mut stack: VecDeque<Cow<'a, [u8]>> = VecDeque::with_capacity(STACK_CAPACITY);
     let mut alt_stack: VecDeque<Cow<'static, [u8]>> = VecDeque::with_capacity(ALT_STACK_CAPACITY);
     let mut branch_exec: Vec<bool> = Vec::new();
     let mut check_index = 0;
