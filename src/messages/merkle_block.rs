@@ -93,8 +93,8 @@ impl MerkleBlock {
         matches: &mut Vec<Hash256>,
     ) -> Result<Hash256> {
         let flag = self.consume_flag(flag_bits_used)?;
-        let mut left;
-        let mut right;
+        let left;
+        let right;
         if flag == 0 {
             *preorder_node += (1 << (tree_depth - depth + 1)) - 1;
             return self.consume_hash(hashes_used);
