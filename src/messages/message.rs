@@ -490,7 +490,8 @@ impl From<Version> for Message {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{BlockHeader, InvVect, NodeAddr, NodeAddrEx, OutPoint, TxIn, TxOut, REJECT_INVALID};
+    use crate::messages::{BlockHeader, InvVect, INV_VECT_TX, MIN_SUPPORTED_PROTOCOL_VERSION,
+    NodeAddr, NodeAddrEx, OutPoint, TxIn, TxOut, REJECT_INVALID};
     use crate::script::Script;
     use crate::util::{secs_since, BloomFilter, Hash256};
     use std::io::Cursor;
