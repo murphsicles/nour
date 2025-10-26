@@ -29,7 +29,6 @@ pub mod p2pkh;
 pub mod sighash;
 use crate::util::{Error, Hash256, Result};
 use secp256k1::{Message, Secp256k1, SecretKey};
-use secp256k1::ecdsa::Signature;
 /// Generates DER-encoded ECDSA signature for sighash + type.
 ///
 /// Normalizes S (low); errors on invalid key.
@@ -40,9 +39,9 @@ use secp256k1::ecdsa::Signature;
 #[inline]
 pub fn generate_signature(private_key: &[u8; 32], sighash: &Hash256, sighash_type: u8) -> Result<Vec<u8>> {
     let secp = Secp256k1::signing_only();
-    let secret_key = SecretKey::from_byte_array(private_key).map_err(|_| Error::BadData("Invalid private key".to_string()))?;
-    let message = Message::from_digest(&sighash.0);
-    let mut signature = secp.sign_ecdsa(&message, &secret_key);
+    let secret_key = SecretKey::from_byte_array(*private_key).map_err(|_| Error::BadData("Invalid private key".to_string()))?;
+    let message = Message::from_digest(sighash.0);
+    let mut signature = secp.sign_ecdsa(message, &secret_key);
     signature.normalize_s();
     let mut der = signature.serialize_der().to_vec();
     der.push(sighash_type);
