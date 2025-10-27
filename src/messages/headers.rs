@@ -179,7 +179,10 @@ mod tests {
             nonce: 1111,
         };
 
-        assert_eq!(header_hash(0, &vec![]).unwrap_err().to_string(), "Bad data: Index out of range");
+        assert_eq!(
+        headers.header_hash(99).unwrap_err().to_string(),
+        "Bad data: Index out of range"
+        );
 
         let headers = vec![header1.clone()];
         assert_eq!(header_hash(0, &headers).unwrap(), header1.hash());
