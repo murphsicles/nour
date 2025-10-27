@@ -164,7 +164,7 @@ impl<'a> Checker for TransactionChecker<'a> {
 mod tests {
     use super::*;
     use crate::messages::{OutPoint, TxIn, TxOut};
-    use crate::script::{op_codes::*, Script, NO_FLAGS, PREGENESIS_RULES};
+    use crate::script::{op_codes::*, Script, NO_FLAGS};
     use crate::transaction::generate_signature;
     use crate::transaction::sighash::{
         SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE
@@ -334,20 +334,31 @@ mod tests {
             ],
             lock_time: 0,
         };
+        // Build full tx_2 with both inputs (empty unlocks initially)
         let mut tx_2 = Tx {
             version: 1,
-            inputs: vec![TxIn {
-                prev_output: OutPoint {
-                    hash: tx_1.hash(),
-                    index: 0,
+            inputs: vec![
+                TxIn {
+                    prev_output: OutPoint {
+                        hash: tx_1.hash(),
+                        index: 0,
+                    },
+                    unlock_script: Script(vec![]),
+                    sequence: 0xffffffff,
                 },
-                unlock_script: Script(vec![]),
-                sequence: 0xffffffff,
-            }],
+                TxIn {
+                    prev_output: OutPoint {
+                        hash: tx_1.hash(),
+                        index: 1,
+                    },
+                    unlock_script: Script(vec![]),
+                    sequence: 0xffffffff,
+                },
+            ],
             outputs: vec![],
             lock_time: 0,
         };
-        // Sign the first input
+        // Sign input 0 with full tx
         let mut cache = SigHashCache::new();
         let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
         let sig_hash1 = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
@@ -356,24 +367,16 @@ mod tests {
         unlock_script1.append_data(&sig1).unwrap();
         unlock_script1.append_data(&pk1).unwrap();
         tx_2.inputs[0].unlock_script = unlock_script1;
-        // Add another input and sign that separately
-        tx_2.inputs.push(TxIn {
-            prev_output: OutPoint {
-                hash: tx_1.hash(),
-                index: 1,
-            },
-            unlock_script: Script(vec![]),
-            sequence: 0xffffffff,
-        });
+        // Sign input 1 with full tx (unlocks don't affect sighash)
         let mut cache = SigHashCache::new();
         let lock_script_bytes2 = &tx_1.outputs[1].lock_script.0;
-        let sig_hash2 =
-            sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
+        let sig_hash2 = sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
         let sig2 = generate_signature(&private_key2, &sig_hash2, sighash_type).unwrap();
         let mut unlock_script2 = Script::new();
         unlock_script2.append_data(&sig2).unwrap();
         unlock_script2.append_data(&pk2).unwrap();
         tx_2.inputs[1].unlock_script = unlock_script2;
+        // Eval input 0
         let mut cache = SigHashCache::new();
         let mut c1 = TransactionChecker::new(&tx_2, &mut cache, 0, 10, false);
         let mut script1 = Script::new();
@@ -381,6 +384,7 @@ mod tests {
         script1.append(OP_CODESEPARATOR);
         script1.append_slice(&tx_1.outputs[0].lock_script.0);
         assert!(script1.eval(&mut c1, NO_FLAGS).is_ok());
+        // Eval input 1
         let mut cache = SigHashCache::new();
         let mut c2 = TransactionChecker::new(&tx_2, &mut cache, 1, 20, false);
         let mut script2 = Script::new();
@@ -392,10 +396,6 @@ mod tests {
 
     #[test]
     fn check_locktime() {
-        let mut lock_script = Script::new();
-        lock_script.append_num(500).unwrap();
-        lock_script.append(OP_CHECKLOCKTIMEVERIFY);
-        lock_script.append(OP_1);
         let mut tx = Tx {
             version: 1,
             inputs: vec![TxIn {
@@ -412,23 +412,17 @@ mod tests {
         let mut cache = SigHashCache::new();
         let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
-            lock_script.eval(&mut c, NO_FLAGS).unwrap_err().to_string(),
+            c.check_locktime(500).unwrap_err().to_string(),
             "Script error: locktime greater than tx"
         );
         tx.lock_time = 500;
         let mut cache = SigHashCache::new();
         let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
-        assert!(lock_script.eval(&mut c, NO_FLAGS).is_ok());
+        assert!(c.check_locktime(500).is_ok());
     }
 
     #[test]
     fn check_sequence() {
-        let mut lock_script = Script::new();
-        lock_script
-            .append_num((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32)
-            .unwrap();
-        lock_script.append(OP_CHECKSEQUENCEVERIFY);
-        lock_script.append(OP_1);
         let mut tx = Tx {
             version: 2,
             inputs: vec![TxIn {
@@ -445,12 +439,12 @@ mod tests {
         let mut cache = SigHashCache::new();
         let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
-            lock_script.eval(&mut c, NO_FLAGS).unwrap_err().to_string(),
+            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).unwrap_err().to_string(),
             "Script error: sequence greater than tx"
         );
         tx.inputs[0].sequence = (500 | SEQUENCE_LOCKTIME_TYPE_FLAG) as u32;
         let mut cache = SigHashCache::new();
         let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
-        assert!(lock_script.eval(&mut c, NO_FLAGS).is_ok());
+        assert!(c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).is_ok());
     }
 }
