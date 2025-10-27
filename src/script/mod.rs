@@ -16,7 +16,6 @@
 ///
 /// script.eval(&mut TransactionlessChecker::default(), NO_FLAGS).unwrap();
 /// ```
-
 use crate::script::op_codes::*;
 use crate::util::{Error, Result};
 use hex;
@@ -24,9 +23,11 @@ use std::fmt;
 
 pub mod checker;
 pub mod interpreter;
+
 #[allow(dead_code)]
 /// Script opcodes and utilities.
 pub mod op_codes;
+
 pub mod stack;
 
 pub use self::checker::{Checker, TransactionChecker, TransactionlessChecker};
@@ -57,10 +58,10 @@ impl Script {
     /// Appends the opcodes and data to push it onto the stack.
     ///
     /// # Errors
-    /// Returns `Error::BadArgument` if data exceeds consensus limits (e.g., >520 bytes post-Genesis).
+    /// Returns `Error::BadArgument` if data exceeds consensus limits (e.g., >10KB for BSV).
     pub fn append_data(&mut self, data: &[u8]) -> Result<()> {
         let len = data.len();
-        if len > 520 {
+        if len > 10000 {
             return Err(Error::BadArgument("Data too large for push".to_string()));
         }
         match len {
@@ -288,43 +289,36 @@ mod tests {
         let mut s = Script::new();
         s.append_data(&[]).unwrap();
         assert_eq!(s.0.len(), 1);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 1]).unwrap();
         assert_eq!(s.0[0], OP_PUSH + 1);
         assert_eq!(s.0.len(), 2);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 75]).unwrap();
         assert_eq!(s.0[0], OP_PUSH + 75);
         assert_eq!(s.0.len(), 76);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 76]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA1);
         assert_eq!(s.0[1], 76);
         assert_eq!(s.0.len(), 78);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 255]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA1);
         assert_eq!(s.0[1], 255);
         assert_eq!(s.0.len(), 257);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 256]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA2);
         assert_eq!(s.0[1], 0);
         assert_eq!(s.0[2], 1);
         assert_eq!(s.0.len(), 259);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 65535]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA2);
         assert_eq!(s.0[1], 255);
         assert_eq!(s.0[2], 255);
         assert_eq!(s.0.len(), 65537);
-
         let mut s = Script::new();
         s.append_data(&vec![0; 65536]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA4);
@@ -339,6 +333,6 @@ mod tests {
     #[should_panic(expected = "Data too large for push")]
     fn append_data_too_large() {
         let mut s = Script::new();
-        s.append_data(&vec![0; 521]).unwrap();
+        s.append_data(&vec![0; 10001]).unwrap();
     }
 }
