@@ -178,29 +178,11 @@ pub fn decode_bigint(s: &mut [u8]) -> BigInt {
 /// assert_eq!(encode_bigint(bi), vec![1]);
 /// ```
 #[inline]
-pub fn encode_bigint(val: BigInt) -> Vec<u8> {
-    let (sign, bytes) = val.to_bytes_le();
-    let mut result = bytes;
-    match sign {
-        Sign::NoSign | Sign::Plus => {
-            if !result.is_empty() && (result[result.len() - 1] & 128) != 0 {
-                result.push(0);
-            }
-        }
-        Sign::Minus => {
-            if !result.is_empty() {
-                let last_idx = result.len() - 1;
-                result[last_idx] |= 128;
-            } else {
-                result.push(128);
-            }
-        }
-    }
-    if result.len() == 1 && result[0] == 0 {
-        vec![]
-    } else {
-        result
-    }
+pub fn encode_bigint(bi: &BigInt) -> Vec<u8> {
+    if *bi == BigInt::zero() { return vec![]; }
+    let mut bytes = bi.to_bytes_be(); // Use BE for script nums
+    if bi.sign() == Sign::Minus { bytes[0] |= 0x80; } // Sign extend
+    bytes
 }
 #[cfg(test)]
 mod tests {
