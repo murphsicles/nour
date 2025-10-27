@@ -180,7 +180,7 @@ pub fn decode_bigint(s: &mut [u8]) -> BigInt {
 #[inline]
 pub fn encode_bigint(bi: &BigInt) -> Vec<u8> {
     if *bi == BigInt::zero() { return vec![]; }
-    let (sign, mut bytes) = bi.to_signed_bytes(); // Unpack tuple
+    let (sign, mut bytes) = bi.to_signed_bytes_be(); // Unpack tuple
     if sign == Sign::Minus && !bytes.is_empty() {
         bytes[0] |= 0x80; // Sign extend (lsb first for script nums)
     }
