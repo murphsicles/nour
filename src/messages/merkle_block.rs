@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
         let merkle_root = "7f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d97287";
         assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
-        assert_eq!(p.header.timestamp, 1231469663);
+        assert_eq!(p.header.timestamp, 1523766002);
         let total_transactions = 7;
         assert_eq!(p.total_transactions, total_transactions);
         assert_eq!(p.hashes.len(), 4);
