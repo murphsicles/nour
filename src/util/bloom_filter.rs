@@ -189,15 +189,15 @@ mod tests {
         assert!(bf.validate().is_ok());
         let mut bf_clone = bf.clone();
         bf_clone.filter = vec![0; BLOOM_FILTER_MAX_FILTER_SIZE + 1];
-        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Filter too long");
+        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Bad data: Filter too long");
         let mut bf_clone = bf.clone();
         bf_clone.num_hash_funcs = BLOOM_FILTER_MAX_HASH_FUNCS + 1;
-        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Too many hash funcs");
+        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Bad data: Too many hash funcs");
     }
 
     #[test]
     fn add_too_large() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
-        assert_eq!(bf.add(&vec![0; 521]).unwrap_err().to_string(), "Data too large for bloom add");
+        assert_eq!(bf.add(&vec![0; 521]).unwrap_err().to_string(), "Bad data: Data too large for bloom add");
     }
 }
