@@ -179,15 +179,15 @@ mod tests {
             nonce: 1111,
         };
 
-        assert_eq!(header_hash(0, &vec![]).unwrap_err().to_string(), "Index out of range");
+        assert_eq!(header_hash(0, &vec![]).unwrap_err().to_string(), "Bad data: Index out of range");
 
         let headers = vec![header1.clone()];
         assert_eq!(header_hash(0, &headers).unwrap(), header1.hash());
-        assert_eq!(header_hash(1, &headers).unwrap_err().to_string(), "Index out of range");
+        assert_eq!(header_hash(1, &headers).unwrap_err().to_string(), "Bad data: Index out of range");
 
         let headers = vec![header1.clone(), header2.clone()];
         assert_eq!(header_hash(0, &headers).unwrap(), header1.hash());
         assert_eq!(header_hash(1, &headers).unwrap(), header2.hash());
-        assert_eq!(header_hash(2, &headers).unwrap_err().to_string(), "Index out of range");
+        assert_eq!(header_hash(2, &headers).unwrap_err().to_string(), "Bad data: Index out of range");
     }
 }
