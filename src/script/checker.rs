@@ -410,14 +410,14 @@ mod tests {
             lock_time: 499,
         };
         let mut cache = SigHashCache::new();
-        let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
+        let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
             c.check_locktime(500).unwrap_err().to_string(),
             "Script error: locktime greater than tx"
         );
         tx.lock_time = 500;
         let mut cache = SigHashCache::new();
-        let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
+        let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert!(c.check_locktime(500).is_ok());
     }
 
@@ -437,14 +437,14 @@ mod tests {
             lock_time: 0,
         };
         let mut cache = SigHashCache::new();
-        let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
+        let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
             c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).unwrap_err().to_string(),
             "Script error: sequence greater than tx"
         );
         tx.inputs[0].sequence = (500 | SEQUENCE_LOCKTIME_TYPE_FLAG) as u32;
         let mut cache = SigHashCache::new();
-        let mut c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
+        let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert!(c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).is_ok());
     }
 }
