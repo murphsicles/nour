@@ -168,7 +168,7 @@ pub fn encode_num(val: i64) -> Result<Vec<u8>> {
     }
     let full = (val as i32).to_le_bytes();
     for l in 1..=4usize {
-        let mut test = full[0..l].to_vec();
+        let test = full[0..l].to_vec();
         let high_byte = test[l - 1];
         let is_neg = (high_byte & 0x80) != 0;
         let mut extended = test.clone();
