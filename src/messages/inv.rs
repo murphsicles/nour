@@ -121,6 +121,6 @@ mod tests {
         }
         let mut v = Vec::new();
         inv.write(&mut v).unwrap();
-        assert_eq!(Inv::read(&mut Cursor::new(&v)).unwrap_err().to_string(), format!("Too many objects: {}", MAX_INV_ENTRIES + 1));
+        assert_eq!(Inv::read(&mut Cursor::new(&v)).unwrap_err().to_string(), format!("Bad data: Too many objects: {}", MAX_INV_ENTRIES + 1));
     }
 }
