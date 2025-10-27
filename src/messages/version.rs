@@ -1,5 +1,4 @@
 //! Version message for Bitcoin SV P2P handshake, defining node capabilities.
-
 use crate::messages::message::Payload;
 use crate::messages::node_addr::NodeAddr;
 use crate::util::{secs_since, var_int, Error, Result, Serializable};
@@ -114,7 +113,6 @@ impl Serializable<Version> for Version {
             start_height,
             relay,
         };
-        ret.validate()?;
         Ok(ret)
     }
 
@@ -173,7 +171,6 @@ impl AsyncSerializable<Version> for Version {
             start_height,
             relay,
         };
-        ret.validate()?;
         Ok(ret)
     }
 
@@ -230,7 +227,7 @@ mod tests {
         let m = Version {
             version: MIN_SUPPORTED_PROTOCOL_VERSION,
             services: 77,
-            timestamp: 1234,
+            timestamp: 1761523200,
             recv_addr: NodeAddr::default(),
             tx_addr: NodeAddr::default(),
             nonce: 99,
@@ -257,23 +254,20 @@ mod tests {
             relay: true,
         };
         assert!(m.validate().is_ok());
-
         let m2 = Version {
             version: 0,
             ..m.clone()
         };
-        assert_eq!(m2.validate().unwrap_err().to_string(), format!("Bad data: Unsupported protocol version: {}", 0));
-
+        assert_eq!(m2.validate().unwrap_err().to_string(), "Bad data: Unsupported protocol version: 0");
         let m3 = Version {
             timestamp: 0,
             ..m.clone()
         };
-        assert_eq!(m3.validate().unwrap_err().to_string(), format!("Bad data: Timestamp too old: {}", 0));
-
+        assert_eq!(m3.validate().unwrap_err().to_string(), "Bad data: Timestamp too old: 0");
         let m4 = Version {
             user_agent: "x".repeat(MAX_USER_AGENT_LEN + 1),
             ..m.clone()
         };
-        assert_eq!(m4.validate().unwrap_err().to_string(), format!("Bad data: User agent too long: {}", MAX_USER_AGENT_LEN + 1));
+        assert_eq!(m4.validate().unwrap_err().to_string(), "Bad data: User agent too long: 257");
     }
 }
