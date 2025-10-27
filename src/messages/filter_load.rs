@@ -148,7 +148,7 @@ mod tests {
             },
             flags: BLOOM_UPDATE_ALL,
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Filter too long");
+        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Filter too long");
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
@@ -157,7 +157,7 @@ mod tests {
             },
             flags: BLOOM_UPDATE_ALL,
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Too many hash funcs");
+        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Too many hash funcs");
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
@@ -166,6 +166,6 @@ mod tests {
             },
             flags: 3, // Invalid flags
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Invalid flags: 3");
+        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Invalid flags: 3");
     }
 }
