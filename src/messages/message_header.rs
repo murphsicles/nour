@@ -177,7 +177,10 @@ mod tests {
             checksum: [0x12, 0x34, 0x56, 0x78],
         };
         assert!(h.validate(magic, 100).is_ok());
-        assert_eq!(h.validate([0xb0, 0xb1, 0xb2, 0xb3], 100).unwrap_err().to_string(), "Bad magic: [160, 161, 162, 163]");
+        assert_eq!(
+        MessageHeader::read(&mut Cursor::new(&invalid_bytes)).unwrap_err().to_string(),
+        "Bad data: Bad magic: [160, 161, 162, 163]"
+        );
         assert_eq!(h.validate(magic, 50).unwrap_err().to_string(), "Bad data: Payload too large: 88");
     }
 
