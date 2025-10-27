@@ -85,8 +85,8 @@ mod tests {
 
     #[test]
     fn read_bytes() {
-        let b = hex::decode("20fdacf9b3eb Kov eb077412e7a968d2e4f11b9a9dee312d666187ed77ee7d26af16cb0b0").unwrap();
-        let f = FilterAdd::read(&mut Cursor::new(&b)).unwrap();
+    let b = hex::decode("deadbeef00").unwrap();
+    let filter_add = FilterAdd::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(f.data.len(), 32);
     }
 
