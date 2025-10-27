@@ -4,7 +4,7 @@
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
 use crate::messages::{Payload, Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
-use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
+use crate::util::{var_int, Error, Hash160, Hash256, Result, Serializable, sha256d};
 use bitcoin_hashes::sha256d as bh_sha256d;
 use byteorder::{LittleEndian, WriteBytesExt};
 
