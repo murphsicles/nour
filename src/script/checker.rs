@@ -2,7 +2,7 @@
 use crate::messages::Tx;
 use crate::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID};
 use crate::util::{Error, Result};
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 
 const LOCKTIME_THRESHOLD: i32 = 500_000_000;
 const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
