@@ -98,7 +98,7 @@ impl Bits {
         let mask = if len == 0 {
             0u8
         } else {
-            (((1u32 << len as u32) - 1) as u8)
+            ((1u32 << len as u32) - 1) as u8
         };
         b & mask
     }
