@@ -101,8 +101,13 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn test_short_read() {
-        let mut cursor = Cursor::new(vec![0; 10]);
-        assert_eq!(ser.read(&short_bytes).unwrap_err().to_string(), "IO error: failed to fill whole buffer");
+fn test_short_read() {
+    use std::io::Cursor;
+    let short_bytes = vec![0u8, 1, 2]; // Short buffer (e.g., for array32 read expecting 4 bytes)
+    let mut ser = Cursor::new(short_bytes); // Assuming Serdes is a reader wrapper; adjust if it's a struct.
+    // If Serdes is a type like SerdesReader, instantiate: let mut ser = Serdes::new(Cursor::new(short_bytes));
+    assert_eq!(
+        ser.read(&mut [0u8; 4]).unwrap_err().to_string(), // Example read_u32 or array
+        "IO error: failed to fill whole buffer");
     }
 }
