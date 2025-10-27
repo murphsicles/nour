@@ -121,22 +121,22 @@ mod tests {
             satoshis: -1,
             lock_script: Script(vec![1; 100]),
         };
-        assert_eq!(t.validate().unwrap_err().to_string(), "Negative satoshis");
+        assert_eq!(t.validate().unwrap_err().to_string(), "Bad data: Negative satoshis");
         let t = TxOut {
             satoshis: MAX_SATOSHIS + 1,
             lock_script: Script(vec![1; 100]),
         };
-        assert_eq!(t.validate().unwrap_err().to_string(), "Satoshis exceeds max");
+        assert_eq!(t.validate().unwrap_err().to_string(), "Bad data: Satoshis exceeds max");
         let t = TxOut {
             satoshis: 1000,
             lock_script: Script(vec![1; MAX_LOCK_SCRIPT_LEN + 1]),
         };
-        assert_eq!(t.validate().unwrap_err().to_string(), format!("Lock script too long: {}", MAX_LOCK_SCRIPT_LEN + 1));
+        assert_eq!(t.validate().unwrap_err().to_string(), format!("Bad data: Lock script too long: {}", MAX_LOCK_SCRIPT_LEN + 1));
     }
     #[test]
     fn read_invalid() {
         let b = hex::decode("00e1f50500000000fe050100000000000000000000").unwrap(); // Large script len
         let result = TxOut::read(&mut Cursor::new(&b));
-        assert_eq!(result.unwrap_err().to_string(), format!("Lock script too long: {}", 0x10005));
+        assert_eq!(result.unwrap_err().to_string(), format!("Bad data: Lock script too long: {}", 0x10005));
     }
 }
