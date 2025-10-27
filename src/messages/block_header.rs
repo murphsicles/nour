@@ -241,7 +241,7 @@ mod tests {
         };
         assert!(valid.validate(&valid.hash(), &headers).is_ok());
 
-        let mut h = valid.clone();
+        let h = valid.clone();
         for header in headers.iter_mut() {
             header.timestamp = valid.timestamp + 1;
         }
