@@ -249,6 +249,6 @@ mod tests {
 
         let mut h = valid.clone();
         h.nonce = 0;
-        assert_eq!(h.validate(&h.hash(), &headers).unwrap_err().to_string(), "Invalid POW");
+        assert_eq!(h.validate(&h.hash(), &headers).unwrap_err().to_string(), "Bad data: Invalid POW");
     }
 }
