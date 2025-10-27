@@ -246,7 +246,7 @@ mod tests {
             header.timestamp = valid.timestamp + 1;
         }
         assert_eq!(
-        header.validate().unwrap_err().to_string(),
+        headers[0].validate().unwrap_err().to_string(),
         "Bad data: Timestamp too old: 1305998791"
         );
 
