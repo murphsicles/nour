@@ -438,10 +438,9 @@ mod tests {
 
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().lock_script = Script(vec![op_codes::OP_0]);
-        for input in &self.inputs 
-            {
-        if input.unlock_script.0 == [OP_0] {
-        return Err(Error::BadData("Invalid script: OP_0".to_string()));
+        for input in &self.inputs {
+        if input.unlock_script.0.is_empty() || input.unlock_script.0 == [OP_0] {
+            return Err(Error::BadData("Invalid script: OP_0".to_string()));
             }
         }
         let mut tx_test = tx.clone();
