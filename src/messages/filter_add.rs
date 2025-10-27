@@ -105,6 +105,6 @@ mod tests {
         assert!(p.validate().is_ok());
 
         let p = FilterAdd { data: vec![21; MAX_FILTER_ADD_DATA_SIZE + 1] };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Data too long");
+        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Data too long");
     }
 }
