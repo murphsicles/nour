@@ -1,5 +1,4 @@
 //! MerkleBlock message for Bitcoin SV P2P, partial merkle tree for SPV filtered blocks (BIP-37).
-
 use crate::messages::block_header::BlockHeader;
 use crate::messages::message::Payload;
 use crate::util::{sha256d, var_int, Error, Hash256, Result, Serializable};
@@ -40,7 +39,6 @@ impl MerkleBlock {
         if self.total_transactions as u64 > MAX_TOTAL_TX {
             return Err(Error::BadData(format!("Too many transactions: {}", self.total_transactions)));
         }
-
         let mut preorder_node = 0;
         let mut flag_bits_used = 0;
         let mut hashes_used = 0;
@@ -52,7 +50,6 @@ impl MerkleBlock {
             row_len = (row_len + 1) / 2;
             total_nodes += row_len;
         }
-
         let merkle_root = self.traverse(
             &mut preorder_node,
             &mut flag_bits_used,
@@ -62,23 +59,18 @@ impl MerkleBlock {
             total_nodes,
             &mut matches,
         )?;
-
         if merkle_root != self.header.merkle_root {
             return Err(Error::BadData("Merkle root doesn't match".to_string()));
         }
-
         if hashes_used < self.hashes.len() {
             return Err(Error::BadData("Not all hashes consumed".to_string()));
         }
-
         if preorder_node < total_nodes {
             return Err(Error::BadData("Not all nodes consumed".to_string()));
         }
-
         if (flag_bits_used + 7) / 8 < self.flags.len() {
             return Err(Error::BadData("Not all flag bits consumed".to_string()));
         }
-
         Ok(matches)
     }
 
@@ -220,7 +212,7 @@ mod tests {
         assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
         let merkle_root = "7f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d97287";
         assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
-        assert_eq!(p.header.timestamp, 1231469663);
+        assert_eq!(p.header.timestamp, 1523766002);
         let total_transactions = 7;
         assert_eq!(p.total_transactions, total_transactions);
         assert_eq!(p.hashes.len(), 4);
@@ -269,32 +261,26 @@ mod tests {
         let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d").unwrap();
         let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
         assert!(p.validate().unwrap().len() == 1);
-
         // Not enough hashes
         let mut p2 = p.clone();
         p2.hashes.truncate(p.hashes.len() - 1);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
-
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not enough hashes");
         // Too many hashes
         let mut p2 = p.clone();
         p2.hashes.push(Hash256([0; 32]));
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
-
         // Not enough flags
         let mut p2 = p.clone();
         p2.flags = vec![];
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not enough flag bits");
-
         // Too many flags
         let mut p2 = p.clone();
         p2.flags.push(0);
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all flag bits consumed");
-
         // Merkle root doesn't match
         let mut p2 = p.clone();
         p2.hashes[0] = Hash256([1; 32]);
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle root doesn't match");
-
         // Duplicate transactions
         let hash1 = Hash256([1; 32]);
         let hash2 = Hash256([2; 32]);
@@ -337,7 +323,7 @@ mod tests {
         };
         let merkle_block = MerkleBlock {
             header,
-            total_transactions: 11,
+            total_transactions: 7,
             hashes: vec![hash1, hash2, hash3, hash4],
             flags: vec![0x5d],
         };
