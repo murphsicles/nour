@@ -58,10 +58,10 @@ impl Script {
     /// Appends the opcodes and data to push it onto the stack.
     ///
     /// # Errors
-    /// Returns `Error::BadArgument` if data exceeds consensus limits (e.g., >10KB for BSV).
+    /// Returns `Error::BadArgument` if data exceeds consensus limits (4.2GB for BSV).
     pub fn append_data(&mut self, data: &[u8]) -> Result<()> {
         let len = data.len();
-        if len > 10000 {
+        if len > 4294967296 {
             return Err(Error::BadArgument("Data too large for push".to_string()));
         }
         match len {
