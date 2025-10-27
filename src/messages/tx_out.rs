@@ -114,7 +114,7 @@ mod tests {
         };
         assert!(valid.satoshis >= 0); // Implicit, but add explicit if needed
 
-        let invalid = TxOut {
+        let _invalid = TxOut {
             satoshis: -1,
             lock_script: Script(vec![]),
         };
