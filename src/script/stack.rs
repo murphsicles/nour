@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn bigint_tests() {
         let bi_zero = BigInt::zero();
-        assert_eq!(encode_bigint(&bi_zero), vec![]);
+        assert_eq!(encode_bigint(&bi_zero), Vec::<u8>::new());
         let bi_1234 = BigInt::from(1234u32);
         let bytes_1234 = encode_bigint(&bi_1234);
         assert_eq!(decode_bigint(&bytes_1234), bi_1234);
