@@ -43,8 +43,8 @@ impl MerkleBlock {
         let mut flag_bits_used = 0;
         let mut hashes_used = 0;
         let mut matches = Vec::new();
-        let tree_depth = (self.total_transactions as f64).log2().ceil() as usize;
-        let mut total_nodes = self.total_transactions as usize;
+        let tree_depth = ((self.total_transactions as f64).log2().ceil() as usize).max(1);
+        let mut total_nodes = (1usize << tree_depth) - 1;
         let mut row_len = total_nodes;
         while row_len > 1 {
             row_len = (row_len + 1) / 2;
