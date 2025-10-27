@@ -396,55 +396,55 @@ mod tests {
 
         let mut tx_test = tx.clone();
         tx_test.inputs = vec![];
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "inputs empty");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: inputs empty");
 
         let mut tx_test = tx.clone();
         tx_test.outputs = vec![];
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "outputs empty");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: outputs empty");
 
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = -1;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "tx_out satoshis negative");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
 
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = MAX_SATOSHIS;
         tx_test.outputs[1].satoshis = MAX_SATOSHIS;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Total out exceeds max satoshis");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total out exceeds max satoshis");
 
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = COINBASE_OUTPOINT_HASH;
         tx_test.inputs[0].prev_output.index = COINBASE_OUTPOINT_INDEX;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Unexpected coinbase");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Unexpected coinbase");
 
         let mut tx_test = tx.clone();
         tx_test.lock_time = 0xffffffff;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Lock time too large");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Lock time too large");
 
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = Hash256([8; 32]);
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "utxo not found");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: utxo not found");
 
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = -1;
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "tx_out satoshis negative");
+        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
 
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = MAX_SATOSHIS + 1;
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Total in exceeds max satoshis");
+        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total in exceeds max satoshis");
 
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = 100;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Output total exceeds input");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Output total exceeds input");
 
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().lock_script = Script(vec![op_codes::OP_0]);
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Invalid script: OP_0");
+        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
 
         let mut tx_test = tx.clone();
         tx_test.outputs[0].lock_script = Script(vec![
             op_codes::OP_HASH160, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, op_codes::OP_EQUAL,
         ]);
         assert!(tx_test.validate(true, false, &utxos, &HashSet::new()).is_ok());
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "P2SH sunsetted");
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: P2SH sunsetted");
     }
 }
