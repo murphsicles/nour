@@ -171,6 +171,7 @@ mod tests {
 
     #[test]
     fn invalid() {
+        let err = BloomFilter::insert(&mut bf, &data).unwrap_err();
         assert_eq!(err.to_string(), "Bad data: Data too large for bloom add");
         assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Bad data: Invalid pr_false_pos value");
         assert_eq!(BloomFilter::new(-1.0, 0.5).unwrap_err().to_string(), "Bad data: Invalid insert value");
@@ -198,6 +199,7 @@ mod tests {
     #[test]
     fn add_too_large() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
+        let err = BloomFilter::insert(&mut bf, &invalid_data).unwrap_err();
         assert_eq!(err.to_string(), "Bad data: Invalid insert value");
     }
 }
