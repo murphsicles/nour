@@ -273,27 +273,27 @@ mod tests {
         // Not enough hashes
         let mut p2 = p.clone();
         p2.hashes.truncate(p.hashes.len() - 1);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Not all hashes consumed");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
 
         // Too many hashes
         let mut p2 = p.clone();
         p2.hashes.push(Hash256([0; 32]));
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Not all hashes consumed");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
 
         // Not enough flags
         let mut p2 = p.clone();
         p2.flags = vec![];
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Not enough flag bits");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not enough flag bits");
 
         // Too many flags
         let mut p2 = p.clone();
         p2.flags.push(0);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Not all flag bits consumed");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all flag bits consumed");
 
         // Merkle root doesn't match
         let mut p2 = p.clone();
         p2.hashes[0] = Hash256([1; 32]);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Merkle root doesn't match");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle root doesn't match");
 
         // Duplicate transactions
         let hash1 = Hash256([1; 32]);
@@ -316,7 +316,7 @@ mod tests {
             hashes: vec![hash1, hash2, hash3, hash4],
             flags: vec![0x5d],
         };
-        assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Duplicate transactions");
+        assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
     }
 
     #[test]
