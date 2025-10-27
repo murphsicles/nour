@@ -246,7 +246,7 @@ mod tests {
         let mut stack = vec![vec![0, 0, 0, 0]];
         assert_eq!(pop_num(&mut stack).unwrap(), 0);
         let mut stack = vec![];
-        assert_eq!(pop_num(&mut stack).unwrap_err().to_string(), "Empty stack for num");
+        assert_eq!(err.to_string(), "Script error: Empty stack for num");
         let mut stack = vec![vec![0; 5]];
         assert_eq!(pop_num(&mut stack).unwrap_err().to_string(), "Num too long: 5 bytes");
     }
