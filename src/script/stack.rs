@@ -223,9 +223,9 @@ mod tests {
         let mut stack = vec![vec![0, 0, 0, 127]];
         assert_eq!(pop_bool(&mut stack).unwrap(), true);
         let mut stack = vec![];
-        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Empty stack for bool");
+        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Script error: Empty stack for bool");
         let mut stack = vec![vec![0; 5]];
-        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Bool too long: 5 bytes");
+        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Script error: Bool too long: 5 bytes");
         let mut stack = vec![vec![]];
         assert_eq!(pop_bool(&mut stack).unwrap(), false);
         let mut stack = vec![vec![0]];
@@ -240,8 +240,8 @@ mod tests {
         // Range checks
         assert!(encode_num(2_147_483_647).is_ok());
         assert!(encode_num(-2_147_483_647).is_ok());
-        assert_eq!(encode_num(2_147_483_648).unwrap_err().to_string(), "Number out of range");
-        assert_eq!(encode_num(-2_147_483_648).unwrap_err().to_string(), "Number out of range");
+        assert_eq!(encode_num(2_147_483_648).unwrap_err().to_string(), "Script error: Number out of range");
+        assert_eq!(encode_num(-2_147_483_648).unwrap_err().to_string(), "Script error: Number out of range");
         // Roundtrip
         assert_eq!(decode_num(&encode_num(0).unwrap()).unwrap(), 0);
         assert_eq!(decode_num(&encode_num(1).unwrap()).unwrap(), 1);
