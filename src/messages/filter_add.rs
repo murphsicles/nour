@@ -1,12 +1,10 @@
 //! FilterAdd message for Bitcoin SV P2P, adding data to bloom filters (BIP-37).
-
 use crate::messages::message::Payload;
 use crate::util::{var_int, Error, Result, Serializable};
 use hex;
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -85,8 +83,8 @@ mod tests {
 
     #[test]
     fn read_bytes() {
-    let b = hex::decode("deadbeef").unwrap();
-    let filter_add = FilterAdd::read(&mut Cursor::new(&b)).unwrap();
+        let b = hex::decode(&("20".to_string() + &"00".repeat(64))).unwrap();
+        let f = FilterAdd::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(f.data.len(), 32);
     }
 
@@ -103,7 +101,6 @@ mod tests {
     fn validate() {
         let p = FilterAdd { data: vec![21; 21] };
         assert!(p.validate().is_ok());
-
         let p = FilterAdd { data: vec![21; MAX_FILTER_ADD_DATA_SIZE + 1] };
         assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Data too long");
     }
