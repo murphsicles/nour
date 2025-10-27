@@ -150,11 +150,11 @@ mod tests {
 
         let mut p = p.clone();
         p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32 - 1;
-        assert_eq!(p.validate().unwrap_err().to_string(), format!("Unsupported protocol version: {}", p.version));
+        assert_eq!(p.validate().unwrap_err().to_string(), format!("Bad data: Unsupported protocol version: {}", p.version));
 
         let mut p = p.clone();
         p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32;
         p.block_locator_hashes = vec![NO_HASH_STOP; MAX_BLOCK_LOCATOR_HASHES as usize + 1];
-        assert_eq!(p.validate().unwrap_err().to_string(), format!("Too many hashes: {}", p.block_locator_hashes.len()));
+        assert_eq!(p.validate().unwrap_err().to_string(), format!("Bad data: Too many hashes: {}", p.block_locator_hashes.len()));
     }
 }
