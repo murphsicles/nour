@@ -1,6 +1,6 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
-
 use crate::util::{var_int, Error, Result, Serializable};
+use hex;
 use murmur3::murmur3_32;
 use rand::Rng;
 use std::fmt;
@@ -38,10 +38,10 @@ impl BloomFilter {
     /// ```
     #[must_use]
     pub fn new(insert: f64, pr_false_pos: f64) -> Result<BloomFilter> {
-        if insert.is_sign_negative() || !insert.is_normal() {
+        if insert <= 0.0 || !insert.is_normal() {
             return Err(Error::BadArgument("Invalid insert value".to_string()));
         }
-        if pr_false_pos.is_sign_negative() || !pr_false_pos.is_normal() {
+        if !(0.0 < pr_false_pos && pr_false_pos < 1.0) || !pr_false_pos.is_normal() {
             return Err(Error::BadArgument("Invalid pr_false_pos value".to_string()));
         }
         let ln2 = 2.0_f64.ln();
@@ -154,7 +154,7 @@ mod tests {
     fn write_read() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
         for i in 0..5 {
-            bf.add(&vec![i; 32]).unwrap();
+            bf.add(&vec![i as u8; 32]).unwrap();
         }
         let mut v = Vec::new();
         bf.write(&mut v).unwrap();
@@ -164,18 +164,20 @@ mod tests {
     #[test]
     fn contains() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
-        bf.add(&vec![5; 32]).unwrap();
-        assert!(bf.contains(&vec![5; 32]));
-        assert!(!bf.contains(&vec![6; 32]));
+        bf.add(&vec![5u8; 32]).unwrap();
+        assert!(bf.contains(&vec![5u8; 32]));
+        assert!(!bf.contains(&vec![6u8; 32]));
     }
 
     #[test]
     fn invalid() {
-        let err = BloomFilter::insert(&mut bf, &data).unwrap_err();
-        assert_eq!(err.to_string(), "Bad data: Data too large for bloom add");
-        assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Bad data: Invalid pr_false_pos value");
-        assert_eq!(BloomFilter::new(-1.0, 0.5).unwrap_err().to_string(), "Bad data: Invalid insert value");
-        assert_eq!(BloomFilter::new(1.0, -1.0).unwrap_err().to_string(), "Bad data: Invalid pr_false_pos value");
+        let mut bf = BloomFilter::new(15.0, 0.0001).unwrap();
+        let data = vec![0u8; 521];
+        let err = bf.add(&data).unwrap_err();
+        assert_eq!(err.to_string(), "Bad argument: Data too large for bloom add");
+        assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Bad argument: Invalid insert value");
+        assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Bad argument: Invalid pr_false_pos value");
+        assert_eq!(BloomFilter::new(1.0, -1.0).unwrap_err().to_string(), "Bad argument: Invalid pr_false_pos value");
         assert!(BloomFilter::new(1.0, f64::NAN).is_err());
         assert!(BloomFilter::new(f64::NAN, 0.5).is_err());
     }
@@ -199,7 +201,8 @@ mod tests {
     #[test]
     fn add_too_large() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
-        let err = BloomFilter::insert(&mut bf, &invalid_data).unwrap_err();
-        assert_eq!(err.to_string(), "Bad data: Invalid insert value");
+        let invalid_data = vec![0u8; 521];
+        let err = bf.add(&invalid_data).unwrap_err();
+        assert_eq!(err.to_string(), "Bad argument: Data too large for bloom add");
     }
 }
