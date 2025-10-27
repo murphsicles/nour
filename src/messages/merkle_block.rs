@@ -43,13 +43,17 @@ impl MerkleBlock {
         let mut flag_bits_used = 0;
         let mut hashes_used = 0;
         let mut matches = Vec::new();
-        let tree_depth = ((self.total_transactions as f64).log2().ceil() as usize).max(1);
-        let mut total_nodes = (1usize << tree_depth) - 1;
-        let mut row_len = total_nodes;
+        let tree_depth = (self.total_transactions as f64).log2().ceil() as usize;
+        let num_leaves = self.total_transactions as usize;
+        let mut total_nodes = num_leaves;
+        let mut row_len = num_leaves;
         while row_len > 1 {
             row_len = (row_len + 1) / 2;
             total_nodes += row_len;
         }
+        // Pad leaves to power of 2 if incomplete
+        let padded_leaves = 1usize << tree_depth;
+        total_nodes += padded_leaves - num_leaves; // Add padded internals
         let merkle_root = self.traverse(
             &mut preorder_node,
             &mut flag_bits_used,
