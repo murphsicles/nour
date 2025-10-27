@@ -245,7 +245,10 @@ mod tests {
         for header in headers.iter_mut() {
             header.timestamp = valid.timestamp + 1;
         }
-        assert_eq!(h.validate(&h.hash(), &headers).unwrap_err().to_string(), format!("Timestamp too old: {}", h.timestamp));
+        assert_eq!(
+        block_header::read(&bytes[..]).unwrap_err().to_string(),
+        "Bad data: Timestamp too old: 1305998791"
+        );
 
         let mut h = valid.clone();
         h.nonce = 0;
