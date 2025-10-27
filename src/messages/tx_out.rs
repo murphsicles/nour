@@ -26,6 +26,17 @@ impl TxOut {
     pub fn size(&self) -> usize {
         8 + var_int::size(self.lock_script.0.len() as u64) + self.lock_script.0.len()
     }
+
+    /// Validates the transaction output.
+    ///
+    /// # Errors
+    /// `Error::BadData` if satoshis is negative.
+    pub fn validate(&self) -> Result<()> {
+        if self.satoshis < 0 {
+            return Err(Error::BadData("Negative satoshis".to_string()));
+        }
+        Ok(())
+    }
 }
 
 impl Serializable<TxOut> for TxOut {
@@ -100,7 +111,7 @@ mod tests {
 
     #[test]
     fn read_invalid() {
-        // value: 100000000 (00e1f50500000000 LE i64), var_int for 65541 (0x10005): FE 05 00 01 00 (LE u32), sequence/pad: zeros
+        // value: 100000000 (00e1f50500000000 LE i64), var_int for 65541 (0x10005): FE 05 00 01 00 (LE u32), pad: zeros
         let b = hex::decode("00e1f50500000000fe0500010000000000000000").unwrap();
         let result = TxOut::read(&mut Cursor::new(&b));
         assert_eq!(result.unwrap_err().to_string(), "Bad data: Lock script too long: 65541");
@@ -112,13 +123,11 @@ mod tests {
             satoshis: 100,
             lock_script: Script(vec![]),
         };
-        assert!(valid.satoshis >= 0); // Implicit, but add explicit if needed
-
-        let _invalid = TxOut {
+        assert!(valid.validate().is_ok());
+        let invalid = TxOut {
             satoshis: -1,
             lock_script: Script(vec![]),
         };
-        // Assuming validate is a method or separate fn; if not, add:
-        // assert_eq!(invalid.validate().unwrap_err().to_string(), "Bad data: Negative satoshis");
+        assert_eq!(invalid.validate().unwrap_err().to_string(), "Bad data: Negative satoshis");
     }
 }
