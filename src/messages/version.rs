@@ -262,18 +262,18 @@ mod tests {
             version: 0,
             ..m.clone()
         };
-        assert_eq!(m2.validate().unwrap_err().to_string(), format!("Unsupported protocol version: {}", 0));
+        assert_eq!(m2.validate().unwrap_err().to_string(), format!("Bad data: Unsupported protocol version: {}", 0));
 
         let m3 = Version {
             timestamp: 0,
             ..m.clone()
         };
-        assert_eq!(m3.validate().unwrap_err().to_string(), format!("Timestamp too old: {}", 0));
+        assert_eq!(m3.validate().unwrap_err().to_string(), format!("Bad data: Timestamp too old: {}", 0));
 
         let m4 = Version {
             user_agent: "x".repeat(MAX_USER_AGENT_LEN + 1),
             ..m.clone()
         };
-        assert_eq!(m4.validate().unwrap_err().to_string(), format!("User agent too long: {}", MAX_USER_AGENT_LEN + 1));
+        assert_eq!(m4.validate().unwrap_err().to_string(), format!("Bad data: User agent too long: {}", MAX_USER_AGENT_LEN + 1));
     }
 }
