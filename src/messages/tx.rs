@@ -1,5 +1,4 @@
 //! Transaction message for Bitcoin SV P2P, supporting large txs for high TPS.
-
 use crate::messages::message::Payload;
 use crate::messages::{OutPoint, TxIn, TxOut, COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX};
 use crate::script::{op_codes, Script, TransactionChecker, NO_FLAGS, PREGENESIS_RULES};
@@ -10,7 +9,6 @@ use std::collections::HashSet;
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -66,7 +64,6 @@ impl Tx {
         if self.outputs.len() as u64 > MAX_OUTPUTS {
             return Err(Error::BadData(format!("Too many outputs: {}", self.outputs.len())));
         }
-
         let mut total_out = 0i64;
         for tx_out in &self.outputs {
             if tx_out.satoshis < 0 {
@@ -79,7 +76,6 @@ impl Tx {
         if total_out > MAX_SATOSHIS {
             return Err(Error::BadData("Total out exceeds max satoshis".to_string()));
         }
-
         for tx_in in &self.inputs {
             if tx_in.prev_output.hash == COINBASE_OUTPOINT_HASH
                 && tx_in.prev_output.index == COINBASE_OUTPOINT_INDEX
@@ -87,11 +83,9 @@ impl Tx {
                 return Err(Error::BadData("Unexpected coinbase".to_string()));
             }
         }
-
         if self.lock_time > 2_147_483_647 {
             return Err(Error::BadData("Lock time too large".to_string()));
         }
-
         let mut total_in = 0i64;
         for tx_in in &self.inputs {
             let tx_out = utxos
@@ -107,21 +101,22 @@ impl Tx {
         if total_in > MAX_SATOSHIS {
             return Err(Error::BadData("Total in exceeds max satoshis".to_string()));
         }
-
         if total_in < total_out {
             return Err(Error::BadData("Output total exceeds input".to_string()));
         }
-
+        for tx_in in &self.inputs {
+            if tx_in.unlock_script.0.is_empty() || tx_in.unlock_script.0 == vec![op_codes::OP_0] {
+                return Err(Error::BadData("Invalid script: OP_0".to_string()));
+            }
+        }
         let mut sighash_cache = SigHashCache::new();
         for input in 0..self.inputs.len() {
             let tx_in = &self.inputs[input];
             let tx_out = utxos.get(&tx_in.prev_output).unwrap();
-
             let mut script = Script::new();
             script.append_slice(&tx_in.unlock_script.0);
             script.append(op_codes::OP_CODESEPARATOR);
             script.append_slice(&tx_out.lock_script.0);
-
             let mut tx_checker = TransactionChecker {
                 tx: self,
                 sig_hash_cache: &mut sighash_cache,
@@ -129,17 +124,14 @@ impl Tx {
                 satoshis: tx_out.satoshis,
                 require_sighash_forkid,
             };
-
             let is_pregenesis_input = pregenesis_outputs.contains(&tx_in.prev_output);
             let flags = if !use_genesis_rules || is_pregenesis_input {
                 PREGENESIS_RULES
             } else {
                 NO_FLAGS
             };
-
             script.eval(&mut tx_checker, flags)?;
         }
-
         if use_genesis_rules {
             for tx_out in &self.outputs {
                 if tx_out.lock_script.0.len() == 22
@@ -150,7 +142,6 @@ impl Tx {
                 }
             }
         }
-
         Ok(())
     }
 
@@ -285,7 +276,7 @@ impl fmt::Debug for Tx {
 mod tests {
     use super::*;
     use crate::messages::{OutPoint, TxIn, TxOut};
-    use crate::script::op_codes;
+    use crate::script::op_codes::{self, OP_0};
     use crate::util::Hash256;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
@@ -372,7 +363,6 @@ mod tests {
         );
         let mut utxos = LinkedHashMap::new();
         utxos.insert(utxo.0.clone(), utxo.1.clone());
-
         let tx = Tx {
             version: 2,
             inputs: vec![TxIn {
@@ -393,56 +383,44 @@ mod tests {
             lock_time: 0,
         };
         assert!(tx.validate(true, true, &utxos, &HashSet::new()).is_ok());
-
         let mut tx_test = tx.clone();
         tx_test.inputs = vec![];
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: inputs empty");
-
         let mut tx_test = tx.clone();
         tx_test.outputs = vec![];
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: outputs empty");
-
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = -1;
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
-
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = MAX_SATOSHIS;
         tx_test.outputs[1].satoshis = MAX_SATOSHIS;
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total out exceeds max satoshis");
-
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = COINBASE_OUTPOINT_HASH;
         tx_test.inputs[0].prev_output.index = COINBASE_OUTPOINT_INDEX;
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Unexpected coinbase");
-
         let mut tx_test = tx.clone();
         tx_test.lock_time = 0xffffffff;
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Lock time too large");
-
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = Hash256([8; 32]);
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: utxo not found");
-
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = -1;
         assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
-
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = MAX_SATOSHIS + 1;
         assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total in exceeds max satoshis");
-
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = 100;
         assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Output total exceeds input");
-
-        let mut utxos_clone = utxos.clone();
-        utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().lock_script = Script(vec![op_codes::OP_0]);
-        for input in &self.inputs {
-        if input.unlock_script.0.is_empty() || input.unlock_script.0 == [OP_0] {
-            return Err(Error::BadData("Invalid script: OP_0".to_string()));
-            }
-        }
+        let mut tx_test = tx.clone();
+        tx_test.inputs[0].unlock_script = Script(vec![]);
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
+        let mut tx_test = tx.clone();
+        tx_test.inputs[0].unlock_script = Script(vec![OP_0]);
+        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
         let mut tx_test = tx.clone();
         tx_test.outputs[0].lock_script = Script(vec![
             op_codes::OP_HASH160, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, op_codes::OP_EQUAL,
