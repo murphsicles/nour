@@ -103,6 +103,6 @@ mod tests {
     #[test]
     fn test_short_read() {
         let mut cursor = Cursor::new(vec![0; 10]);
-        assert_eq!(<[u8; 16]>::read(&mut cursor).unwrap_err().to_string(), "IO error: UnexpectedEof");
+        assert_eq!(ser.read(&short_bytes).unwrap_err().to_string(), "IO error: failed to fill whole buffer");
     }
 }
