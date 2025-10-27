@@ -115,13 +115,10 @@ mod tests {
 
     #[test]
     fn too_long_unlock_script() {
-        // Bytes: OutPoint (36 zeros) + var_int(521) (0xFD 0x05 0x02) + sequence (4 zeros)
-        let mut bytes = vec![0u8; 36 + 3 + 4];
-        bytes[36] = 0xFD; // var_int prefix for 16-bit
-        bytes[37] = 0x05; // LE u16 low byte for 521 (0x0205)
-        bytes[38] = 0x02; // LE u16 high byte
-        let mut cursor = Cursor::new(bytes);
-        let err = TxIn::read(&mut cursor).unwrap_err();
-        assert_eq!(err.to_string(), "Bad data: Unlock script too long: 521");
+        let mut bytes = vec![0u8; 36]; // OutPoint zeros
+        bytes.extend_from_slice(&[0xfd, 0x05, 0x02]); // Var_int 521 (fd + LE u16 0205)
+        bytes.extend_from_slice(&[0, 0, 0, 0]); // Sequence zeros
+        let result = TxIn::read(&mut Cursor::new(bytes));
+        assert_eq!(result.unwrap_err().to_string(), "Bad data: Unlock script too long: 521");
     }
 }
