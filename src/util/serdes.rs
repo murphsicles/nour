@@ -1,5 +1,6 @@
 //! Binary serialization/deserialization trait for Bitcoin SV objects.
 use crate::util::{Error, Result};
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
