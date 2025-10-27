@@ -146,7 +146,7 @@ mod tests {
         let valid_testnet = "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn";
         validate_address(Network::Mainnet, valid_mainnet)?;
         validate_address(Network::Testnet, valid_testnet)?;
-        assert_eq!(validate_address(Network::Mainnet, valid_testnet).unwrap_err().to_string(), "Invalid address version for network");
+        assert_eq!(validate_address(Network::Mainnet, valid_testnet).unwrap_err().to_string(), "Bad data: Invalid address version for network");
         Ok(())
     }
 }
