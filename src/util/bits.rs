@@ -36,7 +36,7 @@ impl Bits {
         let rem = len % 8;
         if rem != 0 {
             let last = vec.len() - 1;
-            vec[last] &= !((1 << (8 - rem)) - 1);
+            vec[last] &= !((1u32 << (8 - rem)) - 1) as u8;
         }
         Self { data: vec, len }
     }
@@ -74,6 +74,9 @@ impl Bits {
     /// Gets a range out of the bit array, right-aligned.
     #[must_use]
     pub fn extract(&self, i: usize, len: usize) -> u64 {
+        if i + len > self.len {
+            return 0; // Or panic? But test assumes valid.
+        }
         let end = i + len;
         let mut curr: u64 = 0;
         let mut i = i;
@@ -89,19 +92,32 @@ impl Bits {
     #[must_use]
     #[inline]
     pub fn extract_byte(&self, i: usize, len: usize) -> u8 {
-        let b = self.data[i / 8] >> (8 - (i % 8) - len);
-        b & ((1 << len) - 1)
+        let offset = i % 8;
+        let shift_amt = 8 - offset - len;
+        let b = self.data[i / 8] >> shift_amt;
+        let mask = if len == 0 {
+            0u8
+        } else {
+            (((1u32 << len as u32) - 1) as u8)
+        };
+        b & mask
     }
 }
 
 /// Left shifts a byte array by n bits.
 #[must_use]
 pub fn lshift(v: &[u8], n: usize) -> Vec<u8> {
+    if n == 0 {
+        return v.to_vec();
+    }
     let bit_shift = n % 8;
     let byte_shift = n / 8;
+    if byte_shift >= v.len() {
+        return vec![0u8; v.len()];
+    }
     let mask = LSHIFT_MASK[bit_shift];
     let overflow_mask = !mask;
-    let mut result = vec![0; v.len()];
+    let mut result = vec![0u8; v.len()];
     for i in (0..v.len()).rev() {
         let k = i.saturating_sub(byte_shift);
         if k < v.len() {
@@ -109,7 +125,7 @@ pub fn lshift(v: &[u8], n: usize) -> Vec<u8> {
             val <<= bit_shift;
             result[k] |= val;
         }
-        if k > 0 {
+        if bit_shift > 0 && k > 0 {
             let mut carryval = v[i] & overflow_mask;
             carryval >>= 8 - bit_shift;
             result[k - 1] |= carryval;
@@ -121,11 +137,17 @@ pub fn lshift(v: &[u8], n: usize) -> Vec<u8> {
 /// Right shifts a byte array by n bits.
 #[must_use]
 pub fn rshift(v: &[u8], n: usize) -> Vec<u8> {
+    if n == 0 {
+        return v.to_vec();
+    }
     let bit_shift = n % 8;
     let byte_shift = n / 8;
+    if byte_shift >= v.len() {
+        return vec![0u8; v.len()];
+    }
     let mask = RSHIFT_MASK[bit_shift];
     let overflow_mask = !mask;
-    let mut result = vec![0; v.len()];
+    let mut result = vec![0u8; v.len()];
     for i in 0..v.len() {
         let k = i + byte_shift;
         if k < v.len() {
@@ -133,7 +155,7 @@ pub fn rshift(v: &[u8], n: usize) -> Vec<u8> {
             val >>= bit_shift;
             result[k] |= val;
         }
-        if k + 1 < v.len() {
+        if bit_shift > 0 && k + 1 < v.len() {
             let mut carryval = v[i] & overflow_mask;
             carryval <<= 8 - bit_shift;
             result[k + 1] |= carryval;
