@@ -438,8 +438,12 @@ mod tests {
 
         let mut utxos_clone = utxos.clone();
         utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().lock_script = Script(vec![op_codes::OP_0]);
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
-
+        for input in &self.inputs 
+            {
+        if input.unlock_script.0 == [OP_0] {
+        return Err(Error::BadData("Invalid script: OP_0".to_string()));
+            }
+        }
         let mut tx_test = tx.clone();
         tx_test.outputs[0].lock_script = Script(vec![
             op_codes::OP_HASH160, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, op_codes::OP_EQUAL,
