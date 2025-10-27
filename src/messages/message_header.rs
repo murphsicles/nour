@@ -1,5 +1,4 @@
 //! Message header for Bitcoin SV P2P messages.
-
 use crate::util::{Error, Result, Serializable};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use bitcoin_hashes::sha256d as bh_sha256d;
@@ -7,7 +6,6 @@ use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
 use std::str;
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -177,9 +175,17 @@ mod tests {
             checksum: [0x12, 0x34, 0x56, 0x78],
         };
         assert!(h.validate(magic, 100).is_ok());
+
+        let invalid_bytes = vec![
+            0x00, 0x00, 0x00, 0x00,  // Wrong magic
+            b'v', b'e', b'r', b'a', b'c', b'k', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // command
+            0x00, 0x00, 0x00, 0x58,  // size 88
+            0x00, 0x00, 0x00, 0x00,  // checksum
+        ];
+        let h_invalid = MessageHeader::read(&mut Cursor::new(&invalid_bytes)).unwrap();
         assert_eq!(
-        MessageHeader::read(&mut Cursor::new(&invalid_bytes)).unwrap_err().to_string(),
-        "Bad data: Bad magic: [160, 161, 162, 163]"
+            h_invalid.validate(magic, 100).unwrap_err().to_string(),
+            "Bad data: Bad magic: [0, 0, 0, 0]"
         );
         assert_eq!(h.validate(magic, 50).unwrap_err().to_string(), "Bad data: Payload too large: 88");
     }
