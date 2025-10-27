@@ -2,7 +2,7 @@
 use crate::messages::Tx;
 use crate::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID};
 use crate::util::{Error, Result};
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 
 const LOCKTIME_THRESHOLD: i32 = 500_000_000;
 const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
@@ -170,7 +170,7 @@ mod tests {
         SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE
     };
     use crate::util::{hash160, Hash256};
-    use secp256k1::{PublicKey, Secp256k1};
+    use secp256k1::{PublicKey, Secp256k1, SecretKey};
     use pretty_assertions::assert_eq;
 
     #[test]
