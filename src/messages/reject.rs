@@ -169,7 +169,7 @@ mod tests {
         };
         assert!(reject.txid().is_ok());
         reject.data = vec![3; 33];
-        assert_eq!(reject.txid().unwrap_err().to_string(), "Bad data: No transaction hash");
+        assert_eq!(reject.txid().unwrap_err().to_string(), "Invalid operation: No transaction hash");
     }
 
     #[test]
