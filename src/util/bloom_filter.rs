@@ -171,10 +171,10 @@ mod tests {
 
     #[test]
     fn invalid() {
-        assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Invalid insert value");
-        assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Invalid pr_false_pos value");
-        assert_eq!(BloomFilter::new(-1.0, 0.5).unwrap_err().to_string(), "Invalid insert value");
-        assert_eq!(BloomFilter::new(1.0, -1.0).unwrap_err().to_string(), "Invalid pr_false_pos value");
+        assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Bad data: Invalid insert value");
+        assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Bad data: Invalid pr_false_pos value");
+        assert_eq!(BloomFilter::new(-1.0, 0.5).unwrap_err().to_string(), "Bad data: Invalid insert value");
+        assert_eq!(BloomFilter::new(1.0, -1.0).unwrap_err().to_string(), "Bad data: Invalid pr_false_pos value");
         assert!(BloomFilter::new(1.0, f64::NAN).is_err());
         assert!(BloomFilter::new(f64::NAN, 0.5).is_err());
     }
