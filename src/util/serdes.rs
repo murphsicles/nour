@@ -80,6 +80,7 @@ impl AsyncSerializable<[u8; 32]> for [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use byteorder::{LittleEndian, ReadBytesExt};
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
     #[test]
