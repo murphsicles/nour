@@ -4,8 +4,8 @@
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
 use crate::messages::{Payload, Tx, TxOut};
 use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
-use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
-use bitcoin_hashes::{sha256d as bh_sha256d, Hash160};
+use crate::util::{var_int, Error, Hash160, Hash256, Result, Serializable, sha256d};
+use bitcoin_hashes::{sha256d as bh_sha256d};
 use byteorder::{LittleEndian, WriteBytesExt};
 
 const FORK_ID: u32 = 0; // 24-bit BSV fork ID
@@ -240,7 +240,7 @@ mod tests {
         let addr = "mfmKD4cP6Na7T8D87XRSiR7shA1HNGSaec";
         let (_version, hash160_vec) = decode_address(addr)?;
         let hash160_array: [u8; 20] = hash160_vec.try_into().map_err(|_| Error::BadData("Invalid hash160 length".to_string()))?;
-        let hash160 = Hash160::from(hash160_array);
+        let hash160 = Hash160(hash160_array);  // Tuple struct init
         let tx = Tx {
             version: 2,
             inputs: vec![TxIn {
