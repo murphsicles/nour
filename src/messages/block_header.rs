@@ -240,8 +240,6 @@ mod tests {
             nonce: 0x9546a142,
         };
         assert!(valid.validate(&valid.hash(), &headers).is_ok());
-
-        let h = valid.clone();
         for header in headers.iter_mut() {
             header.timestamp = valid.timestamp + 1;
         }
