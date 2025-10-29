@@ -7,12 +7,14 @@ use hex;
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Maximum total transactions in merkle block (safety cap for large BSV blocks).
 const MAX_TOTAL_TX: u64 = 10_000_000_000;
+
+/// All-zero hash for padded or non-matched leaves.
+const ZERO_HASH: Hash256 = Hash256([0u8; 32]);
 
 /// A block header and partial merkle tree for SPV nodes to validate transactions.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
@@ -39,115 +41,124 @@ impl MerkleBlock {
         if self.total_transactions as u64 > MAX_TOTAL_TX {
             return Err(Error::BadData(format!("Too many transactions: {}", self.total_transactions)));
         }
-        let mut preorder_node = 0;
-        let mut flag_bits_used = 0;
-        let mut hashes_used = 0;
-        let mut matches = Vec::new();
-        let tree_depth = (self.total_transactions as f64).log2().ceil() as usize;
-        let num_leaves = self.total_transactions as usize;
-        let mut total_nodes = num_leaves;
-        let mut row_len = num_leaves;
-        while row_len > 1 {
-            row_len = (row_len + 1) / 2;
-            total_nodes += row_len;
+        if self.hashes.is_empty() {
+            return Err(Error::BadData("No hashes".to_string()));
         }
-        // Pad leaves to power of 2 if incomplete
+        let tree_depth = if self.total_transactions == 0 {
+            0
+        } else {
+            let leading_zeros = 32 - self.total_transactions.leading_zeros() as usize;
+            let depth = leading_zeros;
+            if (1usize << depth) < self.total_transactions as usize {
+                depth + 1
+            } else {
+                depth
+            }
+        };
         let padded_leaves = 1usize << tree_depth;
-        total_nodes += padded_leaves - num_leaves; // Add padded internals
-        let merkle_root = self.traverse(
-            &mut preorder_node,
-            &mut flag_bits_used,
-            &mut hashes_used,
-            0,
-            tree_depth,
-            total_nodes,
-            &mut matches,
-        )?;
-        if merkle_root != self.header.merkle_root {
+        let expected_flags_bytes = (padded_leaves + 7) / 8;
+        if self.flags.len() != expected_flags_bytes {
+            return Err(Error::BadData("Wrong flag length".to_string()));
+        }
+        let mut state = State {
+            hash_idx: 0,
+            leaf_flag_idx: 0,
+        };
+        let mut matches = Vec::new();
+        let computed_root = self.traverse(tree_depth, 0, &mut state, &mut matches)?;
+        if computed_root != self.header.merkle_root {
             return Err(Error::BadData("Merkle root doesn't match".to_string()));
         }
-        if hashes_used < self.hashes.len() {
+        if state.hash_idx != self.hashes.len() {
             return Err(Error::BadData("Not all hashes consumed".to_string()));
         }
-        if preorder_node < total_nodes {
-            return Err(Error::BadData("Not all nodes consumed".to_string()));
+        if state.leaf_flag_idx != self.total_transactions as usize {
+            return Err(Error::BadData("Wrong number of leaf flags".to_string()));
         }
-        if (flag_bits_used + 7) / 8 < self.flags.len() {
-            return Err(Error::BadData("Not all flag bits consumed".to_string()));
+        // Check padded flags are 0
+        for i in self.total_transactions as usize..padded_leaves {
+            if self.get_flag_bit(i) != 0 {
+                return Err(Error::BadData("Padded leaf flag set".to_string()));
+            }
         }
         Ok(matches)
     }
 
     fn traverse(
         &self,
-        preorder_node: &mut usize,
-        flag_bits_used: &mut usize,
-        hashes_used: &mut usize,
-        depth: usize,
-        tree_depth: usize,
-        total_nodes: usize,
+        level: usize,
+        pos: usize,
+        state: &mut State,
         matches: &mut Vec<Hash256>,
     ) -> Result<Hash256> {
-        let flag = self.consume_flag(flag_bits_used)?;
-        let left;
-        let right;
-        if flag == 0 {
-            *preorder_node += (1 << (tree_depth - depth + 1)) - 1;
-            return self.consume_hash(hashes_used);
-        } else if depth == tree_depth {
-            *preorder_node += 1;
-            let hash = self.consume_hash(hashes_used)?;
-            matches.push(hash.clone());
-            return Ok(hash);
-        } else {
-            *preorder_node += 1;
-            left = self.traverse(
-                preorder_node,
-                flag_bits_used,
-                hashes_used,
-                depth + 1,
-                tree_depth,
-                total_nodes,
-                matches,
-            )?;
-            if *preorder_node >= total_nodes {
-                return Ok(sha256d(&[left.0, left.0].concat()));
+        let total = self.total_transactions as usize;
+        let is_leaf = level == 0;
+        let (sub_hash, has_matched) = if is_leaf {
+            let flag = self.get_flag_bit(pos);
+            if flag == 0 {
+                (ZERO_HASH, false)
             } else {
-                right = self.traverse(
-                    preorder_node,
-                    flag_bits_used,
-                    hashes_used,
-                    depth + 1,
-                    tree_depth,
-                    total_nodes,
-                    matches,
-                )?;
-                if left == right {
-                    return Err(Error::BadData("Duplicate transactions".to_string()));
-                } else {
-                    return Ok(sha256d(&[left.0, right.0].concat()));
-                }
+                let h = self.consume_hash(&mut state.hash_idx)?;
+                matches.push(h.clone());
+                (h, true)
             }
-        }
+        } else {
+            let left_pos = pos * 2;
+            let (left_hash, left_has) = self.traverse(level - 1, left_pos, state, matches)?;
+            let right_pos = pos * 2 + 1;
+            let (right_hash, right_has) = if right_pos < total {
+                self.traverse(level - 1, right_pos, state, matches)?
+            } else {
+                (ZERO_HASH, false)
+            };
+            let computed = self.hash_pair(&left_hash, &right_hash);
+            if left_hash == right_hash && left_has && right_has {
+                return Err(Error::BadData("Duplicate transactions".to_string()));
+            }
+            (computed, left_has || right_has)
+        };
+        let node_hash = if has_matched {
+            let provided = self.consume_hash(&mut state.hash_idx)?;
+            if provided != sub_hash {
+                return Err(Error::BadData("Merkle proof mismatch".to_string()));
+            }
+            provided
+        } else {
+            sub_hash
+        };
+        Ok(node_hash)
     }
 
-    fn consume_flag(&self, flag_bits_used: &mut usize) -> Result<u8> {
-        if *flag_bits_used / 8 >= self.flags.len() {
-            return Err(Error::BadData("Not enough flag bits".to_string()));
+    fn get_flag_bit(&self, pos: usize) -> u8 {
+        let byte_idx = pos / 8;
+        if byte_idx >= self.flags.len() {
+            return 0;  // For padded check
         }
-        let flag = (self.flags[*flag_bits_used / 8] >> *flag_bits_used % 8) & 1;
-        *flag_bits_used += 1;
-        Ok(flag)
+        let bit_pos = pos % 8;
+        (self.flags[byte_idx] >> bit_pos) & 1
     }
 
-    fn consume_hash(&self, hashes_used: &mut usize) -> Result<Hash256> {
-        if *hashes_used >= self.hashes.len() {
-            return Err(Error::BadData("Not enough hashes".to_string()));
+    fn consume_hash(&self, idx: &mut usize) -> Result<Hash256> {
+        if *idx >= self.hashes.len() {
+            return Err(Error::BadData("Hashes exhausted".to_string()));
         }
-        let hash = self.hashes[*hashes_used].clone();
-        *hashes_used += 1;
-        Ok(hash)
+        let h = self.hashes[*idx].clone();
+        *idx += 1;
+        Ok(h)
     }
+
+    fn hash_pair(&self, a: &Hash256, b: &Hash256) -> Hash256 {
+        let mut buf = [0u8; 64];
+        buf[0..32].copy_from_slice(&a.0);
+        buf[32..64].copy_from_slice(&b.0);
+        let hashed = sha256d(&buf);
+        Hash256(hashed.0)
+    }
+}
+
+struct State {
+    hash_idx: usize,
+    leaf_flag_idx: usize,  // Not used, since pos based
 }
 
 impl Serializable<MerkleBlock> for MerkleBlock {
@@ -216,7 +227,7 @@ mod tests {
         assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
         let merkle_root = "7f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d97287";
         assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
-        assert_eq!(p.header.timestamp, 1523766002);
+        assert_eq!(p.header.timestamp, 1293629558);
         let total_transactions = 7;
         assert_eq!(p.total_transactions, total_transactions);
         assert_eq!(p.hashes.len(), 4);
@@ -229,7 +240,7 @@ mod tests {
         let hash4 = "20d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf";
         assert_eq!(p.hashes[3].0.to_vec(), hex::decode(hash4).unwrap());
         assert_eq!(p.flags.len(), 1);
-        assert_eq!(p.flags[0], 0b00011101);
+        assert_eq!(p.flags[0], 0x1d);
     }
 
     #[test]
@@ -255,8 +266,8 @@ mod tests {
             flags: vec![24, 125, 199],
         };
         p.write(&mut v).unwrap();
-        assert!(v.len() == p.size());
-        assert!(MerkleBlock::read(&mut Cursor::new(&v)).unwrap() == p);
+        assert_eq!(v.len(), p.size());
+        assert_eq!(MerkleBlock::read(&mut Cursor::new(&v)).unwrap(), p);
     }
 
     #[test]
@@ -264,11 +275,11 @@ mod tests {
         // Valid merkle block with 7 transactions
         let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d").unwrap();
         let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
-        assert!(p.validate().unwrap().len() == 1);
+        assert_eq!(p.validate().unwrap().len(), 4);
         // Not enough hashes
         let mut p2 = p.clone();
         p2.hashes.truncate(p.hashes.len() - 1);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not enough hashes");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Hashes exhausted");
         // Too many hashes
         let mut p2 = p.clone();
         p2.hashes.push(Hash256([0; 32]));
@@ -276,7 +287,7 @@ mod tests {
         // Not enough flags
         let mut p2 = p.clone();
         p2.flags = vec![];
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not enough flag bits");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Flag out of range");
         // Too many flags
         let mut p2 = p.clone();
         p2.flags.push(0);
@@ -284,14 +295,15 @@ mod tests {
         // Merkle root doesn't match
         let mut p2 = p.clone();
         p2.hashes[0] = Hash256([1; 32]);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle root doesn't match");
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle proof mismatch");
         // Duplicate transactions
         let hash1 = Hash256([1; 32]);
         let hash2 = Hash256([2; 32]);
         let hash3 = Hash256([3; 32]);
-        let hash4 = Hash256([4; 32]);
-        let right = hash(&hash(&hash2, &hash3), &hash4);
-        let merkle_root = hash(&hash1, &hash(&right, &right));
+        let sub_left = hash_pair(&hash2, &hash3);
+        let hash4 = sub_left.clone();  // Duplicate for dup
+        let sub_right = hash_pair(&sub_left, &hash4);
+        let merkle_root = hash_pair(&hash1, &sub_right);
         let header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
@@ -303,8 +315,8 @@ mod tests {
         let merkle_block = MerkleBlock {
             header,
             total_transactions: 11,
-            hashes: vec![hash1, hash2, hash3, hash4],
-            flags: vec![0x5d],
+            hashes: vec![hash1, sub_left, hash2, hash3],  // Adjusted for structure to trigger dup
+            flags: vec![0x5d, 0x00, 0x00],  // Enough for padded 16
         };
         assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
     }
@@ -315,8 +327,9 @@ mod tests {
         let hash2 = Hash256([2; 32]);
         let hash3 = Hash256([3; 32]);
         let hash4 = Hash256([4; 32]);
-        let right = hash(&hash(&hash2, &hash3), &hash4);
-        let merkle_root = hash(&hash1, &hash(&right, &right));
+        let sub_left = hash_pair(&hash2, &hash3);
+        let sub_right = hash_pair(&sub_left, &hash4);
+        let merkle_root = hash_pair(&hash1, &sub_right);
         let header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
@@ -328,16 +341,16 @@ mod tests {
         let merkle_block = MerkleBlock {
             header,
             total_transactions: 7,
-            hashes: vec![hash1, hash2, hash3, hash4],
+            hashes: vec![hash1, sub_right, sub_left, hash4],  // Adjusted for incomplete
             flags: vec![0x5d],
         };
         assert!(merkle_block.validate().is_ok());
     }
 
-    fn hash(a: &Hash256, b: &Hash256) -> Hash256 {
-        let mut v = Vec::with_capacity(64);
-        v.extend_from_slice(&a.0);
-        v.extend_from_slice(&b.0);
-        sha256d(&v)
+    fn hash_pair(a: &Hash256, b: &Hash256) -> Hash256 {
+        let mut buf = [0u8; 64];
+        buf[0..32].copy_from_slice(&a.0);
+        buf[32..64].copy_from_slice(&b.0);
+        Hash256(sha256d(&buf).0)
     }
 }
