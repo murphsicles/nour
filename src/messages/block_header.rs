@@ -79,30 +79,16 @@ impl BlockHeader {
         if exp < 3 || exp > 32 {
             return Err(Error::BadArgument(format!("Difficulty exponent out of range: {}", exp)));
         }
-        let mantissa = self.bits & 0x007fffff;
-        let mut target = [0u8; 32];
-        let shift = (exp as u32 - 3) * 8;
-        if shift >= 256 {
+        let mant_u32 = self.bits & 0x007F_FFFFu32;
+        let mant_bytes = mant_u32.to_be_bytes();
+        let mant_start = exp.saturating_sub(3);
+        if mant_start + 3 > 32 {
             return Err(Error::BadArgument("Difficulty shift too large".to_string()));
         }
-        let mant_bytes = mantissa.to_be_bytes();
-        let mant_start = 32 - 3 - (shift / 8) as usize;
-        if mant_start > 0 {
-            target[mant_start..mant_start + 3].copy_from_slice(&mant_bytes[1..4]);
-        } else {
-            // Handle shift >24, but rare
-            target[0..3].copy_from_slice(&mant_bytes[1..4]);
-        }
-        // Shift bits if needed (sub-byte)
-        let bit_shift = shift % 8;
-        if bit_shift > 0 {
-            for i in (0..32).rev() {
-                target[i] <<= bit_shift;
-                if i > 0 {
-                    target[i] |= target[i-1] >> (8 - bit_shift);
-                }
-            }
-        }
+        let mut target = [0u8; 32];
+        target[mant_start] = mant_bytes[3];     // low byte
+        target[mant_start + 1] = mant_bytes[2]; // mid byte
+        target[mant_start + 2] = mant_bytes[1]; // high byte
         Ok(Hash256(target))
     }
 }
@@ -239,7 +225,7 @@ mod tests {
         let mut headers = Vec::with_capacity(11);
         for i in 0..11 {
             headers.push(BlockHeader {
-                timestamp: (i * 10 + 1000) as u32,  // Higher base ts for median
+                timestamp: (i * 10 + 1000) as u32, // Higher base ts for median
                 ..Default::default()
             });
         }
@@ -262,7 +248,7 @@ mod tests {
         // Test timestamp too old
         let mut invalid_ts = headers[0].clone();
         invalid_ts.timestamp = 0;
-        invalid_ts.bits = 0x1a44b9f2;  // Valid bits
+        invalid_ts.bits = 0x1a44b9f2; // Valid bits
         assert_eq!(
             invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
             "Bad data: Timestamp too old: 0"
@@ -276,7 +262,7 @@ mod tests {
         );
         // Test invalid POW
         let mut invalid_pow = valid.clone();
-        invalid_pow.nonce = 0;  // Assume this makes hash > target
+        invalid_pow.nonce = 0; // Assume this makes hash > target
         assert_eq!(
             invalid_pow.validate(&invalid_pow.hash(), &headers).unwrap_err().to_string(),
             "Bad data: Invalid POW"
