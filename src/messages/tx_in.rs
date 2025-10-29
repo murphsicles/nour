@@ -4,7 +4,6 @@ use crate::script::Script;
 use crate::util::{var_int, Error, Result, Serializable};
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -116,7 +115,7 @@ mod tests {
     #[test]
     fn too_long_unlock_script() {
         let mut bytes = vec![0u8; 36]; // OutPoint zeros
-        bytes.extend_from_slice(&[0xfd, 0x05, 0x02]); // Var_int 521 (fd + LE u16 0205)
+        bytes.extend_from_slice(&[0xfd, 0x09, 0x02]); // Var_int 521 (fd + LE u16 0209)
         bytes.extend_from_slice(&[0, 0, 0, 0]); // Sequence zeros
         let result = TxIn::read(&mut Cursor::new(bytes));
         assert_eq!(result.unwrap_err().to_string(), "Bad data: Unlock script too long: 521");
