@@ -20,16 +20,12 @@ use crate::script::op_codes::*;
 use crate::util::{Error, Result};
 use hex;
 use std::fmt;
-
 pub mod checker;
 pub mod interpreter;
-
 #[allow(dead_code)]
 /// Script opcodes and utilities.
 pub mod op_codes;
-
 pub mod stack;
-
 pub use self::checker::{Checker, TransactionChecker, TransactionlessChecker};
 pub(crate) use self::interpreter::next_op;
 pub use self::interpreter::{NO_FLAGS, PREGENESIS_RULES};
@@ -61,7 +57,7 @@ impl Script {
     /// Returns `Error::BadArgument` if data exceeds consensus limits (4.2GB for BSV).
     pub fn append_data(&mut self, data: &[u8]) -> Result<()> {
         let len = data.len();
-        if len > 4294967296 {
+        if len > u32::MAX as usize {
             return Err(Error::BadArgument("Data too large for push".to_string()));
         }
         match len {
@@ -318,7 +314,7 @@ mod tests {
         assert_eq!(s.0[0], OP_PUSHDATA2);
         assert_eq!(s.0[1], 255);
         assert_eq!(s.0[2], 255);
-        assert_eq!(s.0.len(), 65537);
+        assert_eq!(s.0.len(), 65538);
         let mut s = Script::new();
         s.append_data(&vec![0; 65536]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA4);
@@ -330,9 +326,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Data too large for push")]
     fn append_data_too_large() {
         let mut s = Script::new();
-        s.append_data(&vec![0; 10001]).unwrap();
+        let result = s.append_data(&vec![0u8; (u32::MAX as usize) + 1]);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Bad argument: Data too large for push");
     }
 }
