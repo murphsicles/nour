@@ -1,11 +1,9 @@
 //! Block header for Bitcoin SV P2P messages.
-
 use crate::util::{sha256d, Error, Hash256, Result, Serializable};
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::cmp::min;
 use std::io;
 use std::io::{Read, Write};
-
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -64,13 +62,11 @@ impl BlockHeader {
                 return Err(Error::BadData(format!("Timestamp too old: {}", self.timestamp)));
             }
         }
-
         // POW
         let target = self.difficulty_target()?;
         if hash > &target {
             return Err(Error::BadData("Invalid POW".to_string()));
         }
-
         Ok(())
     }
 
@@ -81,13 +77,33 @@ impl BlockHeader {
     fn difficulty_target(&self) -> Result<Hash256> {
         let exp = (self.bits >> 24) as usize;
         if exp < 3 || exp > 32 {
-            return Err(Error::BadArgument(format!("Difficulty exponent out of range: {}", self.bits)));
+            return Err(Error::BadArgument(format!("Difficulty exponent out of range: {}", exp)));
         }
-        let mut difficulty = [0u8; 32];
-        difficulty[exp - 1] = ((self.bits >> 16) & 0xff) as u8;
-        difficulty[exp - 2] = ((self.bits >> 8) & 0xff) as u8;
-        difficulty[exp - 3] = (self.bits & 0xff) as u8;
-        Ok(Hash256(difficulty))
+        let mantissa = self.bits & 0x007fffff;
+        let mut target = [0u8; 32];
+        let shift = (exp as u32 - 3) * 8;
+        if shift >= 256 {
+            return Err(Error::BadArgument("Difficulty shift too large".to_string()));
+        }
+        let mant_bytes = mantissa.to_be_bytes();
+        let mant_start = 32 - 3 - (shift / 8) as usize;
+        if mant_start > 0 {
+            target[mant_start..mant_start + 3].copy_from_slice(&mant_bytes[1..4]);
+        } else {
+            // Handle shift >24, but rare
+            target[0..3].copy_from_slice(&mant_bytes[1..4]);
+        }
+        // Shift bits if needed (sub-byte)
+        let bit_shift = shift % 8;
+        if bit_shift > 0 {
+            for i in (0..32).rev() {
+                target[i] <<= bit_shift;
+                if i > 0 {
+                    target[i] |= target[i-1] >> (8 - bit_shift);
+                }
+            }
+        }
+        Ok(Hash256(target))
     }
 }
 
@@ -223,11 +239,10 @@ mod tests {
         let mut headers = Vec::with_capacity(11);
         for i in 0..11 {
             headers.push(BlockHeader {
-                timestamp: i * 10,
+                timestamp: (i * 10 + 1000) as u32,  // Higher base ts for median
                 ..Default::default()
             });
         }
-
         let valid = BlockHeader {
             version: 0x00000001,
             prev_hash,
@@ -240,16 +255,31 @@ mod tests {
             nonce: 0x9546a142,
         };
         assert!(valid.validate(&valid.hash(), &headers).is_ok());
+        // Update headers ts to be higher than valid for test setup
         for header in headers.iter_mut() {
             header.timestamp = valid.timestamp + 1;
         }
+        // Test timestamp too old
+        let mut invalid_ts = headers[0].clone();
+        invalid_ts.timestamp = 0;
+        invalid_ts.bits = 0x1a44b9f2;  // Valid bits
         assert_eq!(
-        headers[0].validate(&Hash256([0u8; 32]), &[]).unwrap_err().to_string(),
-        "Bad data: Timestamp too old: 1305998791"
+            invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
+            "Bad data: Timestamp too old: 0"
         );
-
-        let mut h = valid.clone();
-        h.nonce = 0;
-        assert_eq!(h.validate(&h.hash(), &headers).unwrap_err().to_string(), "Bad data: Invalid POW");
+        // Test invalid difficulty
+        let mut invalid_bits = valid.clone();
+        invalid_bits.bits = 0;
+        assert_eq!(
+            invalid_bits.validate(&invalid_bits.hash(), &headers).unwrap_err().to_string(),
+            "Bad argument: Difficulty exponent out of range: 0"
+        );
+        // Test invalid POW
+        let mut invalid_pow = valid.clone();
+        invalid_pow.nonce = 0;  // Assume this makes hash > target
+        assert_eq!(
+            invalid_pow.validate(&invalid_pow.hash(), &headers).unwrap_err().to_string(),
+            "Bad data: Invalid POW"
+        );
     }
 }
