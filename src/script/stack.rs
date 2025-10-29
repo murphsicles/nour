@@ -131,20 +131,9 @@ pub fn decode_num(s: &[u8]) -> Result<i64> {
         extended.push(if sign { 0xffu8 } else { 0u8 });
     }
     let n = i64::from_le_bytes(extended.try_into().map_err(|_| Error::ScriptError("Invalid extension".to_string()))?);
-
     if n.abs() >= NUM_RANGE {
         return Err(Error::ScriptError("Number out of range".to_string()));
     }
-
-    // Check minimal encoding
-    if let Ok(encoded) = encode_num(n) {
-        if encoded != s {
-            return Err(Error::ScriptError("Non-minimal number".to_string()));
-        }
-    } else {
-        return Err(Error::ScriptError("Internal encode error".to_string()));
-    }
-
     Ok(n)
 }
 
@@ -216,6 +205,7 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use num_bigint::BigInt;
+
     #[test]
     fn decode_bool_tests() {
         assert_eq!(decode_bool(&[1]), true);
@@ -226,6 +216,7 @@ mod tests {
         assert_eq!(decode_bool(&[0, 0, 0, 128]), false);
         assert_eq!(decode_bool(&[]), false);
     }
+
     #[test]
     fn pop_bool_tests() {
         let mut stack = vec![vec![1]];
@@ -245,6 +236,7 @@ mod tests {
         let mut stack = vec![vec![0, 0, 0, 128]];
         assert_eq!(pop_bool(&mut stack).unwrap(), false);
     }
+
     #[test]
     fn encode_decode_num_tests() {
         // Range checks
@@ -263,6 +255,7 @@ mod tests {
         assert_eq!(decode_num(&encode_num(2_147_483_647).unwrap()).unwrap(), 2_147_483_647);
         assert_eq!(decode_num(&encode_num(-2_147_483_647).unwrap()).unwrap(), -2_147_483_647);
     }
+
     #[test]
     fn pop_num_tests() {
         let mut stack = vec![vec![]];
@@ -280,6 +273,7 @@ mod tests {
         let err = pop_num(&mut stack).unwrap_err();
         assert_eq!(err.to_string(), "Script error: Num too long: 5 bytes");
     }
+
     #[test]
     fn bigint_tests() {
         let bi_zero = BigInt::zero();
