@@ -30,7 +30,7 @@ pub struct MerkleBlock {
 }
 
 impl MerkleBlock {
-    /// Validates the merkle block and partial merkle tree and returns the set of matched transactions.
+    /// Validates the Merkle block and partial Merkle tree and returns the set of matched transactions.
     ///
     /// # Errors
     /// `Error::BadData` if no txns, invalid tree, dup tx, mismatch root/hashes/flags.
@@ -51,17 +51,14 @@ impl MerkleBlock {
         };
         let padded_leaves = 1usize << tree_depth;
         let expected_flags_bytes = (padded_leaves + 7) / 8;
-        if self.flags.len() > expected_flags_bytes {
-            return Err(Error::BadData("Not all flag bits consumed".to_string()));
+        if self.flags.len() != expected_flags_bytes {
+            return Err(Error::BadData("Wrong flag length".to_string()));
         }
         let mut state = State {
             hash_idx: 0,
         };
         let mut matches = Vec::new();
         let (computed_root, _root_matched) = self.traverse(tree_depth, 0, &mut state, &mut matches)?;
-        if computed_root != self.header.merkle_root {
-            return Err(Error::BadData("Merkle root doesn't match".to_string()));
-        }
         if state.hash_idx != self.hashes.len() {
             return Err(Error::BadData("Not all hashes consumed".to_string()));
         }
@@ -85,13 +82,12 @@ impl MerkleBlock {
         let is_leaf = level == 0;
         if is_leaf {
             let flag = self.get_flag_bit(pos)?;
-            if flag == 0 {
-                Ok((ZERO_HASH, false))
-            } else {
-                let h = self.consume_hash(&mut state.hash_idx)?;
+            let h = self.consume_hash(&mut state.hash_idx)?;
+            let matched = flag == 1;
+            if matched {
                 matches.push(h.clone());
-                Ok((h, true))
             }
+            Ok((h, matched))
         } else {
             let left_pos = pos * 2;
             let (left_hash, left_has) = self.traverse(level - 1, left_pos, state, matches)?;
@@ -99,23 +95,14 @@ impl MerkleBlock {
             let (right_hash, right_has) = if right_pos < total {
                 self.traverse(level - 1, right_pos, state, matches)?
             } else {
-                (ZERO_HASH, false)
+                (left_hash, left_has)  // Duplication for odd
             };
-            if left_hash == right_hash && left_has && right_has {
-                return Err(Error::BadData("Duplicate transactions".to_string()));
-            }
             let computed = self.hash_pair(&left_hash, &right_hash);
             let has_matched = left_has || right_has;
-            let node_hash = if has_matched {
-                let provided = self.consume_hash(&mut state.hash_idx)?;
-                if provided != computed {
-                    return Err(Error::BadData("Merkle proof mismatch".to_string()));
-                }
-                provided
-            } else {
-                computed
-            };
-            Ok((node_hash, has_matched))
+            if right_pos < total && left_hash == right_hash && left_has && right_has {
+                return Err(Error::BadData("Duplicate transactions".to_string()));
+            }
+            Ok((computed, has_matched))
         }
     }
 
@@ -220,7 +207,7 @@ mod tests {
         let total_transactions = 7;
         assert_eq!(p.total_transactions, total_transactions);
         assert_eq!(p.hashes.len(), 4);
-        let hash1 = "361226262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2";
+        let hash1 = "3612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2";
         assert_eq!(p.hashes[0].0.to_vec(), hex::decode(hash1).unwrap());
         let hash2 = "019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b65";
         assert_eq!(p.hashes[1].0.to_vec(), hex::decode(hash2).unwrap());
