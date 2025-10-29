@@ -1,5 +1,4 @@
 //! Script interpreter for Bitcoin SV consensus evaluation.
-
 use crate::script::{op_codes::*, Checker};
 use crate::transaction::sighash::SIGHASH_FORKID;
 use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
@@ -350,19 +349,19 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x += 1;
-                stack.push_back(encode_bigint(x).into());
+                stack.push_back(encode_bigint(&x).into());
             }
             OP_1SUB => {
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x -= 1;
-                stack.push_back(encode_bigint(x).into());
+                stack.push_back(encode_bigint(&x).into());
             }
             OP_NEGATE => {
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x = -x;
-                stack.push_back(encode_bigint(x).into());
+                stack.push_back(encode_bigint(&x).into());
             }
             OP_ABS => {
                 check_stack_size(1, &stack)?;
@@ -370,48 +369,40 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 if x < BigInt::zero() {
                     x = -x;
                 }
-                stack.push_back(encode_bigint(x).into());
+                stack.push_back(encode_bigint(&x).into());
             }
             OP_NOT => {
                 check_stack_size(1, &stack)?;
-                let mut x = pop_bigint(&mut stack)?;
-                if x == BigInt::zero() {
-                    x = BigInt::one();
-                } else {
-                    x = BigInt::zero();
-                }
-                stack.push_back(encode_bigint(x).into());
+                let x = pop_bigint(&mut stack)?;
+                let not_x = if x == BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&not_x).into());
             }
             OP_0NOTEQUAL => {
                 check_stack_size(1, &stack)?;
-                let mut x = pop_bigint(&mut stack)?;
-                if x == BigInt::zero() {
-                    x = BigInt::zero();
-                } else {
-                    x = BigInt::one();
-                }
-                stack.push_back(encode_bigint(x).into());
+                let x = pop_bigint(&mut stack)?;
+                let not_zero = if x == BigInt::zero() { BigInt::zero() } else { BigInt::one() };
+                stack.push_back(encode_bigint(&not_zero).into());
             }
             OP_ADD => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let sum = a + b;
-                stack.push_back(encode_bigint(sum).into());
+                stack.push_back(encode_bigint(&sum).into());
             }
             OP_SUB => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let difference = a - b;
-                stack.push_back(encode_bigint(difference).into());
+                stack.push_back(encode_bigint(&difference).into());
             }
             OP_MUL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let product = a * b;
-                stack.push_back(encode_bigint(product).into());
+                stack.push_back(encode_bigint(&product).into());
             }
             OP_DIV => {
                 check_stack_size(2, &stack)?;
@@ -422,7 +413,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     return Err(Error::ScriptError(msg));
                 }
                 let quotient = a / b;
-                stack.push_back(encode_bigint(quotient).into());
+                stack.push_back(encode_bigint(&quotient).into());
             }
             OP_MOD => {
                 check_stack_size(2, &stack)?;
@@ -433,37 +424,28 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     return Err(Error::ScriptError(msg));
                 }
                 let remainder = a % b;
-                stack.push_back(encode_bigint(remainder).into());
+                stack.push_back(encode_bigint(&remainder).into());
             }
             OP_BOOLAND => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a != BigInt::zero() && b != BigInt::zero() {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a != BigInt::zero() && b != BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_BOOLOR => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a != BigInt::zero() || b != BigInt::zero() {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a != BigInt::zero() || b != BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_NUMEQUAL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a == b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a == b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_NUMEQUALVERIFY => {
                 check_stack_size(2, &stack)?;
@@ -478,82 +460,58 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a != b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a != b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_LESSTHAN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a < b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a < b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_GREATERTHAN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a > b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a > b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_LESSTHANOREQUAL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a <= b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a <= b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_GREATERTHANOREQUAL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a >= b {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if a >= b { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_MIN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a < b {
-                    stack.push_back(encode_bigint(a).into());
-                } else {
-                    stack.push_back(encode_bigint(b).into());
-                }
+                let result = if a < b { a } else { b };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_MAX => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                if a > b {
-                    stack.push_back(encode_bigint(a).into());
-                } else {
-                    stack.push_back(encode_bigint(b).into());
-                }
+                let result = if a > b { a } else { b };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_WITHIN => {
                 check_stack_size(3, &stack)?;
                 let max = pop_bigint(&mut stack)?;
                 let min = pop_bigint(&mut stack)?;
                 let x = pop_bigint(&mut stack)?;
-                if x >= min && x < max {
-                    stack.push_back(encode_num(1)?.into());
-                } else {
-                    stack.push_back(encode_num(0)?.into());
-                }
+                let result = if x >= min && x < max { BigInt::one() } else { BigInt::zero() };
+                stack.push_back(encode_bigint(&result).into());
             }
             OP_NUM2BIN => {
                 check_stack_size(2, &stack)?;
@@ -592,8 +550,8 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(1, &stack)?;
                 let mut v = stack.pop_back().expect("stack underflow").into_owned();
                 v.reverse();
-                let n = decode_bigint(&mut v);
-                stack.push_back(encode_bigint(n).into());
+                let n = decode_bigint(&v);
+                stack.push_back(encode_bigint(&n).into());
             }
             OP_RIPEMD160 => {
                 check_stack_size(1, &stack)?;
@@ -625,7 +583,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 let h = sha256d(v.as_ref());
                 stack.push_back(Cow::Owned(h.0.to_vec()));
             }
-            OP_CODESEPARATOR => check_index = i,
+            OP_CODESEPARATOR => check_index = i + 1, // Set after the opcode
             OP_CHECKSIG => {
                 check_stack_size(2, &stack)?;
                 let pubkey = stack.pop_back().expect("stack underflow").into_owned();
@@ -859,7 +817,8 @@ fn encode_num(n: i64) -> Result<Vec<u8>> {
     Ok(result)
 }
 
-fn encode_bigint(mut n: BigInt) -> Vec<u8> {
+fn encode_bigint(n: &BigInt) -> Vec<u8> {
+    let mut n = n.clone();
     if n == BigInt::zero() {
         return vec![];
     }
@@ -890,7 +849,7 @@ fn encode_bigint(mut n: BigInt) -> Vec<u8> {
     result
 }
 
-fn decode_bigint(v: &mut [u8]) -> BigInt {
+fn decode_bigint(v: &[u8]) -> BigInt {
     let mut result = BigInt::zero();
     for &b in v.iter().rev() {
         result <<= 8;
@@ -908,11 +867,11 @@ fn decode_bigint(v: &mut [u8]) -> BigInt {
 fn pop_num<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<i32> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
-    let mut v = item.to_vec();
-    decode_num(&mut v)
+    let v = item.to_vec();
+    decode_num(&v)
 }
 
-fn decode_num(v: &mut [u8]) -> Result<i32> {
+fn decode_num(v: &[u8]) -> Result<i32> {
     let mut result = 0i64;
     for &b in v.iter().rev() {
         result <<= 8;
@@ -934,8 +893,8 @@ fn decode_bool<'a>(item: &Cow<'a, [u8]>) -> bool {
 fn pop_bigint<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<BigInt> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
-    let mut v = item.to_vec();
-    Ok(decode_bigint(&mut v))
+    let v = item.to_vec();
+    Ok(decode_bigint(&v))
 }
 
 fn pop_bool<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<bool> {
