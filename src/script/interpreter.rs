@@ -652,46 +652,48 @@ fn check_multisig<'a, T: Checker>(
     checker: &mut T,
     script: &'a [u8],
 ) -> Result<bool> {
-    let total = pop_num(stack)?;
-    if total < 0 {
-        let msg = "total out of range".to_string();
-        return Err(Error::ScriptError(msg));
-    }
-    check_stack_size(total as usize, stack)?;
-    let mut keys = Vec::with_capacity(total as usize);
-    for _ in 0..total {
-        keys.push(stack.pop_back().expect("stack underflow").into_owned());
-    }
     let required = pop_num(stack)?;
-    if required < 0 || required > total {
-        let msg = "required out of range".to_string();
-        return Err(Error::ScriptError(msg));
+    if required < 0 {
+        return Err(Error::ScriptError("required out of range".to_string()));
     }
     check_stack_size(required as usize, stack)?;
     let mut sigs = Vec::with_capacity(required as usize);
     for _ in 0..required {
         sigs.push(stack.pop_back().expect("stack underflow").into_owned());
     }
+    let total = pop_num(stack)?;
+    if total < 0 || total < required as i32 {
+        return Err(Error::ScriptError("total out of range".to_string()));
+    }
+    check_stack_size(total as usize, stack)?;
+    let mut keys = Vec::with_capacity(total as usize);
+    for _ in 0..total {
+        keys.push(stack.pop_back().expect("stack underflow").into_owned());
+    }
+    // Pop dummy
     check_stack_size(1, stack)?;
-    let _ = stack.pop_back().expect("stack underflow");
+    let _dummy = stack.pop_back().expect("stack underflow");
+    // Reverse to restore original order (pops were reverse)
+    sigs.reverse();
+    keys.reverse();
     let mut cleaned_script = script.to_vec();
     for sig in &sigs {
         if prefork(sig) {
             cleaned_script = remove_sig(sig, &cleaned_script);
         }
     }
-    let mut key = 0;
-    let mut sig = 0;
-    while sig < sigs.len() {
-        if key == keys.len() {
+    let mut key_idx = 0;
+    let mut sig_idx = 0;
+    while sig_idx < required as usize {
+        if key_idx == total as usize {
             return Ok(false);
         }
-        if checker.check_sig(&sigs[sig], &keys[key], &cleaned_script)? {
-            sig += 1;
+        if checker.check_sig(&sigs[sig_idx], &keys[key_idx], &cleaned_script)? {
+            sig_idx += 1;
         }
-        key += 1;
+        key_idx += 1;
     }
-    Ok(sig == (required as usize))
+    Ok(sig_idx == required as usize)
 }
 
 #[inline]
