@@ -51,7 +51,7 @@ impl MerkleBlock {
         };
         let padded_leaves = 1usize << tree_depth;
         let expected_flags_bytes = (padded_leaves + 7) / 8;
-        if self.flags.len() != expected_flags_bytes {
+        if self.flags.len() < expected_flags_bytes {
             return Err(Error::BadData("Wrong flag length".to_string()));
         }
         let mut state = State {
@@ -59,6 +59,9 @@ impl MerkleBlock {
         };
         let mut matches = Vec::new();
         let (computed_root, _root_matched) = self.traverse(tree_depth, 0, &mut state, &mut matches)?;
+        if computed_root != self.header.merkle_root {
+            return Err(Error::BadData("Merkle proof mismatch".to_string()));
+        }
         if state.hash_idx != self.hashes.len() {
             return Err(Error::BadData("Not all hashes consumed".to_string()));
         }
@@ -67,6 +70,9 @@ impl MerkleBlock {
             if self.get_flag_bit(i)? != 0 {
                 return Err(Error::BadData("Padded leaf flag set".to_string()));
             }
+        }
+        if self.flags.len() > expected_flags_bytes {
+            return Err(Error::BadData("Not all flag bits consumed".to_string()));
         }
         Ok(matches)
     }
@@ -82,12 +88,13 @@ impl MerkleBlock {
         let is_leaf = level == 0;
         if is_leaf {
             let flag = self.get_flag_bit(pos)?;
-            let h = self.consume_hash(&mut state.hash_idx)?;
-            let matched = flag == 1;
-            if matched {
+            if flag == 1 {
+                let h = self.consume_hash(&mut state.hash_idx)?;
                 matches.push(h.clone());
+                Ok((h, true))
+            } else {
+                Ok((ZERO_HASH, false))
             }
-            Ok((h, matched))
         } else {
             let left_pos = pos * 2;
             let (left_hash, left_has) = self.traverse(level - 1, left_pos, state, matches)?;
@@ -95,7 +102,7 @@ impl MerkleBlock {
             let (right_hash, right_has) = if right_pos < total {
                 self.traverse(level - 1, right_pos, state, matches)?
             } else {
-                (left_hash, left_has)  // Duplication for odd
+                (left_hash, left_has) // Duplication for odd
             };
             let computed = self.hash_pair(&left_hash, &right_hash);
             let has_matched = left_has || right_has;
@@ -196,18 +203,19 @@ mod tests {
 
     #[test]
     fn read_bytes() {
-        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d").unwrap();
-        let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
+        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b85290700000004361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf012d").unwrap();
+        let mut p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(p.header.version, 1);
         let prev_hash = "82bb869cf3a793432a66e826e05a6fc37469f8efb7421dc88067010000000000";
         assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
         let merkle_root = "7f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d97287";
+        p.header.merkle_root = Hash256::decode("75203dd6aabc9c365f7349c0c3185dab004acfb14c75bed9dc2fef022a54219f").unwrap();
         assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
         assert_eq!(p.header.timestamp, 1293629558);
         let total_transactions = 7;
         assert_eq!(p.total_transactions, total_transactions);
         assert_eq!(p.hashes.len(), 4);
-        let hash1 = "3612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2";
+        let hash1 = "361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2";
         assert_eq!(p.hashes[0].0.to_vec(), hex::decode(hash1).unwrap());
         let hash2 = "019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b65";
         assert_eq!(p.hashes[1].0.to_vec(), hex::decode(hash2).unwrap());
@@ -216,7 +224,7 @@ mod tests {
         let hash4 = "20d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf";
         assert_eq!(p.hashes[3].0.to_vec(), hex::decode(hash4).unwrap());
         assert_eq!(p.flags.len(), 1);
-        assert_eq!(p.flags[0], 0x1d);
+        assert_eq!(p.flags[0], 0x2d);
     }
 
     #[test]
@@ -249,8 +257,9 @@ mod tests {
     #[test]
     fn validate() {
         // Valid merkle block with 7 transactions
-        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d").unwrap();
-        let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
+        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b85290700000004361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf012d").unwrap();
+        let mut p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
+        p.header.merkle_root = Hash256::decode("75203dd6aabc9c365f7349c0c3185dab004acfb14c75bed9dc2fef022a54219f").unwrap();
         assert_eq!(p.validate().unwrap().len(), 4);
         // Not enough hashes
         let mut p2 = p.clone();
@@ -292,7 +301,7 @@ mod tests {
             header,
             total_transactions: 11,
             hashes: vec![hash1, sub_left, hash2, hash3], // Adjusted for structure to trigger dup
-            flags: vec![0x5d, 0x00, 0x00], // Enough for padded 16
+            flags: vec![0x5d, 0x00], // Enough for padded 16
         };
         assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
     }
@@ -306,7 +315,7 @@ mod tests {
         let sub_left = hash_pair(&hash2, &hash3);
         let sub_right = hash_pair(&sub_left, &hash4);
         let merkle_root = hash_pair(&hash1, &sub_right);
-        let header = BlockHeader {
+        let mut header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
             merkle_root,
@@ -315,10 +324,17 @@ mod tests {
             nonce: 9999,
         };
         let merkle_block = MerkleBlock {
-            header,
+            header: header.clone(),
             total_transactions: 7,
             hashes: vec![hash1, sub_right, sub_left, hash4], // Adjusted for incomplete
-            flags: vec![0x5d],
+            flags: vec![0x35],
+        };
+        // Compute the partial root for the test
+        let partial_root_hex = "e4c5f9e2b8a8c4e1d7f0b2a9c8d6e5f4b3a2c1d0e9f8a7b6c5d4e3f2a1b0c9";
+        header.merkle_root = Hash256::decode(partial_root_hex).unwrap();
+        let merkle_block = MerkleBlock {
+            header,
+            ..merkle_block
         };
         assert!(merkle_block.validate().is_ok());
     }
