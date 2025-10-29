@@ -218,54 +218,57 @@ mod tests {
     }
 
     #[test]
-    fn validate() {
-        let prev_hash =
-            Hash256::decode("00000000000008a3a41b85b8b29ad444def299fee21793cd8b9e567eab02cd81")
-                .unwrap();
-        let mut headers = Vec::with_capacity(11);
-        for i in 0..11 {
-            headers.push(BlockHeader {
-                timestamp: (i * 10 + 1000) as u32, // Higher base ts for median
-                ..Default::default()
-            });
-        }
-        let valid = BlockHeader {
-            version: 0x00000001,
-            prev_hash,
-            merkle_root: Hash256::decode(
-                "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3",
-            )
-            .unwrap(),
-            timestamp: 0x4dd7f5c7,
-            bits: 0x1a44b9f2,
-            nonce: 0x9546a142,
-        };
-        assert!(valid.validate(&valid.hash(), &headers).is_ok());
-        // Update headers ts to be higher than valid for test setup
-        for header in headers.iter_mut() {
-            header.timestamp = valid.timestamp + 1;
-        }
-        // Test timestamp too old
-        let mut invalid_ts = headers[0].clone();
-        invalid_ts.timestamp = 0;
-        invalid_ts.bits = 0x1a44b9f2; // Valid bits
-        assert_eq!(
-            invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
-            "Bad data: Timestamp too old: 0"
-        );
-        // Test invalid difficulty
-        let mut invalid_bits = valid.clone();
-        invalid_bits.bits = 0;
-        assert_eq!(
-            invalid_bits.validate(&invalid_bits.hash(), &headers).unwrap_err().to_string(),
-            "Bad argument: Difficulty exponent out of range: 0"
-        );
-        // Test invalid POW
-        let mut invalid_pow = valid.clone();
-        invalid_pow.nonce = 0; // Assume this makes hash > target
-        assert_eq!(
-            invalid_pow.validate(&invalid_pow.hash(), &headers).unwrap_err().to_string(),
-            "Bad data: Invalid POW"
-        );
+fn validate() {
+    let prev_hash =
+        Hash256::decode("00000000000008a3a41b85b8b29ad444def299fee21793cd8b9e567eab02cd81")
+            .unwrap();
+    let mut headers = Vec::with_capacity(11);
+    for i in 0..11 {
+        headers.push(BlockHeader {
+            timestamp: (i * 10 + 1000) as u32,
+            ..Default::default()
+        });
     }
+    let valid = BlockHeader {
+        version: 0x00000001,
+        prev_hash,
+        merkle_root: Hash256::decode(
+            "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3",
+        )
+        .unwrap(),
+        timestamp: 0x4dd7f5c7,
+        bits: 0x1a44b9f2,
+        nonce: 0x9546a142,
+    };
+    assert!(valid.validate(&valid.hash(), &headers).is_ok());
+
+    // Test invalid difficulty (before timestamp update)
+    let mut invalid_bits = valid.clone();
+    invalid_bits.bits = 0;
+    assert_eq!(
+        invalid_bits.validate(&invalid_bits.hash(), &headers).unwrap_err().to_string(),
+        "Bad argument: Difficulty exponent out of range: 0"
+    );
+
+    // Test invalid POW (before timestamp update)
+    let mut invalid_pow = valid.clone();
+    invalid_pow.nonce = 0;
+    assert_eq!(
+        invalid_pow.validate(&invalid_pow.hash(), &headers).unwrap_err().to_string(),
+        "Bad data: Invalid POW"
+    );
+
+    // Update headers ts to be higher than valid for test setup
+    for header in headers.iter_mut() {
+        header.timestamp = valid.timestamp + 1;
+    }
+
+    // Test timestamp too old
+    let mut invalid_ts = headers[0].clone();
+    invalid_ts.timestamp = 0;
+    invalid_ts.bits = 0x1a44b9f2; // Valid bits
+    assert_eq!(
+        invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
+        "Bad data: Timestamp too old: 0"
+    );
 }
