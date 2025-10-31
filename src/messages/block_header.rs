@@ -263,12 +263,13 @@ fn validate() {
         header.timestamp = valid.timestamp + 1;
     }
 
-    // Test timestamp too old
+        // Test timestamp too old
     let mut invalid_ts = headers[0].clone();
     invalid_ts.timestamp = 0;
     invalid_ts.bits = 0x1a44b9f2; // Valid bits
     assert_eq!(
         invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
         "Bad data: Timestamp too old: 0"
-    );
+        );
+    }
 }
