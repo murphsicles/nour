@@ -231,6 +231,7 @@ mod tests {
     use crate::address::decode_address;
     use crate::messages::{OutPoint, TxIn};
     use crate::transaction::p2pkh;
+    use crate::util::Hash160;
     use hex;
     use pretty_assertions::assert_eq;
 
