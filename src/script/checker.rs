@@ -279,8 +279,8 @@ mod tests {
         let sig2 = generate_signature(&private_key2, &sig_hash, sighash_type).unwrap();
         let mut unlock_script = Script::new();
         unlock_script.append(OP_0);
-        unlock_script.append_data(&sig1).unwrap();
         unlock_script.append_data(&sig2).unwrap();
+        unlock_script.append_data(&sig1).unwrap();
         tx_2.inputs[0].unlock_script = unlock_script;
         let mut cache = SigHashCache::new();
         let mut c = TransactionChecker::new(&tx_2, &mut cache, 0, 10, false);
