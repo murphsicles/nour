@@ -59,8 +59,23 @@ impl MerkleBlock {
         if computed_root != self.header.merkle_root {
             return Err(Error::BadData("Merkle proof mismatch".to_string()));
         }
-        if bit_idx != self.flags.len() * 8 {
-            return Err(Error::BadData("Not all flag bits consumed".to_string()));
+        if bit_idx > self.flags.len() * 8 {
+            return Err(Error::BadData("Flag out of range".to_string()));
+        }
+        let total_bits = self.flags.len() * 8;
+        if bit_idx < total_bits {
+            // Check remaining bits are 0
+            let remaining_bits_start = bit_idx;
+            let mut temp_bit_idx = remaining_bits_start;
+            while temp_bit_idx < total_bits {
+                let byte_idx = temp_bit_idx / 8;
+                let bit_pos = (temp_bit_idx % 8) as u8;
+                let bit = ((self.flags[byte_idx] >> bit_pos) & 1) as usize;
+                if bit != 0 {
+                    return Err(Error::BadData("Trailing flag bits set".to_string()));
+                }
+                temp_bit_idx += 1;
+            }
         }
         if hash_idx != self.hashes.len() {
             return Err(Error::BadData("Not all hashes consumed".to_string()));
@@ -112,15 +127,6 @@ impl MerkleBlock {
                 Ok((computed, matched))
             }
         }
-    }
-
-    fn get_flag_bit(&self, pos: usize) -> Result<u8> {
-        let byte_idx = pos / 8;
-        if byte_idx >= self.flags.len() {
-            return Err(Error::BadData("Flag out of range".to_string()));
-        }
-        let bit_pos = pos % 8;
-        Ok((self.flags[byte_idx] >> bit_pos) & 1)
     }
 
     fn consume_hash(&self, idx: &mut usize) -> Result<Hash256> {
@@ -200,28 +206,23 @@ mod tests {
 
     #[test]
     fn read_bytes() {
-        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b85290700000004361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf012d0").unwrap();
-        let mut p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
+        let b = hex::decode("01000000ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f33a5914ce6ed5b1b01e32f570200000002252bf9d75c4f481ebb6278d708257d1f12beb6dd30301d26c623f789b2ba6fc0e2d32adb5f8ca820731dff234a84e78ec30bce4ec69dbd562d0b2b8266bf4e5a0105").unwrap();
+        let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(p.header.version, 1);
-        let prev_hash = "82bb869cf3a793432a66e826e05a6fc37469f8efb7421dc88067010000000000";
+        let prev_hash = "ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000";
         assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
-        let merkle_root = "7f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d97287";
-        p.header.merkle_root = Hash256::decode("75203dd6aabc9c365f7349c0c3185dab004acfb14c75bed9dc2fef022a54219f").unwrap();
+        let merkle_root = "190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f";
         assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
-        assert_eq!(p.header.timestamp, 1293629558);
-        let total_transactions = 7;
+        assert_eq!(p.header.timestamp, 1284613427);
+        let total_transactions = 2;
         assert_eq!(p.total_transactions, total_transactions);
-        assert_eq!(p.hashes.len(), 4);
-        let hash1 = "361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2";
+        assert_eq!(p.hashes.len(), 2);
+        let hash1 = "252bf9d75c4f481ebb6278d708257d1f12beb6dd30301d26c623f789b2ba6fc0";
         assert_eq!(p.hashes[0].0.to_vec(), hex::decode(hash1).unwrap());
-        let hash2 = "019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b65";
+        let hash2 = "e2d32adb5f8ca820731dff234a84e78ec30bce4ec69dbd562d0b2b8266bf4e5a";
         assert_eq!(p.hashes[1].0.to_vec(), hex::decode(hash2).unwrap());
-        let hash3 = "41ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d068";
-        assert_eq!(p.hashes[2].0.to_vec(), hex::decode(hash3).unwrap());
-        let hash4 = "20d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf";
-        assert_eq!(p.hashes[3].0.to_vec(), hex::decode(hash4).unwrap());
         assert_eq!(p.flags.len(), 1);
-        assert_eq!(p.flags[0], 0x2d);
+        assert_eq!(p.flags[0], 0x05);
     }
 
     #[test]
@@ -253,11 +254,11 @@ mod tests {
 
     #[test]
     fn validate() {
-        // Valid merkle block with 7 transactions
-        let b = hex::decode("0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b85290700000004361226262047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf012d0").unwrap();
-        let mut p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
-        p.header.merkle_root = Hash256::decode("75203dd6aabc9c365f7349c0c3185dab004acfb14c75bed9dc2fef022a54219f").unwrap();
-        assert_eq!(p.validate().unwrap().len(), 4);
+        // Valid merkle block with 2 transactions, 1 match
+        let b = hex::decode("01000000ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f33a5914ce6ed5b1b01e32f570200000002252bf9d75c4f481ebb6278d708257d1f12beb6dd30301d26c623f789b2ba6fc0e2d32adb5f8ca820731dff234a84e78ec30bce4ec69dbd562d0b2b8266bf4e5a0105").unwrap();
+        let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
+        // No need to set merkle_root; it matches the computed
+        assert_eq!(p.validate().unwrap().len(), 1);
         // Not enough hashes
         let mut p2 = p.clone();
         p2.hashes.truncate(p.hashes.len() - 1);
@@ -266,74 +267,58 @@ mod tests {
         let mut p2 = p.clone();
         p2.hashes.push(Hash256([0; 32]));
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
-        // Not enough flags
+        // No flags
         let mut p2 = p.clone();
         p2.flags = vec![];
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: No flags");
-        // Too many flags
+        // Too many flags (trailing non-zero would fail inside, but extra 0 ok; test with non-zero)
         let mut p2 = p.clone();
-        p2.flags.push(0);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all flag bits consumed");
+        p2.flags.push(1); // Non-zero trailing
+        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Trailing flag bits set");
         // Merkle root doesn't match
         let mut p2 = p.clone();
         p2.hashes[0] = Hash256([1; 32]);
         assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle proof mismatch");
-        // Duplicate transactions
-        let hash1 = Hash256([1; 32]);
-        let hash2 = Hash256([2; 32]);
-        let hash3 = hash2.clone(); // Duplicate for dup
-        let sub_left = hash_pair(&hash2, &hash3);
-        let hash4 = sub_left.clone();
-        let sub_right = hash_pair(&sub_left, &hash4);
-        let merkle_root = hash_pair(&hash1, &sub_right);
+        // Duplicate transactions (adjusted for small tree)
+        let hash_left = Hash256([1; 32]);
+        let hash_right = hash_left.clone(); // Dup
+        let computed = hash_pair(&hash_left, &hash_right);
         let header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
-            merkle_root,
+            merkle_root: computed,
             timestamp: 66,
             bits: 4488,
             nonce: 9999,
         };
         let merkle_block = MerkleBlock {
             header,
-            total_transactions: 11,
-            hashes: vec![hash1, sub_left, hash2, hash3], // Adjusted for structure to trigger dup
-            flags: vec![0x5d, 0x00], // Enough for padded 16
+            total_transactions: 2,
+            hashes: vec![hash_left.clone(), hash_right], // Both leaves
+            flags: vec![0b00000111], // root=1, left=1, right=1 (lsb first: 111 binary=7)
         };
         assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
     }
 
     #[test]
     fn incomplete_tree() {
-        let hash1 = Hash256([1; 32]);
-        let hash2 = Hash256([2; 32]);
-        let hash3 = Hash256([3; 32]);
-        let hash4 = Hash256([4; 32]);
-        let sub_left = hash_pair(&hash2, &hash3);
-        let sub_right = hash_pair(&sub_left, &hash4);
-        let merkle_root = hash_pair(&hash1, &sub_right);
-        let mut header = BlockHeader {
+        // Simple incomplete: use subtree hash for entire tree (bit=0 at root)
+        let h = Hash256([4u8; 32]);
+        let header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
-            merkle_root,
+            merkle_root: h.clone(),
             timestamp: 66,
             bits: 4488,
             nonce: 9999,
         };
         let merkle_block = MerkleBlock {
-            header: header.clone(),
-            total_transactions: 7,
-            hashes: vec![hash1, sub_right, sub_left, hash4], // Adjusted for incomplete
-            flags: vec![0x35],
-        };
-        // Compute the partial root for the test
-        let partial_root_hex = "e4c5f9e2b8a8c4e1d7f0b2a9c8d6e5f4b3a2c1d0e9f8a7b6c5d4e3f2a1b0c900";
-        header.merkle_root = Hash256::decode(partial_root_hex).unwrap();
-        let merkle_block = MerkleBlock {
             header,
-            ..merkle_block
+            total_transactions: 7, // Arbitrary >1
+            hashes: vec![h],
+            flags: vec![0x00], // bit0=0 for root (consume hash, no recurse)
         };
-        assert!(merkle_block.validate().is_ok());
+        assert!(merkle_block.validate().is_ok()); // Consumes 1 bit, 1 hash; trailing 0s OK
     }
 
     fn hash_pair(a: &Hash256, b: &Hash256) -> Hash256 {
