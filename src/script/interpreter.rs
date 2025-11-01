@@ -652,36 +652,45 @@ fn check_multisig<'a, T: Checker>(
     checker: &mut T,
     script: &'a [u8],
 ) -> Result<bool> {
-    let required = pop_num(stack)?;
-    if required < 0 {
-        return Err(Error::ScriptError("required out of range".to_string()));
-    }
-    check_stack_size(required as usize, stack)?;
-    let mut sigs = Vec::with_capacity(required as usize);
-    for _ in 0..required {
-        sigs.push(stack.pop_back().expect("stack underflow").into_owned());
-    }
+    // Pop total (n) first (top of stack)
     let total = pop_num(stack)?;
-    if total < 0 || total < required as i32 {
+    if total < 0 {
         return Err(Error::ScriptError("total out of range".to_string()));
     }
+    if total > 20 {  // BSV limit: max 20 pubkeys
+        return Err(Error::ScriptError("too many pubkeys".to_string()));
+    }
+    // Pop total pubkeys
     check_stack_size(total as usize, stack)?;
     let mut keys = Vec::with_capacity(total as usize);
     for _ in 0..total {
         keys.push(stack.pop_back().expect("stack underflow").into_owned());
     }
-    // Pop dummy
+    // Pop required (m)
+    let required = pop_num(stack)?;
+    if required < 0 || required > total {
+        return Err(Error::ScriptError("required out of range".to_string()));
+    }
+    // Pop required signatures
+    check_stack_size(required as usize, stack)?;
+    let mut sigs = Vec::with_capacity(required as usize);
+    for _ in 0..required {
+        sigs.push(stack.pop_back().expect("stack underflow").into_owned());
+    }
+    // Pop dummy (always required for the off-by-one)
     check_stack_size(1, stack)?;
     let _dummy = stack.pop_back().expect("stack underflow");
-    // Reverse to restore original order (pops were reverse)
+    // Reverse to restore original push order
     sigs.reverse();
     keys.reverse();
+    // Build cleaned script (remove sigs if legacy/pre-forkid)
     let mut cleaned_script = script.to_vec();
     for sig in &sigs {
         if prefork(sig) {
             cleaned_script = remove_sig(sig, &cleaned_script);
         }
     }
+    // Verify: advance through keys for each sig until match or no keys left
     let mut key_idx = 0;
     let mut sig_idx = 0;
     while sig_idx < required as usize {
