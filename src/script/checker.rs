@@ -237,59 +237,61 @@ mod tests {
     }
 
     fn multisig_test(sighash_type: u8) {
-        let secp = Secp256k1::new();
-        let private_key1 = [1; 32];
-        let private_key2 = [2; 32];
-        let secret_key1 = SecretKey::from_byte_array(private_key1).unwrap();
-        let secret_key2 = SecretKey::from_byte_array(private_key2).unwrap();
-        let pk1 = PublicKey::from_secret_key(&secp, &secret_key1).serialize();
-        let pk2 = PublicKey::from_secret_key(&secp, &secret_key2).serialize();
-        let mut lock_script = Script::new();
-        lock_script.append(OP_2);
-        lock_script.append_data(&pk1).unwrap();
-        lock_script.append_data(&pk2).unwrap();
-        lock_script.append(OP_2);
-        lock_script.append(OP_CHECKMULTISIG);
-        let tx_1 = Tx {
-            version: 1,
-            inputs: vec![],
-            outputs: vec![TxOut {
-                satoshis: 10,
-                lock_script,
-            }],
-            lock_time: 0,
-        };
-        let mut tx_2 = Tx {
-            version: 1,
-            inputs: vec![TxIn {
-                prev_output: OutPoint {
-                    hash: tx_1.hash(),
-                    index: 0,
-                },
-                unlock_script: Script(vec![]),
-                sequence: 0xffffffff,
-            }],
-            outputs: vec![],
-            lock_time: 0,
-        };
-        let mut cache = SigHashCache::new();
-        let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
-        let sig_hash = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
-        let sig1 = generate_signature(&private_key1, &sig_hash, sighash_type).unwrap();
-        let sig2 = generate_signature(&private_key2, &sig_hash, sighash_type).unwrap();
-        let mut unlock_script = Script::new();
-        unlock_script.append(OP_0);
-        unlock_script.append_data(&sig1).unwrap();
-        unlock_script.append_data(&sig2).unwrap();
-        tx_2.inputs[0].unlock_script = unlock_script;
-        let mut cache = SigHashCache::new();
-        let mut c = TransactionChecker::new(&tx_2, &mut cache, 0, 10, false);
-        let mut script = Script::new();
-        script.append_slice(&tx_2.inputs[0].unlock_script.0);
-        script.append(OP_CODESEPARATOR);
-        script.append_slice(lock_script_bytes);
-        assert!(script.eval(&mut c, NO_FLAGS).is_ok());
-    }
+    let tx_version = if (sighash_type & SIGHASH_FORKID) != 0 { 2u32 } else { 1u32 };
+    let require_forkid = (sighash_type & SIGHASH_FORKID) != 0;
+    let secp = Secp256k1::new();
+    let private_key1 = [1; 32];
+    let private_key2 = [2; 32];
+    let secret_key1 = SecretKey::from_byte_array(private_key1).unwrap();
+    let secret_key2 = SecretKey::from_byte_array(private_key2).unwrap();
+    let pk1 = PublicKey::from_secret_key(&secp, &secret_key1).serialize();
+    let pk2 = PublicKey::from_secret_key(&secp, &secret_key2).serialize();
+    let mut lock_script = Script::new();
+    lock_script.append(OP_2);
+    lock_script.append_data(&pk1).unwrap();
+    lock_script.append_data(&pk2).unwrap();
+    lock_script.append(OP_2);
+    lock_script.append(OP_CHECKMULTISIG);
+    let tx_1 = Tx {
+        version: tx_version,
+        inputs: vec![],
+        outputs: vec![TxOut {
+            satoshis: 10,
+            lock_script,
+        }],
+        lock_time: 0,
+    };
+    let mut tx_2 = Tx {
+        version: tx_version,
+        inputs: vec![TxIn {
+            prev_output: OutPoint {
+                hash: tx_1.hash(),
+                index: 0,
+            },
+            unlock_script: Script(vec![]),
+            sequence: 0xffffffff,
+        }],
+        outputs: vec![],
+        lock_time: 0,
+    };
+    let mut cache = SigHashCache::new();
+    let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
+    let sig_hash = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
+    let sig1 = generate_signature(&private_key1, &sig_hash, sighash_type).unwrap();
+    let sig2 = generate_signature(&private_key2, &sig_hash, sighash_type).unwrap();
+    let mut unlock_script = Script::new();
+    unlock_script.append(OP_0);
+    unlock_script.append_data(&sig1).unwrap();
+    unlock_script.append_data(&sig2).unwrap();
+    tx_2.inputs[0].unlock_script = unlock_script;
+    let mut cache = SigHashCache::new();
+    let mut c = TransactionChecker::new(&tx_2, &mut cache, 0, 10, require_forkid);
+    let mut script = Script::new();
+    script.append_slice(&tx_2.inputs[0].unlock_script.0);
+    script.append(OP_CODESEPARATOR);
+    script.append_slice(lock_script_bytes);
+    assert!(script.eval(&mut c, NO_FLAGS).is_ok());
+}
 
     #[test]
     fn blank_check() {
