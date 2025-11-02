@@ -28,6 +28,7 @@ pub const SIGHASH_FORKID: u8 = 0x40;
 /// # Examples
 /// ```rust
 /// use nour::messages::{Tx, TxIn, TxOut, OutPoint};
+/// use nour::script::Script;
 /// use nour::transaction::sighash::{sighash, SigHashCache, SIGHASH_ALL, SIGHASH_FORKID};
 /// use nour::util::Hash256;
 ///
@@ -38,15 +39,15 @@ pub const SIGHASH_FORKID: u8 = 0x40;
 ///             hash: Hash256([0u8; 32]),
 ///             index: 0,
 ///         },
-///         unlock_script: vec![],
+///         unlock_script: Script(vec![]),
 ///         sequence: 0xffffffff,
 ///     }],
 ///     outputs: vec![],
 ///     lock_time: 0,
 /// };
-/// let script_code = b"OP_DUP OP_HASH160 <pubkey_hash> OP_EQUALVERIFY OP_CHECKSIG";
+/// let script_code = hex::decode("76a914000000000000000000000000000000000000000088ac").unwrap();
 /// let mut cache = SigHashCache::new();
-/// let sighash_val = sighash(&tx, 0, script_code, 1000, SIGHASH_ALL | SIGHASH_FORKID, &mut cache).unwrap();
+/// let sighash_val = sighash(&tx, 0, &script_code, 1000, SIGHASH_ALL | SIGHASH_FORKID, &mut cache).unwrap();
 /// assert_eq!(sighash_val.0.len(), 32);
 /// ```
 #[must_use]
