@@ -31,7 +31,7 @@ Or use the development version:
 
 ### System Requirements
 
-- **Rust**: Stable 1.82 or later.
+- **Rust**: Stable 1.85 or later.
 - **Dependencies**: `libzmq3-dev` (networking), `secp256k1`, `bitcoin_hashes`, `tokio`, `base58` (see Cargo.toml).
 - **OS**: Linux (recommended), macOS, Windows.
 
