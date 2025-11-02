@@ -9,13 +9,8 @@ use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
-
 /// Maximum total transactions in merkle block (safety cap for large BSV blocks).
 const MAX_TOTAL_TX: u64 = 10_000_000_000;
-
-/// All-zero hash for padded or non-matched leaves.
-const ZERO_HASH: Hash256 = Hash256([0u8; 32]);
-
 /// A block header and partial merkle tree for SPV nodes to validate transactions.
 #[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct MerkleBlock {
@@ -28,7 +23,6 @@ pub struct MerkleBlock {
     /// Bit vector used to assign hashes to nodes in the partial merkle tree.
     pub flags: Vec<u8>,
 }
-
 impl MerkleBlock {
     /// Validates the Merkle block and partial Merkle tree and returns the set of matched transactions.
     ///
@@ -82,11 +76,10 @@ impl MerkleBlock {
         }
         Ok(matches)
     }
-
     fn traverse(
         &self,
         level: usize,
-        _pos: usize,  // Unused in new logic (dfs order, not pos-based for bits)
+        _pos: usize, // Unused in new logic (dfs order, not pos-based for bits)
         bit_idx: &mut usize,
         hash_idx: &mut usize,
         matches: &mut Vec<Hash256>,
@@ -99,7 +92,6 @@ impl MerkleBlock {
         let bit_pos = (*bit_idx % 8) as u8;
         let bit = ((self.flags[byte_idx] >> bit_pos) & 1) as usize;
         *bit_idx += 1;
-
         let is_leaf = level == 0;
         if is_leaf {
             // Leaf: always consume hash; bit=1 if matched
@@ -117,7 +109,7 @@ impl MerkleBlock {
             } else {
                 // bit=1: recurse children, compute hash
                 let (left_hash, left_matched) = self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?;
-                let (right_hash, right_matched) = self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?;  // Duplicate logic for odd handled in build, but here assume symmetric call
+                let (right_hash, right_matched) = self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?; // Duplicate logic for odd handled in build, but here assume symmetric call
                 let computed = self.hash_pair(&left_hash, &right_hash);
                 let matched = left_matched || right_matched;
                 // Duplicate check (rare, but per BIP-37)
@@ -128,7 +120,6 @@ impl MerkleBlock {
             }
         }
     }
-
     fn consume_hash(&self, idx: &mut usize) -> Result<Hash256> {
         if *idx >= self.hashes.len() {
             return Err(Error::BadData("Hashes exhausted".to_string()));
@@ -137,7 +128,6 @@ impl MerkleBlock {
         *idx += 1;
         Ok(h)
     }
-
     fn hash_pair(&self, a: &Hash256, b: &Hash256) -> Hash256 {
         let mut buf = [0u8; 64];
         buf[0..32].copy_from_slice(&a.0);
@@ -146,7 +136,6 @@ impl MerkleBlock {
         Hash256(hashed.0)
     }
 }
-
 impl Serializable<MerkleBlock> for MerkleBlock {
     fn read(reader: &mut dyn Read) -> Result<MerkleBlock> {
         let header = BlockHeader::read(reader)?;
@@ -166,7 +155,6 @@ impl Serializable<MerkleBlock> for MerkleBlock {
             flags,
         })
     }
-
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         self.header.write(writer)?;
         writer.write_u32::<LittleEndian>(self.total_transactions)?;
@@ -179,13 +167,11 @@ impl Serializable<MerkleBlock> for MerkleBlock {
         Ok(())
     }
 }
-
 impl Payload<MerkleBlock> for MerkleBlock {
     fn size(&self) -> usize {
         self.header.size() + 4 + var_int::size(self.hashes.len() as u64) + self.hashes.len() * 32 + var_int::size(self.flags.len() as u64) + self.flags.len()
     }
 }
-
 impl fmt::Debug for MerkleBlock {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MerkleBlock")
@@ -196,14 +182,12 @@ impl fmt::Debug for MerkleBlock {
             .finish()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex;
     use std::io::Cursor;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn read_bytes() {
         let b = hex::decode("01000000ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f33a5914ce6ed5b1b01e32f570200000002252bf9d75c4f481ebb6278d708257d1f12beb6dd30301d26c623f789b2ba6fc0e2d32adb5f8ca820731dff234a84e78ec30bce4ec69dbd562d0b2b8266bf4e5a0105").unwrap();
@@ -224,7 +208,6 @@ mod tests {
         assert_eq!(p.flags.len(), 1);
         assert_eq!(p.flags[0], 0x05);
     }
-
     #[test]
     fn write_read() {
         let mut v = Vec::new();
@@ -251,7 +234,6 @@ mod tests {
         assert_eq!(v.len(), p.size());
         assert_eq!(MerkleBlock::read(&mut Cursor::new(&v)).unwrap(), p);
     }
-
     #[test]
     fn validate() {
         // Valid merkle block with 2 transactions, 1 match
@@ -299,7 +281,6 @@ mod tests {
         };
         assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
     }
-
     #[test]
     fn incomplete_tree() {
         // Simple incomplete: use subtree hash for entire tree (bit=0 at root)
@@ -320,7 +301,6 @@ mod tests {
         };
         assert!(merkle_block.validate().is_ok()); // Consumes 1 bit, 1 hash; trailing 0s OK
     }
-
     fn hash_pair(a: &Hash256, b: &Hash256) -> Hash256 {
         let mut buf = [0u8; 64];
         buf[0..32].copy_from_slice(&a.0);
