@@ -26,9 +26,28 @@ pub const SIGHASH_FORKID: u8 = 0x40;
 /// Input out-of-range; invalid script/satoshis.
 ///
 /// # Examples
-/// ```
+/// ```rust
+/// use nour::messages::{Tx, TxIn, TxOut, OutPoint};
 /// use nour::transaction::sighash::{sighash, SigHashCache, SIGHASH_ALL, SIGHASH_FORKID};
-/// let sighash_val = sighash(&tx, 0, &script_code, 1000, SIGHASH_ALL | SIGHASH_FORKID, &mut cache)?;
+/// use nour::util::Hash256;
+///
+/// let tx = Tx {
+///     version: 2,
+///     inputs: vec![TxIn {
+///         prev_output: OutPoint {
+///             hash: Hash256([0u8; 32]),
+///             index: 0,
+///         },
+///         unlock_script: vec![],
+///         sequence: 0xffffffff,
+///     }],
+///     outputs: vec![],
+///     lock_time: 0,
+/// };
+/// let script_code = b"OP_DUP OP_HASH160 <pubkey_hash> OP_EQUALVERIFY OP_CHECKSIG";
+/// let mut cache = SigHashCache::new();
+/// let sighash_val = sighash(&tx, 0, script_code, 1000, SIGHASH_ALL | SIGHASH_FORKID, &mut cache).unwrap();
+/// assert_eq!(sighash_val.0.len(), 32);
 /// ```
 #[must_use]
 pub fn sighash(
