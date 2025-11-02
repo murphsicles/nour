@@ -2,16 +2,13 @@
 //!
 //! Supports Mainnet, Testnet, and STN networks with checksum verification using double-SHA256.
 /// Payload must be exactly 20 bytes (Hash160). Optimized for high-throughput applications.
-
 use base58::{ToBase58, FromBase58};
 use crate::util::{Error, Result, sha256d};
 use crate::network::Network;
-
 const MAINNET_P2PKH_VERSION: u8 = 0x00;
 const MAINNET_P2SH_VERSION: u8 = 0x05;
 const TESTNET_P2PKH_VERSION: u8 = 0x6F;
 const TESTNET_P2SH_VERSION: u8 = 0xC4;
-
 /// Encodes a base58check address from version byte and 20-byte payload.
 ///
 /// # Errors
@@ -22,7 +19,7 @@ const TESTNET_P2SH_VERSION: u8 = 0xC4;
 /// use nour::address::encode_address;
 /// use nour::network::Network;
 /// let addr = encode_address(Network::Mainnet, 0x00, &[0u8; 20]).unwrap();
-/// assert_eq!(addr, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+/// assert_eq!(addr, "1111111111111111111114oLvT2");
 /// ```
 #[must_use]
 #[inline]
@@ -38,7 +35,6 @@ pub fn encode_address(_network: Network, version: u8, payload: &[u8]) -> Result<
     v[21..25].copy_from_slice(&checksum.0[..4]);
     Ok(v.to_base58())
 }
-
 /// Decodes a base58check address into version and payload.
 ///
 /// Verifies 25-byte length and checksum; extracts version (byte 0) and payload (bytes 1-20).
@@ -49,7 +45,7 @@ pub fn encode_address(_network: Network, version: u8, payload: &[u8]) -> Result<
 /// # Examples
 /// ```
 /// use nour::address::decode_address;
-/// let (version, payload) = decode_address("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa").unwrap();
+/// let (version, payload) = decode_address("1111111111111111111114oLvT2").unwrap();
 /// assert_eq!(version, 0x00);
 /// assert_eq!(payload, vec![0u8; 20]);
 /// ```
@@ -68,7 +64,6 @@ pub fn decode_address(input: &str) -> Result<(u8, Vec<u8>)> {
     let payload = bytes[1..21].to_vec();
     Ok((version, payload))
 }
-
 /// Encodes a P2PKH address from 20-byte pubkey hash.
 #[must_use]
 #[inline]
@@ -79,7 +74,6 @@ pub fn encode_p2pkh_address(network: Network, pubkey_hash: &[u8]) -> Result<Stri
     };
     encode_address(network, version, pubkey_hash)
 }
-
 /// Encodes a P2SH address from 20-byte script hash.
 #[must_use]
 #[inline]
@@ -90,7 +84,6 @@ pub fn encode_p2sh_address(network: Network, script_hash: &[u8]) -> Result<Strin
     };
     encode_address(network, version, script_hash)
 }
-
 /// Validates an address version against the network (P2PKH or P2SH only).
 ///
 /// # Errors
@@ -108,13 +101,11 @@ pub fn validate_address(network: Network, address: &str) -> Result<()> {
     }
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex;
     use pretty_assertions::assert_eq;
-
     #[test]
     fn test_encode_decode_p2pkh() -> Result<()> {
         let pubkey_hash: [u8; 20] = hex::decode("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b")?
@@ -127,7 +118,6 @@ mod tests {
         assert_eq!(decoded, pubkey_hash.to_vec());
         Ok(())
     }
-
     #[test]
     fn test_encode_decode_p2sh() -> Result<()> {
         let script_hash: [u8; 20] = hex::decode("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0")?
@@ -139,7 +129,6 @@ mod tests {
         assert_eq!(decoded, script_hash.to_vec());
         Ok(())
     }
-
     #[test]
     fn test_validate_address() -> Result<()> {
         let valid_mainnet = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
