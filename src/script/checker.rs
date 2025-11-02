@@ -3,11 +3,9 @@ use crate::messages::Tx;
 use crate::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID};
 use crate::util::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
-
 const LOCKTIME_THRESHOLD: i32 = 500_000_000;
 const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
 const SEQUENCE_LOCKTIME_TYPE_FLAG: u32 = 1 << 22;
-
 /// Trait for script validation callbacks during evaluation.
 pub trait Checker {
     /// Verifies a signature against pubkey and script (for CHECKSIG).
@@ -26,27 +24,22 @@ pub trait Checker {
     /// `Error::ScriptError` if invalid.
     fn check_sequence(&self, sequence: i32) -> Result<bool>;
 }
-
 /// Dummy checker for non-transaction contexts (e.g., P2SH hash computation).
 ///
 /// Always errors to prevent invalid ops.
 #[derive(Default, Clone, Debug)]
 pub struct TransactionlessChecker;
-
 impl Checker for TransactionlessChecker {
     fn check_sig(&mut self, _sig: &[u8], _pubkey: &[u8], _script: &[u8]) -> Result<bool> {
         Err(Error::IllegalState("No transaction context".to_string()))
     }
-
     fn check_locktime(&self, _locktime: i32) -> Result<bool> {
         Err(Error::IllegalState("No transaction context".to_string()))
     }
-
     fn check_sequence(&self, _sequence: i32) -> Result<bool> {
         Err(Error::IllegalState("No transaction context".to_string()))
     }
 }
-
 /// Checker for full transaction signature/locktime/sequence validation.
 #[derive(Debug)]
 pub struct TransactionChecker<'a> {
@@ -61,7 +54,6 @@ pub struct TransactionChecker<'a> {
     /// Require SIGHASH_FORKID (post-Genesis txs).
     pub require_sighash_forkid: bool,
 }
-
 impl<'a> TransactionChecker<'a> {
     /// Creates a new transaction checker.
     #[must_use]
@@ -81,7 +73,6 @@ impl<'a> TransactionChecker<'a> {
         }
     }
 }
-
 impl<'a> Checker for TransactionChecker<'a> {
     #[inline]
     fn check_sig(&mut self, sig: &[u8], pubkey: &[u8], script: &[u8]) -> Result<bool> {
@@ -109,7 +100,6 @@ impl<'a> Checker for TransactionChecker<'a> {
             PublicKey::from_slice(pubkey).map_err(|_| Error::ScriptError("Invalid pubkey".to_string()))?;
         Ok(secp.verify_ecdsa(message, &signature, &public_key).is_ok())
     }
-
     #[inline]
     fn check_locktime(&self, locktime: i32) -> Result<bool> {
         if locktime < 0 {
@@ -129,7 +119,6 @@ impl<'a> Checker for TransactionChecker<'a> {
         }
         Ok(true)
     }
-
     #[inline]
     fn check_sequence(&self, sequence: i32) -> Result<bool> {
         if sequence < 0 {
@@ -159,7 +148,6 @@ impl<'a> Checker for TransactionChecker<'a> {
         Ok(true)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,13 +160,11 @@ mod tests {
     use crate::util::{hash160, Hash256};
     use secp256k1::{PublicKey, Secp256k1, SecretKey};
     use pretty_assertions::assert_eq;
-
     #[test]
     fn standard_p2pkh() {
         standard_p2pkh_test(SIGHASH_ALL);
         standard_p2pkh_test(SIGHASH_ALL | SIGHASH_FORKID);
     }
-
     fn standard_p2pkh_test(sighash_type: u8) {
         let secp = Secp256k1::new();
         let private_key = [1; 32];
@@ -229,76 +215,76 @@ mod tests {
         script.append_slice(lock_script_bytes);
         assert!(script.eval(&mut c, NO_FLAGS).is_ok());
     }
-
     #[test]
     fn multisig() {
         multisig_test(SIGHASH_ALL);
         multisig_test(SIGHASH_ALL | SIGHASH_FORKID);
     }
-
     fn multisig_test(sighash_type: u8) {
-    let tx_version = if (sighash_type & SIGHASH_FORKID) != 0 { 2u32 } else { 1u32 };
-    let require_forkid = (sighash_type & SIGHASH_FORKID) != 0;
-    let secp = Secp256k1::new();
-    let private_key1 = [1; 32];
-    let private_key2 = [2; 32];
-    let secret_key1 = SecretKey::from_byte_array(private_key1).unwrap();
-    let secret_key2 = SecretKey::from_byte_array(private_key2).unwrap();
-    let pk1 = PublicKey::from_secret_key(&secp, &secret_key1).serialize();
-    let pk2 = PublicKey::from_secret_key(&secp, &secret_key2).serialize();
-    let mut lock_script = Script::new();
-    lock_script.append(OP_2);
-    lock_script.append_data(&pk1).unwrap();
-    lock_script.append_data(&pk2).unwrap();
-    lock_script.append(OP_2);
-    lock_script.append(OP_CHECKMULTISIG);
-    let tx_1 = Tx {
-        version: tx_version,
-        inputs: vec![],
-        outputs: vec![TxOut {
-            satoshis: 10,
-            lock_script,
-        }],
-        lock_time: 0,
-    };
-    let mut tx_2 = Tx {
-        version: tx_version,
-        inputs: vec![TxIn {
-            prev_output: OutPoint {
-                hash: tx_1.hash(),
-                index: 0,
-            },
-            unlock_script: Script(vec![]),
-            sequence: 0xffffffff,
-        }],
-        outputs: vec![],
-        lock_time: 0,
-    };
-    let mut cache = SigHashCache::new();
-    let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
-    let sig_hash = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
-    let sig1 = generate_signature(&private_key1, &sig_hash, sighash_type).unwrap();
-    let sig2 = generate_signature(&private_key2, &sig_hash, sighash_type).unwrap();
-    let mut unlock_script = Script::new();
-    unlock_script.append(OP_0);
-    unlock_script.append_data(&sig1).unwrap();
-    unlock_script.append_data(&sig2).unwrap();
-    tx_2.inputs[0].unlock_script = unlock_script;
-    let mut cache = SigHashCache::new();
-    let mut c = TransactionChecker::new(&tx_2, &mut cache, 0, 10, require_forkid);
-    let mut script = Script::new();
-    script.append_slice(&tx_2.inputs[0].unlock_script.0);
-    script.append(OP_CODESEPARATOR);
-    script.append_slice(lock_script_bytes);
-    assert!(script.eval(&mut c, NO_FLAGS).is_ok());
-}
-
+        let tx_version = if (sighash_type & SIGHASH_FORKID) != 0 { 2u32 } else { 1u32 };
+        let require_forkid = (sighash_type & SIGHASH_FORKID) != 0;
+        let secp = Secp256k1::new();
+        let private_key1 = [1; 32];
+        let private_key2 = [2; 32];
+        let secret_key1 = SecretKey::from_byte_array(private_key1).unwrap();
+        let secret_key2 = SecretKey::from_byte_array(private_key2).unwrap();
+        let pk1 = PublicKey::from_secret_key(&secp, &secret_key1).serialize();
+        let pk2 = PublicKey::from_secret_key(&secp, &secret_key2).serialize();
+        let mut lock_script = Script::new();
+        lock_script.append(OP_2);
+        lock_script.append_data(&pk1).unwrap();
+        lock_script.append_data(&pk2).unwrap();
+        lock_script.append(OP_2);
+        lock_script.append(OP_CHECKMULTISIG);
+        let tx_1 = Tx {
+            version: tx_version,
+            inputs: vec![],
+            outputs: vec![TxOut {
+                satoshis: 10,
+                lock_script,
+            }],
+            lock_time: 0,
+        };
+        let mut tx_2 = Tx {
+            version: tx_version,
+            inputs: vec![TxIn {
+                prev_output: OutPoint {
+                    hash: tx_1.hash(),
+                    index: 0,
+                },
+                unlock_script: Script(vec![]),
+                sequence: 0xffffffff,
+            }],
+            outputs: vec![],
+            lock_time: 0,
+        };
+        let mut cache = SigHashCache::new();
+        let lock_script_bytes = &tx_1.outputs[0].lock_script.0;
+        let sig_hash = sighash(&tx_2, 0, lock_script_bytes, 10, sighash_type, &mut cache).unwrap();
+        let sig1 = generate_signature(&private_key1, &sig_hash, sighash_type).unwrap();
+        let sig2 = generate_signature(&private_key2, &sig_hash, sighash_type).unwrap();
+        let mut unlock_script = Script::new();
+        unlock_script.append(OP_0);
+        unlock_script.append_data(&sig1).unwrap();
+        unlock_script.append_data(&sig2).unwrap();
+        tx_2.inputs[0].unlock_script = unlock_script;
+        let mut cache = SigHashCache::new();
+        let mut c = TransactionChecker::new(&tx_2, &mut cache, 0, 10, require_forkid);
+        let mut script = Script::new();
+        script.append_slice(&tx_2.inputs[0].unlock_script.0);
+        script.append(OP_CODESEPARATOR);
+        script.append_slice(lock_script_bytes);
+        println!("Sig1 len: {}, Sig2 len: {}", sig1.len(), sig2.len());
+        println!("Pk1 len: {}, Pk2 len: {}", pk1.len(), pk2.len());
+        let result = script.eval(&mut c, NO_FLAGS);
+        println!("Eval result: {:?}", result);
+        assert!(result.is_ok());
+    }
     #[test]
     fn blank_check() {
         blank_check_test(SIGHASH_NONE | SIGHASH_ANYONECANPAY);
         blank_check_test(SIGHASH_NONE | SIGHASH_ANYONECANPAY | SIGHASH_FORKID);
     }
-
     fn blank_check_test(sighash_type: u8) {
         let secp = Secp256k1::new();
         let private_key1 = [1; 32];
@@ -395,7 +381,6 @@ mod tests {
         script2.append_slice(&tx_1.outputs[1].lock_script.0);
         assert!(script2.eval(&mut c2, NO_FLAGS).is_ok());
     }
-
     #[test]
     fn check_locktime() {
         let mut tx = Tx {
@@ -422,7 +407,6 @@ mod tests {
         let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert!(c.check_locktime(500).is_ok());
     }
-
     #[test]
     fn check_sequence() {
         let mut tx = Tx {
