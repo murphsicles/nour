@@ -31,7 +31,7 @@ For the development version:
 
 ### System Requirements
 
-- Rust: Stable version 1.85 or later.
+- Rust: Stable version 1.91 or later.
 - Dependencies: Requires libraries like `libzmq3-dev` for networking, `secp256k1`, `bitcoin_hashes`, `tokio`, `base58`, and others (see Cargo.toml).
 - Operating Systems: Linux (recommended), macOS, Windows.
 
