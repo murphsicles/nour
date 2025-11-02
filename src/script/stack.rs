@@ -108,7 +108,7 @@ pub fn decode_bool(s: &[u8]) -> bool {
 /// ```
 /// use nour::script::stack::decode_num;
 /// assert_eq!(decode_num(&[1]).unwrap(), 1i64);
-/// assert_eq!(decode_num(&[129]).unwrap(), -1i64); // 129 = 1 | 128 sign
+/// assert_eq!(decode_num(&[255]).unwrap(), -1i64);
 /// ```
 #[inline]
 pub fn decode_num(s: &[u8]) -> Result<i64> {
