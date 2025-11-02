@@ -82,7 +82,7 @@ pub fn pop_bigint(stack: &mut Vec<Vec<u8>>) -> Result<BigInt> {
 /// ```
 /// use nour::script::stack::decode_bool;
 /// assert_eq!(decode_bool(&[1]), true);
-/// assert_eq!(decode_bool(&[0, 0, 128]), false); // 128 &127 =0
+/// assert_eq!(decode_bool(&[0, 0, 0, 128]), false); // 128 &127 =0
 /// ```
 #[inline]
 pub fn decode_bool(s: &[u8]) -> bool {
