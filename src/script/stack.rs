@@ -8,26 +8,12 @@
 /// - Numbers: [-2^31 + 1, 2^31 - 1], minimal (≤4 bytes), sign extend negative.
 /// - Bools: Non-zero = true; minimal ≤4 bytes.
 /// - BigInts: No range limit; LE with optional sign bit on MSB.
-///
-/// # Examples
-///
-/// ```
-/// use nour::script::stack::{pop_bool, pop_num, encode_num, decode_bool};
-/// let mut stack = vec![vec![1u8]];
-/// assert_eq!(pop_num(&mut stack).unwrap(), 1i32);
-/// assert_eq!(pop_bool(&mut stack).unwrap(), false); // Empty now
-///
-/// let bytes = encode_num(123i64).unwrap();
-/// assert_eq!(decode_num(&bytes).unwrap(), 123i64);
-/// ```
 use crate::util::{Error, Result};
 use num_bigint::BigInt;
 use num_traits::Zero;
-
 const MAX_BOOL_LEN: usize = 4; // Consensus: bools minimal ≤4B
 const MAX_NUM_LEN: usize = 4; // Numbers ≤4B
 const NUM_RANGE: i64 = 1i64 << 31; // 2^31
-
 /// Pops a bool from the stack, decoding the top item.
 ///
 /// # Errors
@@ -36,6 +22,7 @@ const NUM_RANGE: i64 = 1i64 << 31; // 2^31
 ///
 /// # Examples
 /// ```
+/// use nour::script::stack::pop_bool;
 /// let mut stack = vec![vec![1]];
 /// assert_eq!(pop_bool(&mut stack).unwrap(), true);
 /// ```
@@ -47,7 +34,6 @@ pub fn pop_bool(stack: &mut Vec<Vec<u8>>) -> Result<bool> {
     }
     Ok(decode_bool(&top))
 }
-
 /// Pops a number from the stack, decoding to i32.
 ///
 /// # Errors
@@ -57,6 +43,7 @@ pub fn pop_bool(stack: &mut Vec<Vec<u8>>) -> Result<bool> {
 ///
 /// # Examples
 /// ```
+/// use nour::script::stack::pop_num;
 /// let mut stack = vec![vec![1]];
 /// assert_eq!(pop_num(&mut stack).unwrap(), 1i32);
 /// ```
@@ -68,7 +55,6 @@ pub fn pop_num(stack: &mut Vec<Vec<u8>>) -> Result<i32> {
     }
     decode_num(&top).map(|n| n as i32)
 }
-
 /// Pops a bigint from the stack.
 ///
 /// Arbitrary precision; no range limit.
@@ -78,6 +64,8 @@ pub fn pop_num(stack: &mut Vec<Vec<u8>>) -> Result<i32> {
 ///
 /// # Examples
 /// ```
+/// use num_bigint::BigInt;
+/// use nour::script::stack::pop_bigint;
 /// let mut stack = vec![vec![1]];
 /// assert_eq!(pop_bigint(&mut stack).unwrap(), BigInt::from(1u8));
 /// ```
@@ -86,13 +74,13 @@ pub fn pop_bigint(stack: &mut Vec<Vec<u8>>) -> Result<BigInt> {
     let top = stack.pop().ok_or(Error::ScriptError("Empty stack for bigint".to_string()))?;
     Ok(decode_bigint(&top))
 }
-
 /// Decodes a stack item to bool (non-zero true).
 ///
 /// Ignores leading zeros; truthy if any non-zero byte (MSB &127 for last byte).
 ///
 /// # Examples
 /// ```
+/// use nour::script::stack::decode_bool;
 /// assert_eq!(decode_bool(&[1]), true);
 /// assert_eq!(decode_bool(&[0, 0, 128]), false); // 128 &127 =0
 /// ```
@@ -108,7 +96,6 @@ pub fn decode_bool(s: &[u8]) -> bool {
     }
     (s[s.len() - 1] & 127) != 0
 }
-
 /// Decodes a stack item to i64 number (LE, sign in MSB).
 ///
 /// Minimal check: No leading zeros except sign; errors on non-canonical.
@@ -119,6 +106,7 @@ pub fn decode_bool(s: &[u8]) -> bool {
 ///
 /// # Examples
 /// ```
+/// use nour::script::stack::decode_num;
 /// assert_eq!(decode_num(&[1]).unwrap(), 1i64);
 /// assert_eq!(decode_num(&[129]).unwrap(), -1i64); // 129 = 1 | 128 sign
 /// ```
@@ -136,7 +124,6 @@ pub fn decode_num(s: &[u8]) -> Result<i64> {
     }
     Ok(n)
 }
-
 /// Encodes i64 to minimal stack item (1-4 bytes LE, sign in MSB).
 ///
 /// # Errors
@@ -144,6 +131,7 @@ pub fn decode_num(s: &[u8]) -> Result<i64> {
 ///
 /// # Examples
 /// ```
+/// use nour::script::stack::encode_num;
 /// assert_eq!(encode_num(1).unwrap(), vec![1]);
 /// assert_eq!(encode_num(-1).unwrap(), vec![255]); // 255u8 = -1 signed
 /// ```
@@ -171,24 +159,26 @@ pub fn encode_num(val: i64) -> Result<Vec<u8>> {
     }
     unreachable!("Value out of 32-bit range")
 }
-
 /// Decodes bytes to BigInt (LE, sign from MSB if set).
 ///
 /// # Examples
 /// ```
+/// use num_bigint::BigInt;
+/// use nour::script::stack::decode_bigint;
 /// assert_eq!(decode_bigint(&[1, 0]), BigInt::from(1u16));
 /// ```
 #[inline]
 pub fn decode_bigint(s: &[u8]) -> BigInt {
     BigInt::from_signed_bytes_le(s)
 }
-
 /// Encodes BigInt to minimal stack item (LE bytes, sign in MSB if negative).
 ///
 /// Trims leading zeros; sets MSB sign bit for negative.
 ///
 /// # Examples
 /// ```
+/// use num_bigint::BigInt;
+/// use nour::script::stack::encode_bigint;
 /// let bi = BigInt::from(1234u32);
 /// assert_eq!(encode_bigint(&bi), vec![210, 4]); // LE 0x04D2
 /// ```
@@ -199,13 +189,11 @@ pub fn encode_bigint(bi: &BigInt) -> Vec<u8> {
     }
     bi.to_signed_bytes_le()
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use num_bigint::BigInt;
-
     #[test]
     fn decode_bool_tests() {
         assert_eq!(decode_bool(&[1]), true);
@@ -216,7 +204,6 @@ mod tests {
         assert_eq!(decode_bool(&[0, 0, 0, 128]), false);
         assert_eq!(decode_bool(&[]), false);
     }
-
     #[test]
     fn pop_bool_tests() {
         let mut stack = vec![vec![1]];
@@ -236,7 +223,6 @@ mod tests {
         let mut stack = vec![vec![0, 0, 0, 128]];
         assert_eq!(pop_bool(&mut stack).unwrap(), false);
     }
-
     #[test]
     fn encode_decode_num_tests() {
         // Range checks
@@ -255,7 +241,6 @@ mod tests {
         assert_eq!(decode_num(&encode_num(2_147_483_647).unwrap()).unwrap(), 2_147_483_647);
         assert_eq!(decode_num(&encode_num(-2_147_483_647).unwrap()).unwrap(), -2_147_483_647);
     }
-
     #[test]
     fn pop_num_tests() {
         let mut stack = vec![vec![]];
@@ -273,7 +258,6 @@ mod tests {
         let err = pop_num(&mut stack).unwrap_err();
         assert_eq!(err.to_string(), "Script error: Num too long: 5 bytes");
     }
-
     #[test]
     fn bigint_tests() {
         let bi_zero = BigInt::zero();
