@@ -53,28 +53,24 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             len @ 1..=75 => {
                 remains(i + 1, len as usize, script)?;
                 stack.push_back(Cow::Borrowed(&script[i + 1..i + 1 + len as usize]));
-                i += len as usize;
             }
             OP_PUSHDATA1 => {
                 remains(i + 1, 1, script)?;
                 let len = script[i + 1] as usize;
                 remains(i + 2, len, script)?;
                 stack.push_back(Cow::Borrowed(&script[i + 2..i + 2 + len]));
-                i += len + 1;
             }
             OP_PUSHDATA2 => {
                 remains(i + 1, 2, script)?;
                 let len = u16::from_le_bytes([script[i + 1], script[i + 2]]) as usize;
                 remains(i + 3, len, script)?;
                 stack.push_back(Cow::Borrowed(&script[i + 3..i + 3 + len]));
-                i += len + 2;
             }
             OP_PUSHDATA4 => {
                 remains(i + 1, 4, script)?;
                 let len = u32::from_le_bytes([script[i + 1], script[i + 2], script[i + 3], script[i + 4]]) as usize;
                 remains(i + 5, len, script)?;
                 stack.push_back(Cow::Borrowed(&script[i + 5..i + 5 + len]));
-                i += len + 4;
             }
             OP_NOP => {}
             OP_IF => branch_exec.push(pop_bool(&mut stack)?),
