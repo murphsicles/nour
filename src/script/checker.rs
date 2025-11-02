@@ -274,11 +274,7 @@ mod tests {
         script.append_slice(&tx_2.inputs[0].unlock_script.0);
         script.append(OP_CODESEPARATOR);
         script.append_slice(lock_script_bytes);
-        println!("Sig1 len: {}, Sig2 len: {}", sig1.len(), sig2.len());
-        println!("Pk1 len: {}, Pk2 len: {}", pk1.len(), pk2.len());
-        let result = script.eval(&mut c, NO_FLAGS);
-        println!("Eval result: {:?}", result);
-        assert!(result.is_ok());
+        assert!(script.eval(&mut c, NO_FLAGS).is_ok());
     }
     #[test]
     fn blank_check() {
