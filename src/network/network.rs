@@ -1,5 +1,4 @@
 //! Network enum and config for Bitcoin SV parameters (seeds, ports, magic, genesis).
-
 use crate::messages::{Block, BlockHeader, OutPoint, Tx, TxIn, TxOut};
 use crate::network::SeedIter;
 use crate::script::Script;
