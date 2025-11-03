@@ -1,12 +1,12 @@
 //! Script interpreter for Bitcoin SV consensus evaluation.
-use crate::script::{op_codes::*, Checker};
+use crate::script::{Checker, op_codes::*};
 use crate::transaction::sighash::SIGHASH_FORKID;
-use crate::util::{hash160, lshift, rshift, sha256d, Error, Result};
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use bitcoin_hashes::{sha1 as bh_sha1, sha256 as bh_sha256, ripemd160 as bh_ripemd160};
+use crate::util::{Error, Result, hash160, lshift, rshift, sha256d};
+use bitcoin_hashes::{ripemd160 as bh_ripemd160, sha1 as bh_sha1, sha256 as bh_sha256};
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
+use std::borrow::Cow;
+use std::collections::VecDeque;
 
 const STACK_CAPACITY: usize = 1000;
 const ALT_STACK_CAPACITY: usize = 1000;
@@ -68,7 +68,12 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             }
             OP_PUSHDATA4 => {
                 remains(i + 1, 4, script)?;
-                let len = u32::from_le_bytes([script[i + 1], script[i + 2], script[i + 3], script[i + 4]]) as usize;
+                let len = u32::from_le_bytes([
+                    script[i + 1],
+                    script[i + 2],
+                    script[i + 3],
+                    script[i + 4],
+                ]) as usize;
                 remains(i + 5, len, script)?;
                 stack.push_back(Cow::Borrowed(&script[i + 5..i + 5 + len]));
             }
@@ -370,13 +375,21 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             OP_NOT => {
                 check_stack_size(1, &stack)?;
                 let x = pop_bigint(&mut stack)?;
-                let not_x = if x == BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                let not_x = if x == BigInt::zero() {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&not_x).into());
             }
             OP_0NOTEQUAL => {
                 check_stack_size(1, &stack)?;
                 let x = pop_bigint(&mut stack)?;
-                let not_zero = if x == BigInt::zero() { BigInt::zero() } else { BigInt::one() };
+                let not_zero = if x == BigInt::zero() {
+                    BigInt::zero()
+                } else {
+                    BigInt::one()
+                };
                 stack.push_back(encode_bigint(&not_zero).into());
             }
             OP_ADD => {
@@ -426,21 +439,33 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a != BigInt::zero() && b != BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                let result = if a != BigInt::zero() && b != BigInt::zero() {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_BOOLOR => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a != BigInt::zero() || b != BigInt::zero() { BigInt::one() } else { BigInt::zero() };
+                let result = if a != BigInt::zero() || b != BigInt::zero() {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_NUMEQUAL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a == b { BigInt::one() } else { BigInt::zero() };
+                let result = if a == b {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_NUMEQUALVERIFY => {
@@ -456,7 +481,11 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a != b { BigInt::one() } else { BigInt::zero() };
+                let result = if a != b {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_LESSTHAN => {
@@ -477,14 +506,22 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a <= b { BigInt::one() } else { BigInt::zero() };
+                let result = if a <= b {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_GREATERTHANOREQUAL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
-                let result = if a >= b { BigInt::one() } else { BigInt::zero() };
+                let result = if a >= b {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_MIN => {
@@ -506,7 +543,11 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 let max = pop_bigint(&mut stack)?;
                 let min = pop_bigint(&mut stack)?;
                 let x = pop_bigint(&mut stack)?;
-                let result = if x >= min && x < max { BigInt::one() } else { BigInt::zero() };
+                let result = if x >= min && x < max {
+                    BigInt::one()
+                } else {
+                    BigInt::zero()
+                };
                 stack.push_back(encode_bigint(&result).into());
             }
             OP_NUM2BIN => {
@@ -628,7 +669,12 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 }
             }
             OP_NOP1 | OP_NOP4 | OP_NOP5 | OP_NOP6 | OP_NOP7 | OP_NOP8 | OP_NOP9 | OP_NOP10 => {}
-            _ => return Err(Error::ScriptError(format!("Bad opcode: {}, index {}", script[i], i))),
+            _ => {
+                return Err(Error::ScriptError(format!(
+                    "Bad opcode: {}, index {}",
+                    script[i], i
+                )));
+            }
         }
         i = next_op(i, script);
     }
@@ -653,7 +699,8 @@ fn check_multisig<'a, T: Checker>(
     if total < 0 {
         return Err(Error::ScriptError("total out of range".to_string()));
     }
-    if total > 20 {  // BSV limit: max 20 pubkeys
+    if total > 20 {
+        // BSV limit: max 20 pubkeys
         return Err(Error::ScriptError("too many pubkeys".to_string()));
     }
     // Pop total pubkeys
@@ -771,7 +818,13 @@ pub fn next_op(i: usize, script: &[u8]) -> usize {
             if i + 5 > script.len() {
                 script.len()
             } else {
-                i + 5 + u32::from_le_bytes([script[i + 1], script[i + 2], script[i + 3], script[i + 4]]) as usize
+                i + 5
+                    + u32::from_le_bytes([
+                        script[i + 1],
+                        script[i + 2],
+                        script[i + 3],
+                        script[i + 4],
+                    ]) as usize
             }
         }
         _ => i + 1,
