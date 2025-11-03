@@ -1,7 +1,7 @@
 //! Version message for Bitcoin SV P2P handshake, defining node capabilities.
 use crate::messages::message::Payload;
 use crate::messages::node_addr::NodeAddr;
-use crate::util::{secs_since, var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, secs_since, var_int};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
@@ -61,14 +61,23 @@ impl Version {
     /// `Error::BadData` if version < MIN_SUPPORTED_PROTOCOL_VERSION or timestamp > ±2 hours.
     pub fn validate(&self) -> Result<()> {
         if self.version < MIN_SUPPORTED_PROTOCOL_VERSION {
-            return Err(Error::BadData(format!("Unsupported protocol version: {}", self.version)));
+            return Err(Error::BadData(format!(
+                "Unsupported protocol version: {}",
+                self.version
+            )));
         }
         let now = secs_since(UNIX_EPOCH) as i64;
         if (self.timestamp - now).abs() > 2 * 60 * 60 {
-            return Err(Error::BadData(format!("Timestamp too old: {}", self.timestamp)));
+            return Err(Error::BadData(format!(
+                "Timestamp too old: {}",
+                self.timestamp
+            )));
         }
         if self.user_agent.len() > MAX_USER_AGENT_LEN {
-            return Err(Error::BadData(format!("User agent too long: {}", self.user_agent.len())));
+            return Err(Error::BadData(format!(
+                "User agent too long: {}",
+                self.user_agent.len()
+            )));
         }
         Ok(())
     }
@@ -77,29 +86,44 @@ impl Version {
 impl Serializable<Version> for Version {
     fn read(reader: &mut dyn Read) -> Result<Version> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let mut services = [0u8; 8];
-        reader.read_exact(&mut services).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut services)
+            .map_err(|e| Error::IOError(e))?;
         let services = u64::from_le_bytes(services);
         let mut timestamp = [0u8; 8];
-        reader.read_exact(&mut timestamp).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut timestamp)
+            .map_err(|e| Error::IOError(e))?;
         let timestamp = i64::from_le_bytes(timestamp);
         let recv_addr = NodeAddr::read(reader)?;
         let tx_addr = NodeAddr::read(reader)?;
         let mut nonce = [0u8; 8];
-        reader.read_exact(&mut nonce).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut nonce)
+            .map_err(|e| Error::IOError(e))?;
         let nonce = u64::from_le_bytes(nonce);
         let user_agent_size = var_int::read(reader)? as usize;
         if user_agent_size > MAX_USER_AGENT_LEN {
-            return Err(Error::BadData(format!("User agent too long: {}", user_agent_size)));
+            return Err(Error::BadData(format!(
+                "User agent too long: {}",
+                user_agent_size
+            )));
         }
         let mut user_agent_bytes = vec![0; user_agent_size];
-        reader.read_exact(&mut user_agent_bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut user_agent_bytes)
+            .map_err(|e| Error::IOError(e))?;
         let user_agent = String::from_utf8(user_agent_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 user agent".to_string()))?;
         let mut start_height = [0u8; 4];
-        reader.read_exact(&mut start_height).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut start_height)
+            .map_err(|e| Error::IOError(e))?;
         let start_height = i32::from_le_bytes(start_height);
         let relay = reader.read_u8().map_err(|e| Error::IOError(e))? == 0x01;
         let ret = Version {
@@ -135,29 +159,50 @@ impl Serializable<Version> for Version {
 impl AsyncSerializable<Version> for Version {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<Version> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let mut services = [0u8; 8];
-        reader.read_exact(&mut services).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut services)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let services = u64::from_le_bytes(services);
         let mut timestamp = [0u8; 8];
-        reader.read_exact(&mut timestamp).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut timestamp)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let timestamp = i64::from_le_bytes(timestamp);
         let recv_addr = NodeAddr::read_async(reader).await?;
         let tx_addr = NodeAddr::read_async(reader).await?;
         let mut nonce = [0u8; 8];
-        reader.read_exact(&mut nonce).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut nonce)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let nonce = u64::from_le_bytes(nonce);
         let user_agent_size = var_int::read_async(reader).await? as usize;
         if user_agent_size > MAX_USER_AGENT_LEN {
-            return Err(Error::BadData(format!("User agent too long: {}", user_agent_size)));
+            return Err(Error::BadData(format!(
+                "User agent too long: {}",
+                user_agent_size
+            )));
         }
         let mut user_agent_bytes = vec![0; user_agent_size];
-        reader.read_exact(&mut user_agent_bytes).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut user_agent_bytes)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let user_agent = String::from_utf8(user_agent_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 user agent".to_string()))?;
         let mut start_height = [0u8; 4];
-        reader.read_exact(&mut start_height).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut start_height)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let start_height = i32::from_le_bytes(start_height);
         let relay = reader.read_u8().await.map_err(|e| Error::IOError(e))? == 0x01;
         let ret = Version {
@@ -184,14 +229,19 @@ impl AsyncSerializable<Version> for Version {
         var_int::write_async(self.user_agent.as_bytes().len() as u64, writer).await?;
         writer.write_all(self.user_agent.as_bytes()).await?;
         writer.write_all(&self.start_height.to_le_bytes()).await?;
-        writer.write_u8(if self.relay { 0x01 } else { 0x00 }).await?;
+        writer
+            .write_u8(if self.relay { 0x01 } else { 0x00 })
+            .await?;
         Ok(())
     }
 }
 
 impl Payload<Version> for Version {
     fn size(&self) -> usize {
-        33 + self.recv_addr.size() + self.tx_addr.size() + var_int::size(self.user_agent.as_bytes().len() as u64) + self.user_agent.as_bytes().len()
+        33 + self.recv_addr.size()
+            + self.tx_addr.size()
+            + var_int::size(self.user_agent.as_bytes().len() as u64)
+            + self.user_agent.as_bytes().len()
     }
 }
 
@@ -199,8 +249,8 @@ impl Payload<Version> for Version {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn read_bytes() {
@@ -210,10 +260,16 @@ mod tests {
         assert_eq!(v.services, 37);
         assert_eq!(v.timestamp, 1523766002);
         assert_eq!(v.recv_addr.services, 0);
-        assert_eq!(v.recv_addr.ip.octets(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 45, 50, 191, 251]);
+        assert_eq!(
+            v.recv_addr.ip.octets(),
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 45, 50, 191, 251]
+        );
         assert_eq!(v.recv_addr.port, 56599);
         assert_eq!(v.tx_addr.services, 37);
-        assert_eq!(v.tx_addr.ip.octets(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            v.tx_addr.ip.octets(),
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
         assert_eq!(v.tx_addr.port, 0);
         assert_eq!(v.nonce, 16977786322265395341);
         assert_eq!(v.user_agent, "/Bitcoin ABC:0.16.0(EB8.0; bitcore)/");
@@ -258,16 +314,25 @@ mod tests {
             version: 0,
             ..m.clone()
         };
-        assert_eq!(m2.validate().unwrap_err().to_string(), "Bad data: Unsupported protocol version: 0");
+        assert_eq!(
+            m2.validate().unwrap_err().to_string(),
+            "Bad data: Unsupported protocol version: 0"
+        );
         let m3 = Version {
             timestamp: 0,
             ..m.clone()
         };
-        assert_eq!(m3.validate().unwrap_err().to_string(), "Bad data: Timestamp too old: 0");
+        assert_eq!(
+            m3.validate().unwrap_err().to_string(),
+            "Bad data: Timestamp too old: 0"
+        );
         let m4 = Version {
             user_agent: "x".repeat(MAX_USER_AGENT_LEN + 1),
             ..m.clone()
         };
-        assert_eq!(m4.validate().unwrap_err().to_string(), "Bad data: User agent too long: 257");
+        assert_eq!(
+            m4.validate().unwrap_err().to_string(),
+            "Bad data: User agent too long: 257"
+        );
     }
 }
