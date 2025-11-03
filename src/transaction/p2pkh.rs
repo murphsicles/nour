@@ -3,7 +3,7 @@
 /// Standard for "sending to an address"; creates/checks lock/unlock scripts.
 /// Note: For P2SH, see BIP-16.
 use crate::script::op_codes::{OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSH};
-use crate::script::{next_op, Script};
+use crate::script::{Script, next_op};
 use crate::util::{Error, Hash160, Result};
 /// Creates P2PKH lock script (DUP HASH160 [hash] EQUALVERIFY CHECKSIG).
 #[must_use]
