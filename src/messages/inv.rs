@@ -1,8 +1,7 @@
 //! Inv message for Bitcoin SV P2P, announcing inventory vectors (e.g., tx, block).
-
 use crate::messages::inv_vect::InvVect;
 use crate::messages::message::Payload;
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
@@ -74,7 +73,9 @@ impl Payload<Inv> for Inv {
 impl fmt::Debug for Inv {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.objects.len() <= 3 {
-            f.debug_struct("Inv").field("objects", &self.objects).finish()
+            f.debug_struct("Inv")
+                .field("objects", &self.objects)
+                .finish()
         } else {
             let s = format!("[<{} inventory vectors>]", self.objects.len());
             f.debug_struct("Inv").field("objects", &s).finish()
@@ -85,10 +86,10 @@ impl fmt::Debug for Inv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{INV_VECT_TX, INV_VECT_BLOCK};
+    use crate::messages::{INV_VECT_BLOCK, INV_VECT_TX};
     use crate::util::Hash256;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -112,7 +113,9 @@ mod tests {
 
     #[test]
     fn too_many_objects() {
-        let mut inv = Inv { objects: Vec::new() };
+        let mut inv = Inv {
+            objects: Vec::new(),
+        };
         for _ in 0..MAX_INV_ENTRIES + 1 {
             inv.objects.push(InvVect {
                 obj_type: INV_VECT_TX,
@@ -121,6 +124,9 @@ mod tests {
         }
         let mut v = Vec::new();
         inv.write(&mut v).unwrap();
-        assert_eq!(Inv::read(&mut Cursor::new(&v)).unwrap_err().to_string(), format!("Bad data: Too many objects: {}", MAX_INV_ENTRIES + 1));
+        assert_eq!(
+            Inv::read(&mut Cursor::new(&v)).unwrap_err().to_string(),
+            format!("Bad data: Too many objects: {}", MAX_INV_ENTRIES + 1)
+        );
     }
 }
