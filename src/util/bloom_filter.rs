@@ -1,5 +1,5 @@
 //! Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use hex;
 use murmur3::murmur3_32;
 use rand::Rng;
@@ -47,7 +47,9 @@ impl BloomFilter {
         let ln2 = 2.0_f64.ln();
         let size = (-1.0 / ln2.powi(2) * insert * pr_false_pos.ln()) / 8.0;
         let size = size.min(BLOOM_FILTER_MAX_FILTER_SIZE as f64).ceil() as usize;
-        let num_hash_funcs = ((size as f64 * 8.0 / insert * ln2).min(BLOOM_FILTER_MAX_HASH_FUNCS as f64)).ceil() as usize;
+        let num_hash_funcs = ((size as f64 * 8.0 / insert * ln2)
+            .min(BLOOM_FILTER_MAX_HASH_FUNCS as f64))
+        .ceil() as usize;
         let mut rng = rand::rng();
         let tweak = rng.random::<u32>();
         Ok(BloomFilter {
@@ -63,7 +65,9 @@ impl BloomFilter {
     /// - Data >520B (consensus limit).
     pub fn add(&mut self, data: &[u8]) -> Result<()> {
         if data.len() > 520 {
-            return Err(Error::BadArgument("Data too large for bloom add".to_string()));
+            return Err(Error::BadArgument(
+                "Data too large for bloom add".to_string(),
+            ));
         }
         let bit_size = (self.filter.len() * 8) as u32;
         for i in 0..self.num_hash_funcs {
@@ -112,17 +116,27 @@ impl Serializable<BloomFilter> for BloomFilter {
             return Err(Error::BadData("Filter too long".to_string()));
         }
         let mut filter = vec![0; filter_len];
-        reader.read_exact(&mut filter).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut filter)
+            .map_err(|e| Error::IOError(e))?;
         let mut num_hash_funcs = [0u8; 4];
-        reader.read_exact(&mut num_hash_funcs).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut num_hash_funcs)
+            .map_err(|e| Error::IOError(e))?;
         let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         if num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
             return Err(Error::BadData("Too many hash funcs".to_string()));
         }
         let mut tweak = [0u8; 4];
-        reader.read_exact(&mut tweak).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut tweak)
+            .map_err(|e| Error::IOError(e))?;
         let tweak = u32::from_le_bytes(tweak);
-        Ok(BloomFilter { filter, num_hash_funcs, tweak })
+        Ok(BloomFilter {
+            filter,
+            num_hash_funcs,
+            tweak,
+        })
     }
 
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
@@ -147,8 +161,8 @@ impl fmt::Debug for BloomFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -174,10 +188,22 @@ mod tests {
         let mut bf = BloomFilter::new(15.0, 0.0001).unwrap();
         let data = vec![0u8; 521];
         let err = bf.add(&data).unwrap_err();
-        assert_eq!(err.to_string(), "Bad argument: Data too large for bloom add");
-        assert_eq!(BloomFilter::new(0.0, 0.5).unwrap_err().to_string(), "Bad argument: Invalid insert value");
-        assert_eq!(BloomFilter::new(1.0, 0.0).unwrap_err().to_string(), "Bad argument: Invalid pr_false_pos value");
-        assert_eq!(BloomFilter::new(1.0, -1.0).unwrap_err().to_string(), "Bad argument: Invalid pr_false_pos value");
+        assert_eq!(
+            err.to_string(),
+            "Bad argument: Data too large for bloom add"
+        );
+        assert_eq!(
+            BloomFilter::new(0.0, 0.5).unwrap_err().to_string(),
+            "Bad argument: Invalid insert value"
+        );
+        assert_eq!(
+            BloomFilter::new(1.0, 0.0).unwrap_err().to_string(),
+            "Bad argument: Invalid pr_false_pos value"
+        );
+        assert_eq!(
+            BloomFilter::new(1.0, -1.0).unwrap_err().to_string(),
+            "Bad argument: Invalid pr_false_pos value"
+        );
         assert!(BloomFilter::new(1.0, f64::NAN).is_err());
         assert!(BloomFilter::new(f64::NAN, 0.5).is_err());
     }
@@ -192,10 +218,16 @@ mod tests {
         assert!(bf.validate().is_ok());
         let mut bf_clone = bf.clone();
         bf_clone.filter = vec![0; BLOOM_FILTER_MAX_FILTER_SIZE + 1];
-        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Bad data: Filter too long");
+        assert_eq!(
+            bf_clone.validate().unwrap_err().to_string(),
+            "Bad data: Filter too long"
+        );
         let mut bf_clone = bf.clone();
         bf_clone.num_hash_funcs = BLOOM_FILTER_MAX_HASH_FUNCS + 1;
-        assert_eq!(bf_clone.validate().unwrap_err().to_string(), "Bad data: Too many hash funcs");
+        assert_eq!(
+            bf_clone.validate().unwrap_err().to_string(),
+            "Bad data: Too many hash funcs"
+        );
     }
 
     #[test]
@@ -203,6 +235,9 @@ mod tests {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
         let invalid_data = vec![0u8; 521];
         let err = bf.add(&invalid_data).unwrap_err();
-        assert_eq!(err.to_string(), "Bad argument: Data too large for bloom add");
+        assert_eq!(
+            err.to_string(),
+            "Bad argument: Data too large for bloom add"
+        );
     }
 }
