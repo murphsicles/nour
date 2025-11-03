@@ -28,7 +28,9 @@ impl Serializable<SendCmpct> for SendCmpct {
     fn read(reader: &mut dyn Read) -> Result<SendCmpct> {
         let enable = reader.read_u8().map_err(|e| Error::IOError(e))?;
         let mut version = [0u8; 8];
-        reader.read_exact(&mut version).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .map_err(|e| Error::IOError(e))?;
         let version = u64::from_le_bytes(version);
         Ok(SendCmpct { enable, version })
     }
@@ -42,7 +44,10 @@ impl AsyncSerializable<SendCmpct> for SendCmpct {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<SendCmpct> {
         let enable = reader.read_u8().await.map_err(|e| Error::IOError(e))?;
         let mut version = [0u8; 8];
-        reader.read_exact(&mut version).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let version = u64::from_le_bytes(version);
         Ok(SendCmpct { enable, version })
     }
@@ -60,8 +65,8 @@ impl Payload<SendCmpct> for SendCmpct {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("000100000000000000").unwrap();
@@ -72,7 +77,10 @@ mod tests {
     #[test]
     fn write_read() {
         let mut v = Vec::new();
-        let s = SendCmpct { enable: 1, version: 1 };
+        let s = SendCmpct {
+            enable: 1,
+            version: 1,
+        };
         s.write(&mut v).unwrap();
         assert_eq!(v.len(), s.size());
         assert_eq!(SendCmpct::read(&mut Cursor::new(&v)).unwrap(), s);
