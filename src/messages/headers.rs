@@ -1,7 +1,7 @@
 //! Headers message for Bitcoin SV P2P, carrying block headers for chain sync.
 use crate::messages::block_header::BlockHeader;
 use crate::messages::message::Payload;
-use crate::util::{var_int, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, var_int};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::fmt;
 use std::io;
@@ -105,8 +105,8 @@ pub fn header_hash(i: usize, headers: &[BlockHeader]) -> Result<Hash256> {
 mod tests {
     use super::*;
     use crate::util::Hash256;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -182,10 +182,16 @@ mod tests {
         );
         let headers = vec![header1.clone()];
         assert_eq!(header_hash(0, &headers).unwrap(), header1.hash());
-        assert_eq!(header_hash(1, &headers).unwrap_err().to_string(), "Bad argument: Index out of range");
+        assert_eq!(
+            header_hash(1, &headers).unwrap_err().to_string(),
+            "Bad argument: Index out of range"
+        );
         let headers = vec![header1.clone(), header2.clone()];
         assert_eq!(header_hash(0, &headers).unwrap(), header1.hash());
         assert_eq!(header_hash(1, &headers).unwrap(), header2.hash());
-        assert_eq!(header_hash(2, &headers).unwrap_err().to_string(), "Bad argument: Index out of range");
+        assert_eq!(
+            header_hash(2, &headers).unwrap_err().to_string(),
+            "Bad argument: Index out of range"
+        );
     }
 }
