@@ -2,7 +2,7 @@
 name = "nour"
 version = "1.0.0"
 edition = "2024"
-license = "Open BSV"
+license-file = "LICENSE"
 description = "High-performance Bitcoin SV toolkit for transactions, scripts, P2P, and wallets"
 repository = "https://github.com/murphsicles/nour"
 keywords = ["bitcoin-sv", "blockchain", "crypto", "transactions", "p2p"]
