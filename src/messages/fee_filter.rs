@@ -21,7 +21,9 @@ impl FeeFilter {
 impl Serializable<FeeFilter> for FeeFilter {
     fn read(reader: &mut dyn Read) -> Result<FeeFilter> {
         let mut minfee = [0u8; 8];
-        reader.read_exact(&mut minfee).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut minfee)
+            .map_err(|e| Error::IOError(e))?;
         Ok(FeeFilter {
             minfee: u64::from_le_bytes(minfee),
         })
@@ -34,7 +36,10 @@ impl Serializable<FeeFilter> for FeeFilter {
 impl AsyncSerializable<FeeFilter> for FeeFilter {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<FeeFilter> {
         let mut minfee = [0u8; 8];
-        reader.read_exact(&mut minfee).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut minfee)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         Ok(FeeFilter {
             minfee: u64::from_le_bytes(minfee),
         })
@@ -52,8 +57,8 @@ impl Payload<FeeFilter> for FeeFilter {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("e803000000000000").unwrap();
