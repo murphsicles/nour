@@ -28,9 +28,14 @@ const NUM_RANGE: i64 = 1i64 << 31; // 2^31
 /// ```
 #[inline]
 pub fn pop_bool(stack: &mut Vec<Vec<u8>>) -> Result<bool> {
-    let top = stack.pop().ok_or(Error::ScriptError("Empty stack for bool".to_string()))?;
+    let top = stack
+        .pop()
+        .ok_or(Error::ScriptError("Empty stack for bool".to_string()))?;
     if top.len() > MAX_BOOL_LEN {
-        return Err(Error::ScriptError(format!("Bool too long: {} bytes", top.len())));
+        return Err(Error::ScriptError(format!(
+            "Bool too long: {} bytes",
+            top.len()
+        )));
     }
     Ok(decode_bool(&top))
 }
@@ -49,9 +54,14 @@ pub fn pop_bool(stack: &mut Vec<Vec<u8>>) -> Result<bool> {
 /// ```
 #[inline]
 pub fn pop_num(stack: &mut Vec<Vec<u8>>) -> Result<i32> {
-    let top = stack.pop().ok_or(Error::ScriptError("Empty stack for num".to_string()))?;
+    let top = stack
+        .pop()
+        .ok_or(Error::ScriptError("Empty stack for num".to_string()))?;
     if top.len() > MAX_NUM_LEN {
-        return Err(Error::ScriptError(format!("Num too long: {} bytes", top.len())));
+        return Err(Error::ScriptError(format!(
+            "Num too long: {} bytes",
+            top.len()
+        )));
     }
     decode_num(&top).map(|n| n as i32)
 }
@@ -71,7 +81,9 @@ pub fn pop_num(stack: &mut Vec<Vec<u8>>) -> Result<i32> {
 /// ```
 #[inline]
 pub fn pop_bigint(stack: &mut Vec<Vec<u8>>) -> Result<BigInt> {
-    let top = stack.pop().ok_or(Error::ScriptError("Empty stack for bigint".to_string()))?;
+    let top = stack
+        .pop()
+        .ok_or(Error::ScriptError("Empty stack for bigint".to_string()))?;
     Ok(decode_bigint(&top))
 }
 /// Decodes a stack item to bool (non-zero true).
@@ -118,7 +130,11 @@ pub fn decode_num(s: &[u8]) -> Result<i64> {
     while extended.len() < 8 {
         extended.push(if sign { 0xffu8 } else { 0u8 });
     }
-    let n = i64::from_le_bytes(extended.try_into().map_err(|_| Error::ScriptError("Invalid extension".to_string()))?);
+    let n = i64::from_le_bytes(
+        extended
+            .try_into()
+            .map_err(|_| Error::ScriptError("Invalid extension".to_string()))?,
+    );
     if n.abs() >= NUM_RANGE {
         return Err(Error::ScriptError("Number out of range".to_string()));
     }
@@ -152,7 +168,11 @@ pub fn encode_num(val: i64) -> Result<Vec<u8>> {
         for _ in l..4 {
             extended.push(if is_neg { 0xffu8 } else { 0u8 });
         }
-        let decoded = i32::from_le_bytes(extended.try_into().map_err(|_| Error::ScriptError("Invalid slice".to_string()))?) as i64;
+        let decoded = i32::from_le_bytes(
+            extended
+                .try_into()
+                .map_err(|_| Error::ScriptError("Invalid slice".to_string()))?,
+        ) as i64;
         if decoded == val {
             return Ok(test);
         }
@@ -192,8 +212,8 @@ pub fn encode_bigint(bi: &BigInt) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use num_bigint::BigInt;
+    use pretty_assertions::assert_eq;
     #[test]
     fn decode_bool_tests() {
         assert_eq!(decode_bool(&[1]), true);
@@ -211,9 +231,15 @@ mod tests {
         let mut stack = vec![vec![0, 0, 0, 127]];
         assert_eq!(pop_bool(&mut stack).unwrap(), true);
         let mut stack = vec![];
-        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Script error: Empty stack for bool");
+        assert_eq!(
+            pop_bool(&mut stack).unwrap_err().to_string(),
+            "Script error: Empty stack for bool"
+        );
         let mut stack = vec![vec![0; 5]];
-        assert_eq!(pop_bool(&mut stack).unwrap_err().to_string(), "Script error: Bool too long: 5 bytes");
+        assert_eq!(
+            pop_bool(&mut stack).unwrap_err().to_string(),
+            "Script error: Bool too long: 5 bytes"
+        );
         let mut stack = vec![vec![]];
         assert_eq!(pop_bool(&mut stack).unwrap(), false);
         let mut stack = vec![vec![0]];
@@ -228,8 +254,14 @@ mod tests {
         // Range checks
         assert!(encode_num(2_147_483_647).is_ok());
         assert!(encode_num(-2_147_483_647).is_ok());
-        assert_eq!(encode_num(2_147_483_648).unwrap_err().to_string(), "Script error: Number out of range");
-        assert_eq!(encode_num(-2_147_483_648).unwrap_err().to_string(), "Script error: Number out of range");
+        assert_eq!(
+            encode_num(2_147_483_648).unwrap_err().to_string(),
+            "Script error: Number out of range"
+        );
+        assert_eq!(
+            encode_num(-2_147_483_648).unwrap_err().to_string(),
+            "Script error: Number out of range"
+        );
         // Roundtrip
         assert_eq!(decode_num(&encode_num(0).unwrap()).unwrap(), 0);
         assert_eq!(decode_num(&encode_num(1).unwrap()).unwrap(), 1);
@@ -237,9 +269,18 @@ mod tests {
         assert_eq!(decode_num(&encode_num(1_111).unwrap()).unwrap(), 1_111);
         assert_eq!(decode_num(&encode_num(-1_111).unwrap()).unwrap(), -1_111);
         assert_eq!(decode_num(&encode_num(111_111).unwrap()).unwrap(), 111_111);
-        assert_eq!(decode_num(&encode_num(-111_111).unwrap()).unwrap(), -111_111);
-        assert_eq!(decode_num(&encode_num(2_147_483_647).unwrap()).unwrap(), 2_147_483_647);
-        assert_eq!(decode_num(&encode_num(-2_147_483_647).unwrap()).unwrap(), -2_147_483_647);
+        assert_eq!(
+            decode_num(&encode_num(-111_111).unwrap()).unwrap(),
+            -111_111
+        );
+        assert_eq!(
+            decode_num(&encode_num(2_147_483_647).unwrap()).unwrap(),
+            2_147_483_647
+        );
+        assert_eq!(
+            decode_num(&encode_num(-2_147_483_647).unwrap()).unwrap(),
+            -2_147_483_647
+        );
     }
     #[test]
     fn pop_num_tests() {
