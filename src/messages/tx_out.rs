@@ -1,6 +1,6 @@
 //! Transaction output for Bitcoin SV P2P messages.
 use crate::script::Script;
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use std::io;
 use std::io::{Read, Write};
 
@@ -42,14 +42,21 @@ impl TxOut {
 impl Serializable<TxOut> for TxOut {
     fn read(reader: &mut dyn Read) -> Result<TxOut> {
         let mut satoshis_bytes = [0u8; 8];
-        reader.read_exact(&mut satoshis_bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut satoshis_bytes)
+            .map_err(|e| Error::IOError(e))?;
         let satoshis = i64::from_le_bytes(satoshis_bytes);
         let script_len = var_int::read(reader)? as usize;
         if script_len > MAX_LOCK_SCRIPT_LEN {
-            return Err(Error::BadData(format!("Lock script too long: {}", script_len)));
+            return Err(Error::BadData(format!(
+                "Lock script too long: {}",
+                script_len
+            )));
         }
         let mut lock_script = vec![0; script_len];
-        reader.read_exact(&mut lock_script).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut lock_script)
+            .map_err(|e| Error::IOError(e))?;
         Ok(TxOut {
             satoshis,
             lock_script: Script(lock_script),
@@ -68,14 +75,23 @@ impl Serializable<TxOut> for TxOut {
 impl AsyncSerializable<TxOut> for TxOut {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<TxOut> {
         let mut satoshis_bytes = [0u8; 8];
-        reader.read_exact(&mut satoshis_bytes).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut satoshis_bytes)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let satoshis = i64::from_le_bytes(satoshis_bytes);
         let script_len = var_int::read_async(reader).await? as usize;
         if script_len > MAX_LOCK_SCRIPT_LEN {
-            return Err(Error::BadData(format!("Lock script too long: {}", script_len)));
+            return Err(Error::BadData(format!(
+                "Lock script too long: {}",
+                script_len
+            )));
         }
         let mut lock_script = vec![0; script_len];
-        reader.read_exact(&mut lock_script).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut lock_script)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         Ok(TxOut {
             satoshis,
             lock_script: Script(lock_script),
@@ -94,8 +110,8 @@ impl AsyncSerializable<TxOut> for TxOut {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -114,7 +130,10 @@ mod tests {
         // value: 100000000 (00e1f50500000000 LE i64), var_int for 65541 (0x10005): FE 05 00 01 00 (LE u32), pad: zeros
         let b = hex::decode("00e1f50500000000fe0500010000000000000000").unwrap();
         let result = TxOut::read(&mut Cursor::new(&b));
-        assert_eq!(result.unwrap_err().to_string(), "Bad data: Lock script too long: 65541");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Bad data: Lock script too long: 65541"
+        );
     }
 
     #[test]
@@ -128,6 +147,9 @@ mod tests {
             satoshis: -1,
             lock_script: Script(vec![]),
         };
-        assert_eq!(invalid.validate().unwrap_err().to_string(), "Bad data: Negative satoshis");
+        assert_eq!(
+            invalid.validate().unwrap_err().to_string(),
+            "Bad data: Negative satoshis"
+        );
     }
 }
