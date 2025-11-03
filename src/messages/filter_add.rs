@@ -1,6 +1,6 @@
 //! FilterAdd message for Bitcoin SV P2P, adding data to bloom filters (BIP-37).
 use crate::messages::message::Payload;
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use hex;
 use std::fmt;
 use std::io;
@@ -35,7 +35,9 @@ impl Serializable<FilterAdd> for FilterAdd {
     fn read(reader: &mut dyn Read) -> Result<FilterAdd> {
         let data_len = var_int::read(reader)?;
         let mut data = vec![0; data_len as usize];
-        reader.read_exact(&mut data).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut data)
+            .map_err(|e| Error::IOError(e))?;
         Ok(FilterAdd { data })
     }
 
@@ -50,7 +52,10 @@ impl AsyncSerializable<FilterAdd> for FilterAdd {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<FilterAdd> {
         let data_len = var_int::read_async(reader).await?;
         let mut data = vec![0; data_len as usize];
-        reader.read_exact(&mut data).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut data)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         Ok(FilterAdd { data })
     }
 
@@ -78,8 +83,8 @@ impl fmt::Debug for FilterAdd {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn read_bytes() {
@@ -101,7 +106,12 @@ mod tests {
     fn validate() {
         let p = FilterAdd { data: vec![21; 21] };
         assert!(p.validate().is_ok());
-        let p = FilterAdd { data: vec![21; MAX_FILTER_ADD_DATA_SIZE + 1] };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Data too long");
+        let p = FilterAdd {
+            data: vec![21; MAX_FILTER_ADD_DATA_SIZE + 1],
+        };
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            "Bad data: Data too long"
+        );
     }
 }
