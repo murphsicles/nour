@@ -1,6 +1,6 @@
 //! Standard error and result types for the library.
-use hex::FromHexError;
 use base58::FromBase58Error;
+use hex::FromHexError;
 use secp256k1::Error as Secp256k1Error;
 use std::io;
 use std::num::ParseIntError;
