@@ -1,7 +1,7 @@
 //! Message header for Bitcoin SV P2P messages.
 use crate::util::{Error, Result, Serializable};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use bitcoin_hashes::sha256d as bh_sha256d;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt;
 use std::io;
 use std::io::{Cursor, Read, Write};
@@ -42,7 +42,10 @@ impl MessageHeader {
             return Err(Error::BadData(format!("Bad magic: {:?}", self.magic)));
         }
         if self.payload_size as u64 > max_size {
-            return Err(Error::BadData(format!("Payload too large: {}", self.payload_size)));
+            return Err(Error::BadData(format!(
+                "Payload too large: {}",
+                self.payload_size
+            )));
         }
         Ok(())
     }
@@ -65,7 +68,10 @@ impl MessageHeader {
     #[cfg(feature = "async")]
     async fn payload_async(&self, reader: &mut dyn AsyncRead) -> Result<Vec<u8>> {
         let mut p = vec![0; self.payload_size as usize];
-        reader.read_exact(&mut p).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut p)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let hash = bh_sha256d::Hash::hash(&p).to_byte_array();
         let checksum = [hash[0], hash[1], hash[2], hash[3]];
         if checksum != self.checksum {
@@ -81,10 +87,15 @@ impl Serializable<MessageHeader> for MessageHeader {
         reader.read_exact(&mut p).map_err(|e| Error::IOError(e))?;
         let mut c = Cursor::new(p);
         let mut ret = MessageHeader::default();
-        c.read_exact(&mut ret.magic).map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.command).map_err(|e| Error::IOError(e))?;
-        ret.payload_size = c.read_u32::<LittleEndian>().map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.checksum).map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.magic)
+            .map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.command)
+            .map_err(|e| Error::IOError(e))?;
+        ret.payload_size = c
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.checksum)
+            .map_err(|e| Error::IOError(e))?;
         Ok(ret)
     }
 
@@ -101,13 +112,21 @@ impl Serializable<MessageHeader> for MessageHeader {
 impl AsyncSerializable<MessageHeader> for MessageHeader {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<MessageHeader> {
         let mut p = [0; Self::SIZE];
-        reader.read_exact(&mut p).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut p)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let mut c = Cursor::new(p);
         let mut ret = MessageHeader::default();
-        c.read_exact(&mut ret.magic).map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.command).map_err(|e| Error::IOError(e))?;
-        ret.payload_size = c.read_u32::<LittleEndian>().map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.checksum).map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.magic)
+            .map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.command)
+            .map_err(|e| Error::IOError(e))?;
+        ret.payload_size = c
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.checksum)
+            .map_err(|e| Error::IOError(e))?;
         Ok(ret)
     }
 
@@ -138,8 +157,8 @@ impl fmt::Debug for MessageHeader {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn read_bytes() {
@@ -177,17 +196,20 @@ mod tests {
         assert!(h.validate(magic, 100).is_ok());
 
         let invalid_bytes = vec![
-            0x00, 0x00, 0x00, 0x00,  // Wrong magic
-            b'v', b'e', b'r', b'a', b'c', b'k', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // command
-            0x00, 0x00, 0x00, 0x58,  // size 88
-            0x00, 0x00, 0x00, 0x00,  // checksum
+            0x00, 0x00, 0x00, 0x00, // Wrong magic
+            b'v', b'e', b'r', b'a', b'c', b'k', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // command
+            0x00, 0x00, 0x00, 0x58, // size 88
+            0x00, 0x00, 0x00, 0x00, // checksum
         ];
         let h_invalid = MessageHeader::read(&mut Cursor::new(&invalid_bytes)).unwrap();
         assert_eq!(
             h_invalid.validate(magic, 100).unwrap_err().to_string(),
             "Bad data: Bad magic: [0, 0, 0, 0]"
         );
-        assert_eq!(h.validate(magic, 50).unwrap_err().to_string(), "Bad data: Payload too large: 88");
+        assert_eq!(
+            h.validate(magic, 50).unwrap_err().to_string(),
+            "Bad data: Payload too large: 88"
+        );
     }
 
     #[test]
