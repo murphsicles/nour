@@ -1,7 +1,7 @@
 //! Reject message for Bitcoin SV P2P, notifying of rejected messages (e.g., invalid tx/block).
 
 use crate::messages::message::Payload;
-use crate::util::{var_int, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, var_int};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::fmt;
 use std::io;
@@ -63,7 +63,9 @@ impl Serializable<Reject> for Reject {
     fn read(reader: &mut dyn Read) -> Result<Reject> {
         let message_size = var_int::read(reader)? as usize;
         let mut message_bytes = vec![0; message_size];
-        reader.read_exact(&mut message_bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut message_bytes)
+            .map_err(|e| Error::IOError(e))?;
         let message = String::from_utf8(message_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 message".to_string()))?;
         let code = reader.read_u8().map_err(|e| Error::IOError(e))?;
@@ -72,7 +74,9 @@ impl Serializable<Reject> for Reject {
             return Err(Error::BadData(format!("Reason too long: {}", reason_size)));
         }
         let mut reason_bytes = vec![0; reason_size];
-        reader.read_exact(&mut reason_bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut reason_bytes)
+            .map_err(|e| Error::IOError(e))?;
         let reason = String::from_utf8(reason_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 reason".to_string()))?;
         let mut data = vec![];
@@ -81,7 +85,12 @@ impl Serializable<Reject> for Reject {
             reader.read_exact(&mut d).map_err(|e| Error::IOError(e))?;
             data = d.to_vec();
         }
-        Ok(Reject { message, code, reason, data })
+        Ok(Reject {
+            message,
+            code,
+            reason,
+            data,
+        })
     }
 
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
@@ -100,7 +109,10 @@ impl AsyncSerializable<Reject> for Reject {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<Reject> {
         let message_size = var_int::read_async(reader).await? as usize;
         let mut message_bytes = vec![0; message_size];
-        reader.read_exact(&mut message_bytes).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut message_bytes)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let message = String::from_utf8(message_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 message".to_string()))?;
         let code = reader.read_u8().await.map_err(|e| Error::IOError(e))?;
@@ -109,16 +121,27 @@ impl AsyncSerializable<Reject> for Reject {
             return Err(Error::BadData(format!("Reason too long: {}", reason_size)));
         }
         let mut reason_bytes = vec![0; reason_size];
-        reader.read_exact(&mut reason_bytes).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut reason_bytes)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let reason = String::from_utf8(reason_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 reason".to_string()))?;
         let mut data = vec![];
         if message == "block" || message == "tx" {
             let mut d = [0u8; 32];
-            reader.read_exact(&mut d).await.map_err(|e| Error::IOError(e))?;
+            reader
+                .read_exact(&mut d)
+                .await
+                .map_err(|e| Error::IOError(e))?;
             data = d.to_vec();
         }
-        Ok(Reject { message, code, reason, data })
+        Ok(Reject {
+            message,
+            code,
+            reason,
+            data,
+        })
     }
 
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
@@ -134,7 +157,12 @@ impl AsyncSerializable<Reject> for Reject {
 
 impl Payload<Reject> for Reject {
     fn size(&self) -> usize {
-        var_int::size(self.message.as_bytes().len() as u64) + self.message.as_bytes().len() + 1 + var_int::size(self.reason.as_bytes().len() as u64) + self.reason.as_bytes().len() + self.data.len()
+        var_int::size(self.message.as_bytes().len() as u64)
+            + self.message.as_bytes().len()
+            + 1
+            + var_int::size(self.reason.as_bytes().len() as u64)
+            + self.reason.as_bytes().len()
+            + self.data.len()
     }
 }
 
@@ -158,8 +186,8 @@ impl fmt::Debug for Reject {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn txid() {
@@ -169,7 +197,10 @@ mod tests {
         };
         assert!(reject.txid().is_ok());
         reject.data = vec![3; 33];
-        assert_eq!(reject.txid().unwrap_err().to_string(), "Invalid operation: No transaction hash");
+        assert_eq!(
+            reject.txid().unwrap_err().to_string(),
+            "Invalid operation: No transaction hash"
+        );
     }
 
     #[test]
@@ -178,7 +209,10 @@ mod tests {
         let m = Reject::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(m.message, "tx");
         assert_eq!(m.code, REJECT_INVALID);
-        assert_eq!(m.reason, "mandatory-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)");
+        assert_eq!(
+            m.reason,
+            "mandatory-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)"
+        );
         let data = "2f174bfe9e5b6e32ef2fabd164df5469f44977d93e0625238465ded771083993";
         assert_eq!(m.data, hex::decode(data).unwrap());
     }
