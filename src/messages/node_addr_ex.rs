@@ -27,10 +27,15 @@ impl NodeAddrEx {
 impl Serializable<NodeAddrEx> for NodeAddrEx {
     fn read(reader: &mut dyn Read) -> Result<NodeAddrEx> {
         let mut time = [0u8; 4];
-        reader.read_exact(&mut time).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut time)
+            .map_err(|e| Error::IOError(e))?;
         let last_connected_time = u32::from_le_bytes(time);
         let addr = NodeAddr::read(reader)?;
-        Ok(NodeAddrEx { last_connected_time, addr })
+        Ok(NodeAddrEx {
+            last_connected_time,
+            addr,
+        })
     }
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.last_connected_time.to_le_bytes())?;
@@ -42,13 +47,21 @@ impl Serializable<NodeAddrEx> for NodeAddrEx {
 impl AsyncSerializable<NodeAddrEx> for NodeAddrEx {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<NodeAddrEx> {
         let mut time = [0u8; 4];
-        reader.read_exact(&mut time).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut time)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let last_connected_time = u32::from_le_bytes(time);
         let addr = NodeAddr::read_async(reader).await?;
-        Ok(NodeAddrEx { last_connected_time, addr })
+        Ok(NodeAddrEx {
+            last_connected_time,
+            addr,
+        })
     }
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
-        writer.write_all(&self.last_connected_time.to_le_bytes()).await?;
+        writer
+            .write_all(&self.last_connected_time.to_le_bytes())
+            .await?;
         self.addr.write_async(writer).await?;
         Ok(())
     }
@@ -56,9 +69,9 @@ impl AsyncSerializable<NodeAddrEx> for NodeAddrEx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
     use std::io::Cursor;
     use std::net::Ipv6Addr;
-    use pretty_assertions::assert_eq;
     #[test]
     fn write_read() {
         let mut v = Vec::new();
