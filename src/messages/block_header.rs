@@ -1,5 +1,5 @@
 //! Block header for Bitcoin SV P2P messages.
-use crate::util::{sha256d, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, sha256d};
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::cmp::min;
 use std::io;
@@ -59,7 +59,10 @@ impl BlockHeader {
             let mut timestamps: Vec<u32> = h.iter().map(|x| x.timestamp).collect();
             timestamps.sort();
             if self.timestamp < timestamps[timestamps.len() / 2] {
-                return Err(Error::BadData(format!("Timestamp too old: {}", self.timestamp)));
+                return Err(Error::BadData(format!(
+                    "Timestamp too old: {}",
+                    self.timestamp
+                )));
             }
         }
         // POW
@@ -77,7 +80,10 @@ impl BlockHeader {
     fn difficulty_target(&self) -> Result<Hash256> {
         let exp = (self.bits >> 24) as usize;
         if exp < 3 || exp > 32 {
-            return Err(Error::BadArgument(format!("Difficulty exponent out of range: {}", exp)));
+            return Err(Error::BadArgument(format!(
+                "Difficulty exponent out of range: {}",
+                exp
+            )));
         }
         let mant_u32 = self.bits & 0x007F_FFFFu32;
         let mant_bytes = mant_u32.to_be_bytes();
@@ -86,7 +92,7 @@ impl BlockHeader {
             return Err(Error::BadArgument("Difficulty shift too large".to_string()));
         }
         let mut target = [0u8; 32];
-        target[mant_start] = mant_bytes[3];     // low byte
+        target[mant_start] = mant_bytes[3]; // low byte
         target[mant_start + 1] = mant_bytes[2]; // mid byte
         target[mant_start + 2] = mant_bytes[1]; // high byte
         Ok(Hash256(target))
@@ -96,18 +102,26 @@ impl BlockHeader {
 impl Serializable<BlockHeader> for BlockHeader {
     fn read(reader: &mut dyn Read) -> Result<BlockHeader> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let prev_hash = Hash256::read(reader)?;
         let merkle_root = Hash256::read(reader)?;
         let mut timestamp = [0u8; 4];
-        reader.read_exact(&mut timestamp).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut timestamp)
+            .map_err(|e| Error::IOError(e))?;
         let timestamp = u32::from_le_bytes(timestamp);
         let mut bits = [0u8; 4];
-        reader.read_exact(&mut bits).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut bits)
+            .map_err(|e| Error::IOError(e))?;
         let bits = u32::from_le_bytes(bits);
         let mut nonce = [0u8; 4];
-        reader.read_exact(&mut nonce).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut nonce)
+            .map_err(|e| Error::IOError(e))?;
         let nonce = u32::from_le_bytes(nonce);
         Ok(BlockHeader {
             version,
@@ -134,18 +148,30 @@ impl Serializable<BlockHeader> for BlockHeader {
 impl AsyncSerializable<BlockHeader> for BlockHeader {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<BlockHeader> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let prev_hash = Hash256::read_async(reader).await?;
         let merkle_root = Hash256::read_async(reader).await?;
         let mut timestamp = [0u8; 4];
-        reader.read_exact(&mut timestamp).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut timestamp)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let timestamp = u32::from_le_bytes(timestamp);
         let mut bits = [0u8; 4];
-        reader.read_exact(&mut bits).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut bits)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let bits = u32::from_le_bytes(bits);
         let mut nonce = [0u8; 4];
-        reader.read_exact(&mut nonce).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut nonce)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let nonce = u32::from_le_bytes(nonce);
         Ok(BlockHeader {
             version,
@@ -171,8 +197,8 @@ impl AsyncSerializable<BlockHeader> for BlockHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -193,7 +219,10 @@ mod tests {
         };
         block_header.write(&mut v).unwrap();
         assert_eq!(v.len(), block_header.size());
-        assert_eq!(BlockHeader::read(&mut Cursor::new(&v)).unwrap(), block_header);
+        assert_eq!(
+            BlockHeader::read(&mut Cursor::new(&v)).unwrap(),
+            block_header
+        );
     }
 
     #[test]
@@ -218,58 +247,67 @@ mod tests {
     }
 
     #[test]
-fn validate() {
-    let prev_hash =
-        Hash256::decode("00000000000008a3a41b85b8b29ad444def299fee21793cd8b9e567eab02cd81")
-            .unwrap();
-    let mut headers = Vec::with_capacity(11);
-    for i in 0..11 {
-        headers.push(BlockHeader {
-            timestamp: (i * 10 + 1000) as u32,
-            ..Default::default()
-        });
-    }
-    let valid = BlockHeader {
-        version: 0x00000001,
-        prev_hash,
-        merkle_root: Hash256::decode(
-            "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3",
-        )
-        .unwrap(),
-        timestamp: 0x4dd7f5c7,
-        bits: 0x1a44b9f2,
-        nonce: 0x9546a142,
-    };
-    assert!(valid.validate(&valid.hash(), &headers).is_ok());
+    fn validate() {
+        let prev_hash =
+            Hash256::decode("00000000000008a3a41b85b8b29ad444def299fee21793cd8b9e567eab02cd81")
+                .unwrap();
+        let mut headers = Vec::with_capacity(11);
+        for i in 0..11 {
+            headers.push(BlockHeader {
+                timestamp: (i * 10 + 1000) as u32,
+                ..Default::default()
+            });
+        }
+        let valid = BlockHeader {
+            version: 0x00000001,
+            prev_hash,
+            merkle_root: Hash256::decode(
+                "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3",
+            )
+            .unwrap(),
+            timestamp: 0x4dd7f5c7,
+            bits: 0x1a44b9f2,
+            nonce: 0x9546a142,
+        };
+        assert!(valid.validate(&valid.hash(), &headers).is_ok());
 
-    // Test invalid difficulty (before timestamp update)
-    let mut invalid_bits = valid.clone();
-    invalid_bits.bits = 0;
-    assert_eq!(
-        invalid_bits.validate(&invalid_bits.hash(), &headers).unwrap_err().to_string(),
-        "Bad argument: Difficulty exponent out of range: 0"
-    );
+        // Test invalid difficulty (before timestamp update)
+        let mut invalid_bits = valid.clone();
+        invalid_bits.bits = 0;
+        assert_eq!(
+            invalid_bits
+                .validate(&invalid_bits.hash(), &headers)
+                .unwrap_err()
+                .to_string(),
+            "Bad argument: Difficulty exponent out of range: 0"
+        );
 
-    // Test invalid POW (before timestamp update)
-    let mut invalid_pow = valid.clone();
-    invalid_pow.nonce = 0;
-    assert_eq!(
-        invalid_pow.validate(&invalid_pow.hash(), &headers).unwrap_err().to_string(),
-        "Bad data: Invalid POW"
-    );
+        // Test invalid POW (before timestamp update)
+        let mut invalid_pow = valid.clone();
+        invalid_pow.nonce = 0;
+        assert_eq!(
+            invalid_pow
+                .validate(&invalid_pow.hash(), &headers)
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Invalid POW"
+        );
 
-    // Update headers ts to be higher than valid for test setup
-    for header in headers.iter_mut() {
-        header.timestamp = valid.timestamp + 1;
-    }
+        // Update headers ts to be higher than valid for test setup
+        for header in headers.iter_mut() {
+            header.timestamp = valid.timestamp + 1;
+        }
 
         // Test timestamp too old
-    let mut invalid_ts = headers[0].clone();
-    invalid_ts.timestamp = 0;
-    invalid_ts.bits = 0x1a44b9f2; // Valid bits
-    assert_eq!(
-        invalid_ts.validate(&invalid_ts.hash(), &headers[1..]).unwrap_err().to_string(),
-        "Bad data: Timestamp too old: 0"
+        let mut invalid_ts = headers[0].clone();
+        invalid_ts.timestamp = 0;
+        invalid_ts.bits = 0x1a44b9f2; // Valid bits
+        assert_eq!(
+            invalid_ts
+                .validate(&invalid_ts.hash(), &headers[1..])
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Timestamp too old: 0"
         );
     }
 }
