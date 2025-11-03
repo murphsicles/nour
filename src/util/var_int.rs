@@ -101,8 +101,8 @@ pub async fn read_async(reader: &mut dyn AsyncRead) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn size() {
