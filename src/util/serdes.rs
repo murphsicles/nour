@@ -64,7 +64,10 @@ impl AsyncSerializable<[u8; 16]> for [u8; 16] {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<[u8; 16]> {
         // Use tokio read_exact impl
         let mut d = [0; 16];
-        reader.read_exact(&mut d).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut d)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         Ok(d)
     }
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
@@ -76,7 +79,10 @@ impl AsyncSerializable<[u8; 16]> for [u8; 16] {
 impl AsyncSerializable<[u8; 32]> for [u8; 32] {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<[u8; 32]> {
         let mut d = [0; 32];
-        reader.read_exact(&mut d).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut d)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         Ok(d)
     }
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
@@ -88,8 +94,8 @@ impl AsyncSerializable<[u8; 32]> for [u8; 32] {
 mod tests {
     use super::*;
     use byteorder::{LittleEndian, ReadBytesExt};
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn test_serdes_array16() -> Result<()> {
