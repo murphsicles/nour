@@ -1,8 +1,8 @@
 //! Script checkers for signature, locktime, and sequence validation in Bitcoin SV.
 use crate::messages::Tx;
-use crate::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID};
+use crate::transaction::sighash::{SIGHASH_FORKID, SigHashCache, sighash};
 use crate::util::{Error, Result};
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+use secp256k1::{Message, PublicKey, Secp256k1, ecdsa::Signature};
 const LOCKTIME_THRESHOLD: i32 = 500_000_000;
 const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
 const SEQUENCE_LOCKTIME_TYPE_FLAG: u32 = 1 << 22;
@@ -93,11 +93,11 @@ impl<'a> Checker for TransactionChecker<'a> {
         )?;
         let der_sig = &sig[..sig.len() - 1];
         let secp = Secp256k1::verification_only();
-        let signature =
-            Signature::from_der(der_sig).map_err(|_| Error::ScriptError("Invalid DER".to_string()))?;
+        let signature = Signature::from_der(der_sig)
+            .map_err(|_| Error::ScriptError("Invalid DER".to_string()))?;
         let message = Message::from_digest(sig_hash.0);
-        let public_key =
-            PublicKey::from_slice(pubkey).map_err(|_| Error::ScriptError("Invalid pubkey".to_string()))?;
+        let public_key = PublicKey::from_slice(pubkey)
+            .map_err(|_| Error::ScriptError("Invalid pubkey".to_string()))?;
         Ok(secp.verify_ecdsa(message, &signature, &public_key).is_ok())
     }
     #[inline]
@@ -115,7 +115,9 @@ impl<'a> Checker for TransactionChecker<'a> {
             return Err(Error::ScriptError("locktime greater than tx".to_string()));
         }
         if self.tx.inputs[self.input].sequence == 0xffffffff {
-            return Err(Error::ScriptError("Max sequence disables locktime".to_string()));
+            return Err(Error::ScriptError(
+                "Max sequence disables locktime".to_string(),
+            ));
         }
         Ok(true)
     }
@@ -152,14 +154,14 @@ impl<'a> Checker for TransactionChecker<'a> {
 mod tests {
     use super::*;
     use crate::messages::{OutPoint, TxIn, TxOut};
-    use crate::script::{op_codes::*, Script, NO_FLAGS};
+    use crate::script::{NO_FLAGS, Script, op_codes::*};
     use crate::transaction::generate_signature;
     use crate::transaction::sighash::{
-        SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE
+        SIGHASH_ALL, SIGHASH_ANYONECANPAY, SIGHASH_FORKID, SIGHASH_NONE,
     };
-    use crate::util::{hash160, Hash256};
-    use secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use crate::util::{Hash256, hash160};
     use pretty_assertions::assert_eq;
+    use secp256k1::{PublicKey, Secp256k1, SecretKey};
     #[test]
     fn standard_p2pkh() {
         standard_p2pkh_test(SIGHASH_ALL);
@@ -221,7 +223,11 @@ mod tests {
         multisig_test(SIGHASH_ALL | SIGHASH_FORKID);
     }
     fn multisig_test(sighash_type: u8) {
-        let tx_version = if (sighash_type & SIGHASH_FORKID) != 0 { 2u32 } else { 1u32 };
+        let tx_version = if (sighash_type & SIGHASH_FORKID) != 0 {
+            2u32
+        } else {
+            1u32
+        };
         let require_forkid = (sighash_type & SIGHASH_FORKID) != 0;
         let secp = Secp256k1::new();
         let private_key1 = [1; 32];
@@ -354,7 +360,8 @@ mod tests {
         // Sign input 1 with full tx (unlocks don't affect sighash)
         let mut cache = SigHashCache::new();
         let lock_script_bytes2 = &tx_1.outputs[1].lock_script.0;
-        let sig_hash2 = sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
+        let sig_hash2 =
+            sighash(&tx_2, 1, lock_script_bytes2, 20, sighash_type, &mut cache).unwrap();
         let sig2 = generate_signature(&private_key2, &sig_hash2, sighash_type).unwrap();
         let mut unlock_script2 = Script::new();
         unlock_script2.append_data(&sig2).unwrap();
@@ -421,12 +428,17 @@ mod tests {
         let mut cache = SigHashCache::new();
         let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
-            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).unwrap_err().to_string(),
+            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32)
+                .unwrap_err()
+                .to_string(),
             "Script error: sequence greater than tx"
         );
         tx.inputs[0].sequence = (500 | SEQUENCE_LOCKTIME_TYPE_FLAG) as u32;
         let mut cache = SigHashCache::new();
         let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
-        assert!(c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32).is_ok());
+        assert!(
+            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32)
+                .is_ok()
+        );
     }
 }
