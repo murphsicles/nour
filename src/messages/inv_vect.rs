@@ -36,7 +36,9 @@ impl InvVect {
 impl Serializable<InvVect> for InvVect {
     fn read(reader: &mut dyn Read) -> Result<InvVect> {
         let mut obj_type = [0u8; 4];
-        reader.read_exact(&mut obj_type).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut obj_type)
+            .map_err(|e| Error::IOError(e))?;
         let obj_type = u32::from_le_bytes(obj_type);
         let hash = Hash256::read(reader)?;
         Ok(InvVect { obj_type, hash })
@@ -51,7 +53,10 @@ impl Serializable<InvVect> for InvVect {
 impl AsyncSerializable<InvVect> for InvVect {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<InvVect> {
         let mut obj_type = [0u8; 4];
-        reader.read_exact(&mut obj_type).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut obj_type)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let obj_type = u32::from_le_bytes(obj_type);
         let hash = Hash256::read_async(reader).await?;
         Ok(InvVect { obj_type, hash })
@@ -65,8 +70,8 @@ impl AsyncSerializable<InvVect> for InvVect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn write_read() {
         let mut v = Vec::new();
