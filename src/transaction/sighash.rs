@@ -3,9 +3,9 @@
 /// Supports legacy (pre-2017) and BIP-143 (post-fork with forkid) algorithms.
 /// Cache intermediates for multi-sig efficiency (avoids O(n^2) hashing).
 use crate::messages::{Payload, Tx, TxOut};
-use crate::script::{next_op, op_codes::OP_CODESEPARATOR, Script};
-use crate::util::{var_int, Error, Hash256, Result, Serializable, sha256d};
-use bitcoin_hashes::{sha256d as bh_sha256d};
+use crate::script::{Script, next_op, op_codes::OP_CODESEPARATOR};
+use crate::util::{Error, Hash256, Result, Serializable, sha256d, var_int};
+use bitcoin_hashes::sha256d as bh_sha256d;
 use byteorder::{LittleEndian, WriteBytesExt};
 const FORK_ID: u32 = 0; // 24-bit BSV fork ID
 /// Signs all outputs.
@@ -250,7 +250,9 @@ mod tests {
         let lock_script = hex::decode("76a91402b74813b047606b4b3fbdfb1a6e8e053fdb8dab88ac")?;
         let addr = "mfmKD4cP6Na7T8D87XRSiR7shA1HNGSaec";
         let (_version, hash160_vec) = decode_address(addr)?;
-        let hash160_array: [u8; 20] = hash160_vec.try_into().map_err(|_| Error::BadData("Invalid hash160 length".to_string()))?;
+        let hash160_array: [u8; 20] = hash160_vec
+            .try_into()
+            .map_err(|_| Error::BadData("Invalid hash160 length".to_string()))?;
         let hash160 = Hash160(hash160_array); // Tuple struct init
         let tx = Tx {
             version: 2,
@@ -303,7 +305,9 @@ mod tests {
             }],
             outputs: vec![TxOut {
                 satoshis: 49990000,
-                lock_script: Script(hex::decode("76a9147865b0b301119fc3eadc7f3406ff1339908e46d488ac")?.into()),
+                lock_script: Script(
+                    hex::decode("76a9147865b0b301119fc3eadc7f3406ff1339908e46d488ac")?.into(),
+                ),
             }],
             lock_time: 0,
         };
