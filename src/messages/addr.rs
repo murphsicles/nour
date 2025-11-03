@@ -2,7 +2,7 @@
 
 use crate::messages::message::Payload;
 use crate::messages::node_addr_ex::NodeAddrEx;
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
@@ -76,7 +76,9 @@ impl fmt::Debug for Addr {
         if self.addrs.len() <= 3 {
             f.debug_struct("Addr").field("addrs", &self.addrs).finish()
         } else {
-            f.debug_struct("Addr").field("addrs", &format!("[<{} addrs>]", self.addrs.len())).finish()
+            f.debug_struct("Addr")
+                .field("addrs", &format!("[<{} addrs>]", self.addrs.len()))
+                .finish()
         }
     }
 }
@@ -86,15 +88,14 @@ mod tests {
     use super::*;
     use crate::messages::NodeAddr;
     use hex;
+    use pretty_assertions::assert_eq;
     use std::io::Cursor;
     use std::net::Ipv6Addr;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn read_bytes() {
-        let b = hex::decode(
-            "013c93dd5a250000000000000000000000000000000000ffff43cdb3a1479d",
-        ).unwrap();
+        let b =
+            hex::decode("013c93dd5a250000000000000000000000000000000000ffff43cdb3a1479d").unwrap();
         let a = Addr::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(a.addrs.len(), 1);
         assert_eq!(a.addrs[0].last_connected_time, 1524470588);
