@@ -29,7 +29,10 @@ impl Hash256 {
     pub fn decode(s: &str) -> Result<Hash256> {
         let decoded_bytes = hex::decode(s)?;
         if decoded_bytes.len() != 32 {
-            return Err(Error::BadArgument(format!("Length {} of decoded bytes", decoded_bytes.len())));
+            return Err(Error::BadArgument(format!(
+                "Length {} of decoded bytes",
+                decoded_bytes.len()
+            )));
         }
         let mut hash_bytes = [0; 32];
         hash_bytes.copy_from_slice(&decoded_bytes);
@@ -47,7 +50,9 @@ impl From<Sha256dHash> for Hash256 {
 impl Serializable<Hash256> for Hash256 {
     fn read(reader: &mut dyn Read) -> Result<Hash256> {
         let mut bytes = [0; 32];
-        reader.read_exact(&mut bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut bytes)
+            .map_err(|e| Error::IOError(e))?;
         Ok(Hash256(bytes))
     }
 
@@ -91,14 +96,17 @@ impl fmt::Debug for Hash256 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn sha256d_test() {
         let x = hex::decode("0123456789abcdef").unwrap();
         let e = hex::encode(sha256d(&x).0);
-        assert_eq!(e, "137ad663f79da06e282ed0abbec4d70523ced5ff8e39d5c2e5641d978c5925aa");
+        assert_eq!(
+            e,
+            "137ad663f79da06e282ed0abbec4d70523ced5ff8e39d5c2e5641d978c5925aa"
+        );
     }
 
     #[test]
