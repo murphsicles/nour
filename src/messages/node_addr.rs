@@ -48,11 +48,15 @@ impl NodeAddr {
 
 impl Serializable<NodeAddr> for NodeAddr {
     fn read(reader: &mut dyn Read) -> Result<NodeAddr> {
-        let services = reader.read_u64::<LittleEndian>().map_err(|e| Error::IOError(e))?;
+        let services = reader
+            .read_u64::<LittleEndian>()
+            .map_err(|e| Error::IOError(e))?;
         let mut ip = [0; 16];
         reader.read_exact(&mut ip).map_err(|e| Error::IOError(e))?;
         let ip = Ipv6Addr::from(ip);
-        let port = reader.read_u16::<BigEndian>().map_err(|e| Error::IOError(e))?;
+        let port = reader
+            .read_u16::<BigEndian>()
+            .map_err(|e| Error::IOError(e))?;
         Ok(NodeAddr { services, ip, port })
     }
 
@@ -69,7 +73,10 @@ impl AsyncSerializable<NodeAddr> for NodeAddr {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<NodeAddr> {
         let services = reader.read_u64_le().await.map_err(|e| Error::IOError(e))?;
         let mut ip = [0; 16];
-        reader.read_exact(&mut ip).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut ip)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let ip = Ipv6Addr::from(ip);
         let port = reader.read_u16_be().await.map_err(|e| Error::IOError(e))?;
         Ok(NodeAddr { services, ip, port })
@@ -97,15 +104,18 @@ impl Default for NodeAddr {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn read_bytes() {
         let b = hex::decode("250000000000000000000000000000000000ffff2d32bffbddd3").unwrap();
         let a = NodeAddr::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(a.services, 37);
-        assert_eq!(a.ip.octets(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 45, 50, 191, 251]);
+        assert_eq!(
+            a.ip.octets(),
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 45, 50, 191, 251]
+        );
         assert_eq!(a.port, 56787);
     }
 
