@@ -2,7 +2,7 @@
 
 use crate::messages::message::Payload;
 use crate::messages::version::MIN_SUPPORTED_PROTOCOL_VERSION;
-use crate::util::{var_int, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, var_int};
 use std::io;
 use std::io::{Read, Write};
 
@@ -33,10 +33,16 @@ impl BlockLocator {
     /// `Error::BadData` if version < MIN_SUPPORTED_PROTOCOL_VERSION.
     pub fn validate(&self) -> Result<()> {
         if self.version < MIN_SUPPORTED_PROTOCOL_VERSION as u32 {
-            return Err(Error::BadData(format!("Unsupported protocol version: {}", self.version)));
+            return Err(Error::BadData(format!(
+                "Unsupported protocol version: {}",
+                self.version
+            )));
         }
         if self.block_locator_hashes.len() as u64 > MAX_BLOCK_LOCATOR_HASHES {
-            return Err(Error::BadData(format!("Too many hashes: {}", self.block_locator_hashes.len())));
+            return Err(Error::BadData(format!(
+                "Too many hashes: {}",
+                self.block_locator_hashes.len()
+            )));
         }
         Ok(())
     }
@@ -45,7 +51,9 @@ impl BlockLocator {
 impl Serializable<BlockLocator> for BlockLocator {
     fn read(reader: &mut dyn Read) -> Result<BlockLocator> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let num_hashes = var_int::read(reader)?;
         if num_hashes > MAX_BLOCK_LOCATOR_HASHES {
@@ -78,7 +86,10 @@ impl Serializable<BlockLocator> for BlockLocator {
 impl AsyncSerializable<BlockLocator> for BlockLocator {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<BlockLocator> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let num_hashes = var_int::read_async(reader).await?;
         if num_hashes > MAX_BLOCK_LOCATOR_HASHES {
@@ -109,15 +120,17 @@ impl AsyncSerializable<BlockLocator> for BlockLocator {
 
 impl Payload<BlockLocator> for BlockLocator {
     fn size(&self) -> usize {
-        4 + var_int::size(self.block_locator_hashes.len() as u64) + self.block_locator_hashes.len() * 32 + 32
+        4 + var_int::size(self.block_locator_hashes.len() as u64)
+            + self.block_locator_hashes.len() * 32
+            + 32
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -150,11 +163,20 @@ mod tests {
 
         let mut p = p.clone();
         p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32 - 1;
-        assert_eq!(p.validate().unwrap_err().to_string(), format!("Bad data: Unsupported protocol version: {}", p.version));
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            format!("Bad data: Unsupported protocol version: {}", p.version)
+        );
 
         let mut p = p.clone();
         p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32;
         p.block_locator_hashes = vec![NO_HASH_STOP; MAX_BLOCK_LOCATOR_HASHES as usize + 1];
-        assert_eq!(p.validate().unwrap_err().to_string(), format!("Bad data: Too many hashes: {}", p.block_locator_hashes.len()));
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            format!(
+                "Bad data: Too many hashes: {}",
+                p.block_locator_hashes.len()
+            )
+        );
     }
 }
