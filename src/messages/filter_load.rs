@@ -1,6 +1,6 @@
 //! FilterLoad message for Bitcoin SV P2P, setting bloom filters (BIP-37).
 use crate::messages::message::Payload;
-use crate::util::{var_int, BloomFilter, Error, Result, Serializable};
+use crate::util::{BloomFilter, Error, Result, Serializable, var_int};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::{Read, Write};
@@ -37,12 +37,18 @@ impl Serializable<FilterLoad> for FilterLoad {
     fn read(reader: &mut dyn Read) -> Result<FilterLoad> {
         let num_filters = var_int::read(reader)?;
         let mut filter = vec![0; num_filters as usize];
-        reader.read_exact(&mut filter).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut filter)
+            .map_err(|e| Error::IOError(e))?;
         let mut num_hash_funcs = [0u8; 4];
-        reader.read_exact(&mut num_hash_funcs).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut num_hash_funcs)
+            .map_err(|e| Error::IOError(e))?;
         let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         let mut tweak = [0u8; 4];
-        reader.read_exact(&mut tweak).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut tweak)
+            .map_err(|e| Error::IOError(e))?;
         let tweak = u32::from_le_bytes(tweak);
         let flags = reader.read_u8().map_err(|e| Error::IOError(e))?;
         Ok(FilterLoad {
@@ -68,12 +74,21 @@ impl AsyncSerializable<FilterLoad> for FilterLoad {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<FilterLoad> {
         let num_filters = var_int::read_async(reader).await?;
         let mut filter = vec![0; num_filters as usize];
-        reader.read_exact(&mut filter).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut filter)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let mut num_hash_funcs = [0u8; 4];
-        reader.read_exact(&mut num_hash_funcs).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut num_hash_funcs)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         let mut tweak = [0u8; 4];
-        reader.read_exact(&mut tweak).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut tweak)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let tweak = u32::from_le_bytes(tweak);
         let flags = reader.read_u8().await.map_err(|e| Error::IOError(e))?;
         Ok(FilterLoad {
@@ -88,8 +103,12 @@ impl AsyncSerializable<FilterLoad> for FilterLoad {
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         var_int::write_async(self.bloom_filter.filter.len() as u64, writer).await?;
         writer.write_all(&self.bloom_filter.filter).await?;
-        writer.write_all(&(self.bloom_filter.num_hash_funcs as u32).to_le_bytes()).await?;
-        writer.write_all(&self.bloom_filter.tweak.to_le_bytes()).await?;
+        writer
+            .write_all(&(self.bloom_filter.num_hash_funcs as u32).to_le_bytes())
+            .await?;
+        writer
+            .write_all(&self.bloom_filter.tweak.to_le_bytes())
+            .await?;
         writer.write_u8(self.flags).await?;
         Ok(())
     }
@@ -103,8 +122,8 @@ impl Payload<FilterLoad> for FilterLoad {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("02b50f0b0000000000000001").unwrap();
@@ -148,7 +167,10 @@ mod tests {
             },
             flags: BLOOM_UPDATE_ALL,
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Filter too long");
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            "Bad data: Filter too long"
+        );
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
@@ -157,7 +179,10 @@ mod tests {
             },
             flags: BLOOM_UPDATE_ALL,
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Too many hash funcs");
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            "Bad data: Too many hash funcs"
+        );
         let p = FilterLoad {
             bloom_filter: BloomFilter {
                 filter: vec![0; 1000],
@@ -166,6 +191,9 @@ mod tests {
             },
             flags: 3, // Invalid flags
         };
-        assert_eq!(p.validate().unwrap_err().to_string(), "Bad data: Invalid flags: 3");
+        assert_eq!(
+            p.validate().unwrap_err().to_string(),
+            "Bad data: Invalid flags: 3"
+        );
     }
 }
