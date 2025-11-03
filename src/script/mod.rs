@@ -181,7 +181,12 @@ impl fmt::Debug for Script {
                     if i + 5 > script.len() {
                         break;
                     }
-                    let len = u32::from_le_bytes([script[i + 1], script[i + 2], script[i + 3], script[i + 4]]) as usize;
+                    let len = u32::from_le_bytes([
+                        script[i + 1],
+                        script[i + 2],
+                        script[i + 3],
+                        script[i + 4],
+                    ]) as usize;
                     ret.push_str(&format!("{} ", len));
                     let end = i + 5 + len;
                     if end <= script.len() {
@@ -330,6 +335,9 @@ mod tests {
         let mut s = Script::new();
         let result = s.append_data(&vec![0u8; (u32::MAX as usize) + 1]);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Bad argument: Data too large for push");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Bad argument: Data too large for push"
+        );
     }
 }
