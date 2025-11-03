@@ -16,11 +16,11 @@ pub(crate) use self::bits::{lshift, rshift};
 
 #[allow(dead_code)]
 pub use self::bloom_filter::{
-    BloomFilter, BLOOM_FILTER_MAX_FILTER_SIZE, BLOOM_FILTER_MAX_HASH_FUNCS,
+    BLOOM_FILTER_MAX_FILTER_SIZE, BLOOM_FILTER_MAX_HASH_FUNCS, BloomFilter,
 };
 
-pub use self::hash160::{hash160, Hash160};
-pub use self::hash256::{sha256d, Hash256};
+pub use self::hash160::{Hash160, hash160};
+pub use self::hash256::{Hash256, sha256d};
 pub use self::result::{Error, Result};
 #[allow(unused_imports)]
 pub use self::serdes::Serializable;
