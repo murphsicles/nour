@@ -1,9 +1,9 @@
 //! Transaction message for Bitcoin SV P2P, supporting large txs for high TPS.
 use crate::messages::message::Payload;
-use crate::messages::{OutPoint, TxIn, TxOut, COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX};
-use crate::script::{op_codes, Script, TransactionChecker, NO_FLAGS, PREGENESIS_RULES};
+use crate::messages::{COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX, OutPoint, TxIn, TxOut};
+use crate::script::{NO_FLAGS, PREGENESIS_RULES, Script, TransactionChecker, op_codes};
 use crate::transaction::sighash::SigHashCache;
-use crate::util::{sha256d, var_int, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, sha256d, var_int};
 use linked_hash_map::LinkedHashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -56,13 +56,19 @@ impl Tx {
             return Err(Error::BadData("inputs empty".to_string()));
         }
         if self.inputs.len() as u64 > MAX_INPUTS {
-            return Err(Error::BadData(format!("Too many inputs: {}", self.inputs.len())));
+            return Err(Error::BadData(format!(
+                "Too many inputs: {}",
+                self.inputs.len()
+            )));
         }
         if self.outputs.is_empty() {
             return Err(Error::BadData("outputs empty".to_string()));
         }
         if self.outputs.len() as u64 > MAX_OUTPUTS {
-            return Err(Error::BadData(format!("Too many outputs: {}", self.outputs.len())));
+            return Err(Error::BadData(format!(
+                "Too many outputs: {}",
+                self.outputs.len()
+            )));
         }
         let mut total_out = 0i64;
         for tx_out in &self.outputs {
@@ -158,7 +164,9 @@ impl Tx {
 impl Serializable<Tx> for Tx {
     fn read(reader: &mut dyn Read) -> Result<Tx> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let n_inputs = var_int::read(reader)?;
         if n_inputs > MAX_INPUTS {
@@ -177,7 +185,9 @@ impl Serializable<Tx> for Tx {
             outputs.push(TxOut::read(reader)?);
         }
         let mut lock_time = [0u8; 4];
-        reader.read_exact(&mut lock_time).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut lock_time)
+            .map_err(|e| Error::IOError(e))?;
         let lock_time = u32::from_le_bytes(lock_time);
         Ok(Tx {
             version,
@@ -206,7 +216,10 @@ impl Serializable<Tx> for Tx {
 impl AsyncSerializable<Tx> for Tx {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<Tx> {
         let mut version = [0u8; 4];
-        reader.read_exact(&mut version).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut version)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let version = u32::from_le_bytes(version);
         let n_inputs = var_int::read_async(reader).await?;
         if n_inputs > MAX_INPUTS {
@@ -225,7 +238,10 @@ impl AsyncSerializable<Tx> for Tx {
             outputs.push(TxOut::read_async(reader).await?);
         }
         let mut lock_time = [0u8; 4];
-        reader.read_exact(&mut lock_time).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut lock_time)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let lock_time = u32::from_le_bytes(lock_time);
         Ok(Tx {
             version,
@@ -255,7 +271,11 @@ impl Payload<Tx> for Tx {
         8 + var_int::size(self.inputs.len() as u64)
             + self.inputs.iter().map(|tx_in| tx_in.size()).sum::<usize>()
             + var_int::size(self.outputs.len() as u64)
-            + self.outputs.iter().map(|tx_out| tx_out.size()).sum::<usize>()
+            + self
+                .outputs
+                .iter()
+                .map(|tx_out| tx_out.size())
+                .sum::<usize>()
     }
 }
 
@@ -265,8 +285,22 @@ impl fmt::Debug for Tx {
         let outputs_str = format!("[<{} outputs>]", self.outputs.len());
         f.debug_struct("Tx")
             .field("version", &self.version)
-            .field("inputs", if self.inputs.len() <= 3 { &self.inputs } else { &inputs_str })
-            .field("outputs", if self.outputs.len() <= 3 { &self.outputs } else { &outputs_str })
+            .field(
+                "inputs",
+                if self.inputs.len() <= 3 {
+                    &self.inputs
+                } else {
+                    &inputs_str
+                },
+            )
+            .field(
+                "outputs",
+                if self.outputs.len() <= 3 {
+                    &self.outputs
+                } else {
+                    &outputs_str
+                },
+            )
             .field("lock_time", &self.lock_time)
             .finish()
     }
@@ -278,8 +312,8 @@ mod tests {
     use crate::messages::{OutPoint, TxIn, TxOut};
     use crate::script::op_codes::{self, OP_0};
     use crate::util::Hash256;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -385,47 +419,154 @@ mod tests {
         assert!(tx.validate(true, true, &utxos, &HashSet::new()).is_ok());
         let mut tx_test = tx.clone();
         tx_test.inputs = vec![];
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: inputs empty");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: inputs empty"
+        );
         let mut tx_test = tx.clone();
         tx_test.outputs = vec![];
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: outputs empty");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: outputs empty"
+        );
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = -1;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: tx_out satoshis negative"
+        );
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = MAX_SATOSHIS;
         tx_test.outputs[1].satoshis = MAX_SATOSHIS;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total out exceeds max satoshis");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Total out exceeds max satoshis"
+        );
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = COINBASE_OUTPOINT_HASH;
         tx_test.inputs[0].prev_output.index = COINBASE_OUTPOINT_INDEX;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Unexpected coinbase");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Unexpected coinbase"
+        );
         let mut tx_test = tx.clone();
         tx_test.lock_time = 0xffffffff;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Lock time too large");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Lock time too large"
+        );
         let mut tx_test = tx.clone();
         tx_test.inputs[0].prev_output.hash = Hash256([8; 32]);
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: utxo not found");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: utxo not found"
+        );
         let mut utxos_clone = utxos.clone();
-        utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = -1;
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: tx_out satoshis negative");
+        utxos_clone
+            .get_mut(&tx.inputs[0].prev_output)
+            .unwrap()
+            .satoshis = -1;
+        assert_eq!(
+            tx.validate(true, true, &utxos_clone, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: tx_out satoshis negative"
+        );
         let mut utxos_clone = utxos.clone();
-        utxos_clone.get_mut(&tx.inputs[0].prev_output).unwrap().satoshis = MAX_SATOSHIS + 1;
-        assert_eq!(tx.validate(true, true, &utxos_clone, &HashSet::new()).unwrap_err().to_string(), "Bad data: Total in exceeds max satoshis");
+        utxos_clone
+            .get_mut(&tx.inputs[0].prev_output)
+            .unwrap()
+            .satoshis = MAX_SATOSHIS + 1;
+        assert_eq!(
+            tx.validate(true, true, &utxos_clone, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Total in exceeds max satoshis"
+        );
         let mut tx_test = tx.clone();
         tx_test.outputs[0].satoshis = 100;
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Output total exceeds input");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Output total exceeds input"
+        );
         let mut tx_test = tx.clone();
         tx_test.inputs[0].unlock_script = Script(vec![]);
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Invalid script: OP_0"
+        );
         let mut tx_test = tx.clone();
         tx_test.inputs[0].unlock_script = Script(vec![OP_0]);
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: Invalid script: OP_0");
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Invalid script: OP_0"
+        );
         let mut tx_test = tx.clone();
         tx_test.outputs[0].lock_script = Script(vec![
-            op_codes::OP_HASH160, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, op_codes::OP_EQUAL,
+            op_codes::OP_HASH160,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            op_codes::OP_EQUAL,
         ]);
-        assert!(tx_test.validate(true, false, &utxos, &HashSet::new()).is_ok());
-        assert_eq!(tx_test.validate(true, true, &utxos, &HashSet::new()).unwrap_err().to_string(), "Bad data: P2SH sunsetted");
+        assert!(
+            tx_test
+                .validate(true, false, &utxos, &HashSet::new())
+                .is_ok()
+        );
+        assert_eq!(
+            tx_test
+                .validate(true, true, &utxos, &HashSet::new())
+                .unwrap_err()
+                .to_string(),
+            "Bad data: P2SH sunsetted"
+        );
     }
 }
