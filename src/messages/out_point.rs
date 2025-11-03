@@ -36,10 +36,14 @@ impl OutPoint {
 impl Serializable<OutPoint> for OutPoint {
     fn read(reader: &mut dyn Read) -> Result<OutPoint> {
         let mut hash_bytes = [0u8; 32];
-        reader.read_exact(&mut hash_bytes).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut hash_bytes)
+            .map_err(|e| Error::IOError(e))?;
         let hash = Hash256(hash_bytes);
         let mut index = [0u8; 4];
-        reader.read_exact(&mut index).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut index)
+            .map_err(|e| Error::IOError(e))?;
         let index = u32::from_le_bytes(index);
         Ok(OutPoint { hash, index })
     }
@@ -54,10 +58,16 @@ impl Serializable<OutPoint> for OutPoint {
 impl AsyncSerializable<OutPoint> for OutPoint {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<OutPoint> {
         let mut hash_bytes = [0u8; 32];
-        reader.read_exact(&mut hash_bytes).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut hash_bytes)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let hash = Hash256(hash_bytes);
         let mut index = [0u8; 4];
-        reader.read_exact(&mut index).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut index)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let index = u32::from_le_bytes(index);
         Ok(OutPoint { hash, index })
     }
@@ -71,8 +81,8 @@ impl AsyncSerializable<OutPoint> for OutPoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
