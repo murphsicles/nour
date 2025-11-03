@@ -18,8 +18,12 @@ impl Ping {
 impl Serializable<Ping> for Ping {
     fn read(reader: &mut dyn Read) -> Result<Ping> {
         let mut nonce = [0u8; 8];
-        reader.read_exact(&mut nonce).map_err(|e| Error::IOError(e))?;
-        Ok(Ping { nonce: u64::from_le_bytes(nonce) })
+        reader
+            .read_exact(&mut nonce)
+            .map_err(|e| Error::IOError(e))?;
+        Ok(Ping {
+            nonce: u64::from_le_bytes(nonce),
+        })
     }
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.nonce.to_le_bytes())
@@ -29,8 +33,13 @@ impl Serializable<Ping> for Ping {
 impl AsyncSerializable<Ping> for Ping {
     async fn read_async(reader: &mut dyn AsyncRead) -> Result<Ping> {
         let mut nonce = [0u8; 8];
-        reader.read_exact(&mut nonce).await.map_err(|e| Error::IOError(e))?;
-        Ok(Ping { nonce: u64::from_le_bytes(nonce) })
+        reader
+            .read_exact(&mut nonce)
+            .await
+            .map_err(|e| Error::IOError(e))?;
+        Ok(Ping {
+            nonce: u64::from_le_bytes(nonce),
+        })
     }
     async fn write_async(&self, writer: &mut dyn AsyncWrite) -> io::Result<()> {
         writer.write_all(&self.nonce.to_le_bytes()).await
@@ -45,8 +54,8 @@ impl Payload<Ping> for Ping {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("86b19332b96c657d").unwrap();
