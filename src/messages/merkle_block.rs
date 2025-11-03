@@ -1,7 +1,7 @@
 //! MerkleBlock message for Bitcoin SV P2P, partial merkle tree for SPV filtered blocks (BIP-37).
 use crate::messages::block_header::BlockHeader;
 use crate::messages::message::Payload;
-use crate::util::{sha256d, var_int, Error, Hash256, Result, Serializable};
+use crate::util::{Error, Hash256, Result, Serializable, sha256d, var_int};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use hex;
 use std::fmt;
@@ -33,7 +33,10 @@ impl MerkleBlock {
             return Err(Error::BadData("No transactions".to_string()));
         }
         if self.total_transactions as u64 > MAX_TOTAL_TX {
-            return Err(Error::BadData(format!("Too many transactions: {}", self.total_transactions)));
+            return Err(Error::BadData(format!(
+                "Too many transactions: {}",
+                self.total_transactions
+            )));
         }
         if self.hashes.is_empty() {
             return Err(Error::BadData("No hashes".to_string()));
@@ -49,7 +52,8 @@ impl MerkleBlock {
         let mut bit_idx = 0usize;
         let mut hash_idx = 0usize;
         let mut matches = Vec::new();
-        let (computed_root, _root_matched) = self.traverse(tree_depth, 0, &mut bit_idx, &mut hash_idx, &mut matches)?;
+        let (computed_root, _root_matched) =
+            self.traverse(tree_depth, 0, &mut bit_idx, &mut hash_idx, &mut matches)?;
         if computed_root != self.header.merkle_root {
             return Err(Error::BadData("Merkle proof mismatch".to_string()));
         }
@@ -108,8 +112,10 @@ impl MerkleBlock {
                 Ok((h, false))
             } else {
                 // bit=1: recurse children, compute hash
-                let (left_hash, left_matched) = self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?;
-                let (right_hash, right_matched) = self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?; // Duplicate logic for odd handled in build, but here assume symmetric call
+                let (left_hash, left_matched) =
+                    self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?;
+                let (right_hash, right_matched) =
+                    self.traverse(level - 1, 0, bit_idx, hash_idx, matches)?; // Duplicate logic for odd handled in build, but here assume symmetric call
                 let computed = self.hash_pair(&left_hash, &right_hash);
                 let matched = left_matched || right_matched;
                 // Duplicate check (rare, but per BIP-37)
@@ -147,7 +153,9 @@ impl Serializable<MerkleBlock> for MerkleBlock {
         }
         let flags_len = var_int::read(reader)?;
         let mut flags = vec![0; flags_len as usize];
-        reader.read_exact(&mut flags).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut flags)
+            .map_err(|e| Error::IOError(e))?;
         Ok(MerkleBlock {
             header,
             total_transactions,
@@ -169,7 +177,12 @@ impl Serializable<MerkleBlock> for MerkleBlock {
 }
 impl Payload<MerkleBlock> for MerkleBlock {
     fn size(&self) -> usize {
-        self.header.size() + 4 + var_int::size(self.hashes.len() as u64) + self.hashes.len() * 32 + var_int::size(self.flags.len() as u64) + self.flags.len()
+        self.header.size()
+            + 4
+            + var_int::size(self.hashes.len() as u64)
+            + self.hashes.len() * 32
+            + var_int::size(self.flags.len() as u64)
+            + self.flags.len()
     }
 }
 impl fmt::Debug for MerkleBlock {
@@ -186,17 +199,23 @@ impl fmt::Debug for MerkleBlock {
 mod tests {
     use super::*;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("01000000ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f33a5914ce6ed5b1b01e32f570200000002252bf9d75c4f481ebb6278d708257d1f12beb6dd30301d26c623f789b2ba6fc0e2d32adb5f8ca820731dff234a84e78ec30bce4ec69dbd562d0b2b8266bf4e5a0105").unwrap();
         let p = MerkleBlock::read(&mut Cursor::new(&b)).unwrap();
         assert_eq!(p.header.version, 1);
         let prev_hash = "ba8b9cda965dd8e536670f9ddec10e53aab14b20bacad27b9137190000000000";
-        assert_eq!(p.header.prev_hash.0.to_vec(), hex::decode(prev_hash).unwrap());
+        assert_eq!(
+            p.header.prev_hash.0.to_vec(),
+            hex::decode(prev_hash).unwrap()
+        );
         let merkle_root = "190760b278fe7b8565fda3b968b918d5fd997f993b23674c0af3b6fde300b38f";
-        assert_eq!(p.header.merkle_root.0.to_vec(), hex::decode(merkle_root).unwrap());
+        assert_eq!(
+            p.header.merkle_root.0.to_vec(),
+            hex::decode(merkle_root).unwrap()
+        );
         assert_eq!(p.header.timestamp, 1284613427);
         let total_transactions = 2;
         assert_eq!(p.total_transactions, total_transactions);
@@ -244,11 +263,17 @@ mod tests {
         // Not enough hashes
         let mut p2 = p.clone();
         p2.hashes.truncate(p.hashes.len() - 1);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Hashes exhausted");
+        assert_eq!(
+            p2.validate().unwrap_err().to_string(),
+            "Bad data: Hashes exhausted"
+        );
         // Too many hashes
         let mut p2 = p.clone();
         p2.hashes.push(Hash256([0; 32]));
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Not all hashes consumed");
+        assert_eq!(
+            p2.validate().unwrap_err().to_string(),
+            "Bad data: Not all hashes consumed"
+        );
         // No flags
         let mut p2 = p.clone();
         p2.flags = vec![];
@@ -256,11 +281,17 @@ mod tests {
         // Too many flags (trailing non-zero would fail inside, but extra 0 ok; test with non-zero)
         let mut p2 = p.clone();
         p2.flags.push(1); // Non-zero trailing
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Trailing flag bits set");
+        assert_eq!(
+            p2.validate().unwrap_err().to_string(),
+            "Bad data: Trailing flag bits set"
+        );
         // Merkle root doesn't match
         let mut p2 = p.clone();
         p2.hashes[0] = Hash256([1; 32]);
-        assert_eq!(p2.validate().unwrap_err().to_string(), "Bad data: Merkle proof mismatch");
+        assert_eq!(
+            p2.validate().unwrap_err().to_string(),
+            "Bad data: Merkle proof mismatch"
+        );
         // Duplicate transactions (adjusted for small tree)
         let hash_left = Hash256([1; 32]);
         let hash_right = hash_left.clone(); // Dup
@@ -279,7 +310,10 @@ mod tests {
             hashes: vec![hash_left.clone(), hash_right], // Both leaves
             flags: vec![0b00000111], // root=1, left=1, right=1 (lsb first: 111 binary=7)
         };
-        assert_eq!(merkle_block.validate().unwrap_err().to_string(), "Bad data: Duplicate transactions");
+        assert_eq!(
+            merkle_block.validate().unwrap_err().to_string(),
+            "Bad data: Duplicate transactions"
+        );
     }
     #[test]
     fn incomplete_tree() {
