@@ -35,7 +35,9 @@ mod tests {
 
     #[test]
     fn tohash160() {
-        let pubkey = hex!("126999eabe3f84a3a9f5c09e87faab27484818a0ec1d67b94c9a02e40268499d98538cf770198550adfb9d1d473e5e926bb00e4c58baec1fb42ffa6069781003e4");
+        let pubkey = hex!(
+            "126999eabe3f84a3a9f5c09e87faab27484818a0ec1d67b94c9a02e40268499d98538cf770198550adfb9d1d473e5e926bb00e4c58baec1fb42ffa6069781003e4"
+        );
         let expected = hex!("3c231b5e624a42e99a87160c6e4231718a6d77c0");
         assert_eq!(hash160(&pubkey).0, expected);
     }
