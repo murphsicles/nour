@@ -47,7 +47,11 @@ impl NetworkConfig {
             Network::Testnet => 18333,
             Network::STN => 9333,
         };
-        Ok(Self { network, seeds, port })
+        Ok(Self {
+            network,
+            seeds,
+            port,
+        })
     }
 
     /// Converts an integer to a network type.
@@ -87,7 +91,8 @@ impl NetworkConfig {
                     prev_hash: Hash256([0; 32]),
                     merkle_root: Hash256::decode(
                         "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-                    ).unwrap(),
+                    )
+                    .unwrap(),
                     timestamp: 1231006505,
                     bits: 0x1d00ffff,
                     nonce: 2083236893,
@@ -119,7 +124,8 @@ impl NetworkConfig {
                     prev_hash: Hash256([0; 32]),
                     merkle_root: Hash256::decode(
                         "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-                    ).unwrap(),
+                    )
+                    .unwrap(),
                     timestamp: 1296688602,
                     bits: 0x1d00ffff,
                     nonce: 414098458,
@@ -152,8 +158,14 @@ impl NetworkConfig {
     #[must_use]
     pub fn genesis_hash(&self) -> Hash256 {
         match self.network {
-            Network::Mainnet => Hash256::decode("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f").unwrap(),
-            Network::Testnet | Network::STN => Hash256::decode("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943").unwrap(),
+            Network::Mainnet => {
+                Hash256::decode("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
+                    .unwrap()
+            }
+            Network::Testnet | Network::STN => {
+                Hash256::decode("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943")
+                    .unwrap()
+            }
         }
     }
 
