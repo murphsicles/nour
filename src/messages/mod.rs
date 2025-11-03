@@ -88,30 +88,30 @@ pub use self::block_locator::{BlockLocator, NO_HASH_STOP};
 pub use self::fee_filter::FeeFilter;
 pub use self::filter_add::{FilterAdd, MAX_FILTER_ADD_DATA_SIZE};
 pub use self::filter_load::{
-    FilterLoad, BLOOM_UPDATE_ALL, BLOOM_UPDATE_NONE, BLOOM_UPDATE_P2PUBKEY_ONLY,
+    BLOOM_UPDATE_ALL, BLOOM_UPDATE_NONE, BLOOM_UPDATE_P2PUBKEY_ONLY, FilterLoad,
 };
-pub use self::headers::{header_hash, Headers};
+pub use self::headers::{Headers, header_hash};
 pub use self::inv::{Inv, MAX_INV_ENTRIES};
 pub use self::inv_vect::{
-    InvVect, INV_VECT_BLOCK, INV_VECT_COMPACT_BLOCK, INV_VECT_ERROR, INV_VECT_FILTERED_BLOCK,
-    INV_VECT_TX,
+    INV_VECT_BLOCK, INV_VECT_COMPACT_BLOCK, INV_VECT_ERROR, INV_VECT_FILTERED_BLOCK, INV_VECT_TX,
+    InvVect,
 };
 pub use self::merkle_block::MerkleBlock;
-pub use self::message::{Message, Payload, MAX_PAYLOAD_SIZE, NO_CHECKSUM};
+pub use self::message::{MAX_PAYLOAD_SIZE, Message, NO_CHECKSUM, Payload};
 pub use self::message_header::MessageHeader;
 pub use self::node_addr::NodeAddr;
 pub use self::node_addr_ex::NodeAddrEx;
-pub use self::out_point::{OutPoint, COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX};
+pub use self::out_point::{COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX, OutPoint};
 pub use self::ping::Ping;
 pub use self::reject::{
-    Reject, REJECT_CHECKPOINT, REJECT_DUPLICATE, REJECT_DUST, REJECT_INSUFFICIENT_FEE,
-    REJECT_INVALID, REJECT_MALFORMED, REJECT_NONSTANDARD, REJECT_OBSOLETE,
+    REJECT_CHECKPOINT, REJECT_DUPLICATE, REJECT_DUST, REJECT_INSUFFICIENT_FEE, REJECT_INVALID,
+    REJECT_MALFORMED, REJECT_NONSTANDARD, REJECT_OBSOLETE, Reject,
 };
 pub use self::send_cmpct::SendCmpct;
-pub use self::tx::{Tx, MAX_SATOSHIS};
+pub use self::tx::{MAX_SATOSHIS, Tx};
 pub use self::tx_in::TxIn;
 pub use self::tx_out::TxOut;
 pub use self::version::{
-    Version, MIN_SUPPORTED_PROTOCOL_VERSION, NODE_BITCOIN_CASH, NODE_NETWORK, NODE_NONE,
-    PROTOCOL_VERSION, UNKNOWN_IP,
+    MIN_SUPPORTED_PROTOCOL_VERSION, NODE_BITCOIN_CASH, NODE_NETWORK, NODE_NONE, PROTOCOL_VERSION,
+    UNKNOWN_IP, Version,
 };
