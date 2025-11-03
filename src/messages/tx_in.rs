@@ -1,7 +1,7 @@
 //! Transaction input for Bitcoin SV P2P messages.
 use crate::messages::out_point::OutPoint;
 use crate::script::Script;
-use crate::util::{var_int, Error, Result, Serializable};
+use crate::util::{Error, Result, Serializable, var_int};
 use std::io;
 use std::io::{Read, Write};
 #[cfg(feature = "async")]
@@ -26,7 +26,10 @@ impl TxIn {
     #[must_use]
     #[inline]
     pub fn size(&self) -> usize {
-        OutPoint::SIZE + var_int::size(self.unlock_script.0.len() as u64) + self.unlock_script.0.len() + 4
+        OutPoint::SIZE
+            + var_int::size(self.unlock_script.0.len() as u64)
+            + self.unlock_script.0.len()
+            + 4
     }
 }
 
@@ -35,12 +38,19 @@ impl Serializable<TxIn> for TxIn {
         let prev_output = OutPoint::read(reader)?;
         let script_len = var_int::read(reader)? as usize;
         if script_len > MAX_UNLOCK_SCRIPT_LEN {
-            return Err(Error::BadData(format!("Unlock script too long: {}", script_len)));
+            return Err(Error::BadData(format!(
+                "Unlock script too long: {}",
+                script_len
+            )));
         }
         let mut unlock_script = vec![0; script_len];
-        reader.read_exact(&mut unlock_script).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut unlock_script)
+            .map_err(|e| Error::IOError(e))?;
         let mut sequence = [0u8; 4];
-        reader.read_exact(&mut sequence).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut sequence)
+            .map_err(|e| Error::IOError(e))?;
         let sequence = u32::from_le_bytes(sequence);
         Ok(TxIn {
             prev_output,
@@ -64,12 +74,21 @@ impl AsyncSerializable<TxIn> for TxIn {
         let prev_output = OutPoint::read_async(reader).await?;
         let script_len = var_int::read_async(reader).await? as usize;
         if script_len > MAX_UNLOCK_SCRIPT_LEN {
-            return Err(Error::BadData(format!("Unlock script too long: {}", script_len)));
+            return Err(Error::BadData(format!(
+                "Unlock script too long: {}",
+                script_len
+            )));
         }
         let mut unlock_script = vec![0; script_len];
-        reader.read_exact(&mut unlock_script).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut unlock_script)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let mut sequence = [0u8; 4];
-        reader.read_exact(&mut sequence).await.map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut sequence)
+            .await
+            .map_err(|e| Error::IOError(e))?;
         let sequence = u32::from_le_bytes(sequence);
         Ok(TxIn {
             prev_output,
@@ -93,8 +112,8 @@ mod tests {
     use crate::messages::OutPoint;
     use crate::script::Script;
     use crate::util::Hash256;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn write_read() {
@@ -118,6 +137,9 @@ mod tests {
         bytes.extend_from_slice(&[0xfd, 0x09, 0x02]); // Var_int 521 (fd + LE u16 0209)
         bytes.extend_from_slice(&[0, 0, 0, 0]); // Sequence zeros
         let result = TxIn::read(&mut Cursor::new(bytes));
-        assert_eq!(result.unwrap_err().to_string(), "Bad data: Unlock script too long: 521");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Bad data: Unlock script too long: 521"
+        );
     }
 }
