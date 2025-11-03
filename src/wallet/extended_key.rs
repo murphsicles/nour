@@ -2,11 +2,11 @@
 
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
-use base58::{ToBase58, FromBase58};
-use bitcoin_hashes::{sha256d as bh_sha256d, Hash, HashEngine};
-use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use std::io::{self, Read, Write};
+use base58::{FromBase58, ToBase58};
+use bitcoin_hashes::{Hash, HashEngine, sha256d as bh_sha256d};
+use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use std::fmt;
+use std::io::{self, Read, Write};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -125,30 +125,45 @@ impl ExtendedKey {
     ///
     /// # Errors
     /// `Error::BadData` if invalid lengths or tweak fails.
-    pub fn derive_child(&self, index: u32, secp: &Secp256k1<secp256k1::All>) -> Result<ExtendedKey> {
+    pub fn derive_child(
+        &self,
+        index: u32,
+        secp: &Secp256k1<secp256k1::All>,
+    ) -> Result<ExtendedKey> {
         let is_private = self.is_private();
         let is_hardened = index >= HARDENED_KEY;
         let mut hmac_input = Vec::with_capacity(37);
         if is_private {
             let private_key = &self.key()[1..33];
             if private_key.len() != 32 {
-                return Err(Error::BadData(format!("Invalid private key length: {}", private_key.len())));
+                return Err(Error::BadData(format!(
+                    "Invalid private key length: {}",
+                    private_key.len()
+                )));
             }
             hmac_input.push(0);
             hmac_input.extend_from_slice(private_key);
         } else {
             if is_hardened {
-                return Err(Error::InvalidOperation("Hardened derivation not supported for public keys".to_string()));
+                return Err(Error::InvalidOperation(
+                    "Hardened derivation not supported for public keys".to_string(),
+                ));
             }
             hmac_input.extend_from_slice(&self.key());
         }
         hmac_input.extend_from_slice(&index.to_be_bytes());
         let chain_code = self.chain_code();
-        let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(&chain_code);
+        let mut hmac_engine =
+            bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(
+                &chain_code,
+            );
         hmac_engine.input(&hmac_input);
         let result = hmac_engine.finalize().to_byte_array();
         if result.len() != 64 {
-            return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
+            return Err(Error::BadData(format!(
+                "Invalid HMAC output length: {}",
+                result.len()
+            )));
         }
         let il = &result[0..32];
         let new_chain_code = &result[32..64];
@@ -157,7 +172,9 @@ impl ExtendedKey {
         child_key.0[4] = self.depth().wrapping_add(1);
         let parent_pubkey = if is_private {
             let private_key = &self.key()[1..33];
-            let secret_key = SecretKey::from_byte_array((*private_key).try_into().expect("private key is 32 bytes"))?;
+            let secret_key = SecretKey::from_byte_array(
+                (*private_key).try_into().expect("private key is 32 bytes"),
+            )?;
             PublicKey::from_secret_key(secp, &secret_key)
         } else {
             PublicKey::from_slice(&self.key())?
@@ -168,7 +185,9 @@ impl ExtendedKey {
         child_key.0[13..45].copy_from_slice(new_chain_code);
         if is_private {
             let private_key = &self.key()[1..33];
-            let secret_key = SecretKey::from_byte_array((*private_key).try_into().expect("private key is 32 bytes"))?;
+            let secret_key = SecretKey::from_byte_array(
+                (*private_key).try_into().expect("private key is 32 bytes"),
+            )?;
             let tweak = SecretKey::from_byte_array(il.try_into().expect("il is 32 bytes"))?;
             let child_secret = secret_key.add_tweak(&tweak.into())?;
             child_key.0[45] = 0; // Private prefix
@@ -186,7 +205,9 @@ impl ExtendedKey {
 impl Serializable<ExtendedKey> for ExtendedKey {
     fn read(reader: &mut dyn Read) -> Result<ExtendedKey> {
         let mut data = [0u8; 78];
-        reader.read_exact(&mut data).map_err(|e| Error::IOError(e))?;
+        reader
+            .read_exact(&mut data)
+            .map_err(|e| Error::IOError(e))?;
         Ok(ExtendedKey(data))
     }
 
@@ -209,7 +230,8 @@ pub fn derive_extended_key(
     secp: &Secp256k1<secp256k1::All>,
 ) -> Result<ExtendedKey> {
     if path.is_empty() || path == "m" {
-        let seed = hex::decode(input).map_err(|_| Error::BadData("Invalid hex seed".to_string()))?;
+        let seed =
+            hex::decode(input).map_err(|_| Error::BadData("Invalid hex seed".to_string()))?;
         return extended_key_from_seed(&seed, network);
     }
     let mut key = ExtendedKey::decode(input)?;
@@ -220,7 +242,11 @@ pub fn derive_extended_key(
         let index: u32 = index_str
             .parse()
             .map_err(|_| Error::BadData("Invalid derivation index".to_string()))?;
-        let index = if is_hardened { index + HARDENED_KEY } else { index };
+        let index = if is_hardened {
+            index + HARDENED_KEY
+        } else {
+            index
+        };
         key = key.derive_child(index, secp)?;
     }
     Ok(key)
@@ -228,11 +254,17 @@ pub fn derive_extended_key(
 
 /// Creates an extended private key from a seed.
 pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedKey> {
-    let mut hmac_engine = bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(b"Bitcoin seed");
+    let mut hmac_engine =
+        bitcoin_hashes::hmac::HmacEngine::<bitcoin_hashes::sha512::HashEngine>::new(
+            b"Bitcoin seed",
+        );
     hmac_engine.input(seed);
     let result = hmac_engine.finalize().to_byte_array();
     if result.len() != 64 {
-        return Err(Error::BadData(format!("Invalid HMAC output length: {}", result.len())));
+        return Err(Error::BadData(format!(
+            "Invalid HMAC output length: {}",
+            result.len()
+        )));
     }
     let il = &result[0..32];
     let chain_code = &result[32..64];
@@ -263,8 +295,8 @@ mod tests {
     fn test_hmac() -> Result<()> {
         let key = hex::decode("873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508")?;
         let private_key = [
-            232, 243, 46, 114, 61, 236, 244, 5, 26, 239, 172, 142, 44, 147, 201, 197,
-            178, 20, 49, 56, 23, 205, 176, 26, 20, 148, 185, 23, 200, 67, 107, 53,
+            232, 243, 46, 114, 61, 236, 244, 5, 26, 239, 172, 142, 44, 147, 201, 197, 178, 20, 49,
+            56, 23, 205, 176, 26, 20, 148, 185, 23, 200, 67, 107, 53,
         ];
         let index = 0x80000000u32;
         let mut data = vec![0u8; 37];
@@ -308,10 +340,14 @@ mod tests {
     #[test]
     fn test_pubkey() -> Result<()> {
         let secp = Secp256k1::new();
-        let private_key = hex::decode("e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35")?;
+        let private_key =
+            hex::decode("e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35")?;
         let secret_key = SecretKey::from_byte_array(private_key.try_into().expect("32 bytes"))?;
         let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-        assert_eq!(hex::encode(public_key.serialize()), "0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2");
+        assert_eq!(
+            hex::encode(public_key.serialize()),
+            "0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2"
+        );
         Ok(())
     }
 }
