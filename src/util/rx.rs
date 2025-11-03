@@ -1,7 +1,7 @@
 //! Lightweight reactive library for event handling in Bitcoin SV toolkit.
 use crate::util::{Error, Result};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, RwLock, TryLockError, Weak};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 /// Observes an event of type T.
 pub trait Observer<T>: Sync + Send {
@@ -130,8 +130,8 @@ impl<T: Sync + Send + Clone> Observer<T> for Poller<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use pretty_assertions::assert_eq;
+    use std::sync::atomic::{AtomicBool, Ordering};
     #[test]
     fn publish_observe() {
         struct MyObserver {
