@@ -2,9 +2,9 @@
 use crate::messages::{BlockHeader, OutPoint, Payload, Tx, TxOut};
 use crate::network::Network;
 use crate::util::{
-    var_int, Error, Hash256, Result, Serializable, BITCOIN_CASH_FORK_HEIGHT_MAINNET,
-    BITCOIN_CASH_FORK_HEIGHT_TESTNET, GENESIS_UPGRADE_HEIGHT_MAINNET,
-    GENESIS_UPGRADE_HEIGHT_TESTNET,
+    BITCOIN_CASH_FORK_HEIGHT_MAINNET, BITCOIN_CASH_FORK_HEIGHT_TESTNET, Error,
+    GENESIS_UPGRADE_HEIGHT_MAINNET, GENESIS_UPGRADE_HEIGHT_TESTNET, Hash256, Result, Serializable,
+    var_int,
 };
 use bitcoin_hashes::sha256d as bh_sha256d; // SIMD opt
 use linked_hash_map::LinkedHashMap;
@@ -48,7 +48,13 @@ impl Block {
         for txn in &self.txns {
             let hash = txn.hash();
             for (index, out) in txn.outputs.iter().enumerate() {
-                outputs.insert(OutPoint { hash, index: index as u32 }, out.clone());
+                outputs.insert(
+                    OutPoint {
+                        hash,
+                        index: index as u32,
+                    },
+                    out.clone(),
+                );
             }
         }
         outputs
@@ -68,7 +74,10 @@ impl Block {
             return Err(Error::BadData("Txn count is zero".to_string()));
         }
         if self.txns.len() > MAX_TXNS_COUNT {
-            return Err(Error::BadData(format!("Too many txns: {}", self.txns.len())));
+            return Err(Error::BadData(format!(
+                "Too many txns: {}",
+                self.txns.len()
+            )));
         }
         if self.merkle_root() != self.header.merkle_root {
             return Err(Error::BadData("Bad merkle root".to_string()));
@@ -179,7 +188,9 @@ impl AsyncSerializable<Block> for Block {
 }
 impl Payload<Block> for Block {
     fn size(&self) -> usize {
-        BlockHeader::SIZE + var_int::size(self.txns.len() as u64) + self.txns.iter().map(Tx::size).sum::<usize>()
+        BlockHeader::SIZE
+            + var_int::size(self.txns.len() as u64)
+            + self.txns.iter().map(Tx::size).sum::<usize>()
     }
 }
 impl fmt::Debug for Block {
@@ -205,8 +216,8 @@ mod tests {
     use crate::script::Script;
     use crate::util::Hash256;
     use hex;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
     #[test]
     fn read_bytes() {
         let b = hex::decode("010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd610101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d010bffffffff0100f2052a010000004341047211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073dee6c89064984f03385237d92167c13e236446b417ab79a0fcae412ae3316b77ac00000000").unwrap();
@@ -218,10 +229,12 @@ mod tests {
                     version: 1,
                     prev_hash: Hash256::decode(
                         "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
-                    ).unwrap(),
+                    )
+                    .unwrap(),
                     merkle_root: Hash256::decode(
                         "9b0fc92260312ce44e74ef369f5c66bbb85848f2eddd5a7a1cde251e54ccfdd5",
-                    ).unwrap(),
+                    )
+                    .unwrap(),
                     timestamp: 1231469744,
                     bits: 486604799,
                     nonce: 1639830024,
@@ -239,11 +252,11 @@ mod tests {
                     outputs: vec![TxOut {
                         satoshis: 5000000000,
                         lock_script: Script(vec![
-                            65, 4, 114, 17, 168, 36, 245, 91, 80, 82, 40, 228, 195, 213, 25,
-                            76, 31, 207, 170, 21, 164, 86, 171, 223, 55, 249, 185, 217, 122,
-                            64, 64, 175, 192, 115, 222, 230, 200, 144, 100, 152, 79, 3, 56, 82,
-                            55, 217, 33, 103, 193, 62, 35, 100, 70, 180, 23, 171, 121, 160,
-                            252, 174, 65, 42, 227, 49, 107, 119, 172,
+                            65, 4, 114, 17, 168, 36, 245, 91, 80, 82, 40, 228, 195, 213, 25, 76,
+                            31, 207, 170, 21, 164, 86, 171, 223, 55, 249, 185, 217, 122, 64, 64,
+                            175, 192, 115, 222, 230, 200, 144, 100, 152, 79, 3, 56, 82, 55, 217,
+                            33, 103, 193, 62, 35, 100, 70, 180, 23, 171, 121, 160, 252, 174, 65,
+                            42, 227, 49, 107, 119, 172,
                         ]),
                     }],
                     lock_time: 0,
@@ -259,10 +272,12 @@ mod tests {
                 version: 77,
                 prev_hash: Hash256::decode(
                     "abcdabcdabcdabcd1234123412341234abcdabcdabcdabcd1234123412341234",
-                ).unwrap(),
+                )
+                .unwrap(),
                 merkle_root: Hash256::decode(
                     "1234567809876543123456780987654312345678098765431234567809876543",
-                ).unwrap(),
+                )
+                .unwrap(),
                 timestamp: 7,
                 bits: 8,
                 nonce: 9,
