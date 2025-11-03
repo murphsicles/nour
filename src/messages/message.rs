@@ -160,7 +160,8 @@ impl Message {
             Ok(msg) => Ok(msg),
             Err(e) => {
                 if let Error::IOError(e) = &e {
-                    if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock {
+                    if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
+                    {
                         return Ok(Message::Partial(header));
                     }
                 }
@@ -211,7 +212,9 @@ impl Message {
         }
         if header.command == commands::GETHEADERS {
             let payload = header.payload(reader)?;
-            return Ok(Message::GetHeaders(BlockLocator::read(&mut Cursor::new(payload))?));
+            return Ok(Message::GetHeaders(BlockLocator::read(&mut Cursor::new(
+                payload,
+            ))?));
         }
         read_payload!(commands::HEADERS, Headers);
         read_payload!(commands::INV, Inv);
@@ -325,7 +328,11 @@ impl Message {
         }
     }
 }
-fn write_without_payload(writer: &mut dyn Write, command: [u8; 12], magic: [u8; 4]) -> io::Result<()> {
+fn write_without_payload(
+    writer: &mut dyn Write,
+    command: [u8; 12],
+    magic: [u8; 4],
+) -> io::Result<()> {
     let header = MessageHeader {
         magic,
         command,
@@ -389,8 +396,8 @@ async fn write_with_payload_async<T: Serializable<T>>(
 }
 /// Message payload that is writable to bytes.
 pub trait Payload<T>: Serializable<T> + fmt::Debug {
-/// Returns the serialized size of the message in bytes.
-fn size(&self) -> usize;
+    /// Returns the serialized size of the message in bytes.
+    fn size(&self) -> usize;
 }
 impl From<Addr> for Message {
     fn from(p: Addr) -> Self {
@@ -490,14 +497,16 @@ impl From<Version> for Message {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{BlockHeader, InvVect, INV_VECT_TX, MIN_SUPPORTED_PROTOCOL_VERSION,
-    NodeAddr, NodeAddrEx, OutPoint, TxIn, TxOut, REJECT_INVALID};
+    use crate::messages::{
+        BlockHeader, INV_VECT_TX, InvVect, MIN_SUPPORTED_PROTOCOL_VERSION, NodeAddr, NodeAddrEx,
+        OutPoint, REJECT_INVALID, TxIn, TxOut,
+    };
     use crate::script::Script;
-    use crate::util::{secs_since, BloomFilter, Hash256};
+    use crate::util::{BloomFilter, Hash256, secs_since};
+    use pretty_assertions::assert_eq;
     use std::io::Cursor;
     use std::net::Ipv6Addr;
     use std::time::UNIX_EPOCH;
-    use pretty_assertions::assert_eq;
     #[test]
     fn write_read() {
         let magic = [7, 8, 9, 0];
@@ -522,10 +531,12 @@ mod tests {
                 version: 0x00000001,
                 prev_hash: Hash256::decode(
                     "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
-                ).unwrap(),
+                )
+                .unwrap(),
                 merkle_root: Hash256::decode(
                     "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3",
-                ).unwrap(),
+                )
+                .unwrap(),
                 timestamp: 0x4dd7f5c7,
                 bits: 0x1a44b9f2,
                 nonce: 0x9546a142,
@@ -656,10 +667,12 @@ mod tests {
                 version: 12345,
                 prev_hash: Hash256::decode(
                     "7766009988776600998877660099887766009988776600998877660099887766",
-                ).unwrap(),
+                )
+                .unwrap(),
                 merkle_root: Hash256::decode(
                     "2211554433221155443322115544332211554433221155443322115544332211",
-                ).unwrap(),
+                )
+                .unwrap(),
                 timestamp: 66,
                 bits: 4488,
                 nonce: 9999,
@@ -723,7 +736,10 @@ mod tests {
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
         // SendCmpct
         let mut v = Vec::new();
-        let p = SendCmpct { enable: 1, version: 1 };
+        let p = SendCmpct {
+            enable: 1,
+            version: 1,
+        };
         let m = Message::SendCmpct(p);
         m.write(&mut v, magic).unwrap();
         assert_eq!(Message::read(&mut Cursor::new(&v), magic).unwrap(), m);
