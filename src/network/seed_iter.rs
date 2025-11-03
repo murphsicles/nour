@@ -2,7 +2,7 @@
 
 use dns_lookup::lookup_host;
 use log::{error, info};
-use rand::{rng, seq::SliceRandom, Rng};
+use rand::{Rng, rng, seq::SliceRandom};
 use std::net::IpAddr;
 
 /// Iterator over DNS seeds for peer discovery.
