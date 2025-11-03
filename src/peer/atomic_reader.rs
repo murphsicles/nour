@@ -13,7 +13,10 @@ impl<'a> AtomicReader<'a> {
     /// Creates a new atomic reader wrapper.
     #[must_use]
     pub fn new(reader: &mut dyn Read) -> AtomicReader<'_> {
-        AtomicReader { buf: Vec::new(), reader }
+        AtomicReader {
+            buf: Vec::new(),
+            reader,
+        }
     }
 }
 
@@ -60,8 +63,8 @@ impl<'a> Read for AtomicReader<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::io::Cursor;
     use pretty_assertions::assert_eq;
+    use std::io::Cursor;
 
     #[test]
     fn read() {
