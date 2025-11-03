@@ -1,10 +1,10 @@
 //! Address handling for Bitcoin SV: P2PKH and P2SH encoding/decoding in base58check format.
 //!
 //! Supports Mainnet, Testnet, and STN networks with checksum verification using double-SHA256.
-/// Payload must be exactly 20 bytes (Hash160). Optimized for high-throughput applications.
-use base58::{ToBase58, FromBase58};
-use crate::util::{Error, Result, sha256d};
+//! Payload must be exactly 20 bytes (Hash160). Optimized for high-throughput applications.
 use crate::network::Network;
+use crate::util::{Error, Result, sha256d};
+use base58::{FromBase58, ToBase58};
 const MAINNET_P2PKH_VERSION: u8 = 0x00;
 const MAINNET_P2SH_VERSION: u8 = 0x05;
 const TESTNET_P2PKH_VERSION: u8 = 0x6F;
@@ -97,7 +97,9 @@ pub fn validate_address(network: Network, address: &str) -> Result<()> {
         Network::Testnet | Network::STN => [TESTNET_P2PKH_VERSION, TESTNET_P2SH_VERSION],
     };
     if !expected_version.contains(&version) {
-        return Err(Error::BadData("Invalid address version for network".to_string()));
+        return Err(Error::BadData(
+            "Invalid address version for network".to_string(),
+        ));
     }
     Ok(())
 }
@@ -135,7 +137,12 @@ mod tests {
         let valid_testnet = "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn";
         validate_address(Network::Mainnet, valid_mainnet)?;
         validate_address(Network::Testnet, valid_testnet)?;
-        assert_eq!(validate_address(Network::Mainnet, valid_testnet).unwrap_err().to_string(), "Bad data: Invalid address version for network");
+        assert_eq!(
+            validate_address(Network::Mainnet, valid_testnet)
+                .unwrap_err()
+                .to_string(),
+            "Bad data: Invalid address version for network"
+        );
         Ok(())
     }
 }
