@@ -1,10 +1,10 @@
 //! Peer connection implementation for Bitcoin SV P2P.
 
-use crate::messages::{Message, MessageHeader, Ping, Version, NODE_BITCOIN_CASH, NODE_NETWORK};
+use crate::messages::{Message, MessageHeader, NODE_BITCOIN_CASH, NODE_NETWORK, Ping, Version};
 use crate::network::NetworkConfig;
 use crate::peer::atomic_reader::AtomicReader;
 use crate::util::rx::{Observable, Observer, Single, Subject};
-use crate::util::{secs_since, Error, Result};
+use crate::util::{Error, Result, secs_since};
 use log::{debug, error, info, warn};
 use snowflake::ProcessUniqueId;
 use std::fmt;
