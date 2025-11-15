@@ -141,8 +141,19 @@ impl ExtendedKey {
                     private_key.len()
                 )));
             }
-            hmac_input.push(0);
-            hmac_input.extend_from_slice(private_key);
+            // For hardened derivation, use 0x00 || private_key
+            // For non-hardened derivation, use the public key
+            if is_hardened {
+                hmac_input.push(0);
+                hmac_input.extend_from_slice(private_key);
+            } else {
+                // Non-hardened: use public key (BIP-32 spec)
+                let secret_key = SecretKey::from_byte_array(
+                    (*private_key).try_into().expect("private key is 32 bytes"),
+                )?;
+                let public_key = PublicKey::from_secret_key(secp, &secret_key);
+                hmac_input.extend_from_slice(&public_key.serialize());
+            }
         } else {
             if is_hardened {
                 return Err(Error::InvalidOperation(
