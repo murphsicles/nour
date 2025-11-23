@@ -2,7 +2,7 @@
 
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
-use base58::{FromBase58, ToBase58};
+use bsv58;
 use bitcoin_hashes::{Hash, HashEngine, sha256d as bh_sha256d};
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use std::fmt;
@@ -100,7 +100,7 @@ impl ExtendedKey {
         let mut v = [0u8; 82];
         v[0..78].copy_from_slice(&self.0);
         v[78..82].copy_from_slice(&checksum[0..4]);
-        v.to_base58()
+        bsv58::encode(&v)
     }
 
     /// Decodes an extended key from a base58 string.
@@ -108,13 +108,10 @@ impl ExtendedKey {
     /// # Errors
     /// `Error::BadData` if invalid length or checksum.
     pub fn decode(s: &str) -> Result<ExtendedKey> {
-        let v = s.from_base58().map_err(|e| Error::FromBase58Error(e))?;
-        if v.len() != 82 {
+        // bsv58::decode_full with checksum validation returns data without checksum
+        let v = bsv58::decode_full(s, true).map_err(|e| Error::BadData(format!("Base58 decode error: {:?}", e)))?;
+        if v.len() != 78 {
             return Err(Error::BadData("Invalid extended key length".to_string()));
-        }
-        let checksum = bh_sha256d::Hash::hash(&v[..78]).to_byte_array();
-        if checksum[0..4] != v[78..] {
-            return Err(Error::BadData("Invalid checksum".to_string()));
         }
         let mut extended_key = ExtendedKey([0; 78]);
         extended_key.0.copy_from_slice(&v[..78]);

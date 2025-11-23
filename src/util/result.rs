@@ -1,5 +1,4 @@
 //! Standard error and result types for the library.
-use base58::FromBase58Error;
 use hex::FromHexError;
 use secp256k1::Error as Secp256k1Error;
 use std::io;
@@ -13,8 +12,6 @@ pub enum Error {
     BadArgument(String),
     /// The data given is not valid
     BadData(String),
-    /// Base58 string could not be decoded
-    FromBase58Error(FromBase58Error),
     /// Hex string could not be decoded
     FromHexError(FromHexError),
     /// UTF8 parsing error
@@ -42,7 +39,6 @@ impl std::fmt::Display for Error {
         match self {
             Error::BadArgument(s) => write!(f, "Bad argument: {}", s),
             Error::BadData(s) => write!(f, "Bad data: {}", s),
-            Error::FromBase58Error(e) => write!(f, "Base58 decoding error: {:?}", e),
             Error::FromHexError(e) => write!(f, "Hex decoding error: {}", e),
             Error::FromUtf8Error(e) => write!(f, "Utf8 parsing error: {}", e),
             Error::IllegalState(s) => write!(f, "Illegal state: {}", s),
@@ -67,12 +63,6 @@ impl std::error::Error for Error {
             Error::Secp256k1Error(e) => Some(e),
             _ => None,
         }
-    }
-}
-
-impl From<FromBase58Error> for Error {
-    fn from(e: FromBase58Error) -> Self {
-        Error::FromBase58Error(e)
     }
 }
 

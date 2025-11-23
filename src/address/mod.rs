@@ -4,7 +4,7 @@
 //! Payload must be exactly 20 bytes (Hash160). Optimized for high-throughput applications.
 use crate::network::Network;
 use crate::util::{Error, Result, sha256d};
-use base58::{FromBase58, ToBase58};
+use bsv58::{encode, decode_full};
 const MAINNET_P2PKH_VERSION: u8 = 0x00;
 const MAINNET_P2SH_VERSION: u8 = 0x05;
 const TESTNET_P2PKH_VERSION: u8 = 0x6F;
@@ -33,7 +33,7 @@ pub fn encode_address(_network: Network, version: u8, payload: &[u8]) -> Result<
     v[1..21].copy_from_slice(payload);
     let checksum = sha256d(&v[..21]);
     v[21..25].copy_from_slice(&checksum.0[..4]);
-    Ok(v.to_base58())
+    Ok(encode(&v))
 }
 /// Decodes a base58check address into version and payload.
 ///
@@ -52,13 +52,11 @@ pub fn encode_address(_network: Network, version: u8, payload: &[u8]) -> Result<
 #[must_use]
 #[inline]
 pub fn decode_address(input: &str) -> Result<(u8, Vec<u8>)> {
-    let bytes = input.from_base58().map_err(|e| Error::FromBase58Error(e))?;
-    if bytes.len() != 25 {
+    // bsv58::decode_full validates checksum and strips it when validate_checksum=true
+    let bytes = decode_full(input, true).map_err(|e| Error::BadData(format!("Base58 decode error: {:?}", e)))?;
+    // After checksum validation and stripping, we expect 21 bytes (version + 20-byte payload)
+    if bytes.len() != 21 {
         return Err(Error::BadData("Invalid address length".to_string()));
-    }
-    let checksum = sha256d(&bytes[..21]);
-    if checksum.0[..4] != bytes[21..] {
-        return Err(Error::BadData("Invalid checksum".to_string()));
     }
     let version = bytes[0];
     let payload = bytes[1..21].to_vec();

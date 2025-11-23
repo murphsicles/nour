@@ -10,7 +10,7 @@ categories = ["cryptography", "network-programming"]
 readme = "README.md"
 
 [dependencies]
-base58 = "0.2.0" # Address encoding
+bsv58 = { git = "https://github.com/murphsicles/bsv58" } # Address encoding
 bitcoin_hashes = "0.17.0" # Required for SHA256/Hash160
 byteorder = "1.5.0" # LE/BE read/write
 dns-lookup = "3.0.1" # DNS seed resolution
