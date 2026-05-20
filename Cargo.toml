@@ -10,7 +10,8 @@ categories = ["cryptography", "network-programming"]
 readme = "README.md"
 
 [dependencies]
-bsv58 = { version = "0.1.1", path = "../bsv58" } # Base58 codec for BSV (Zeta: uses bsv58.z)
+base58 = "0.2.0" # Address encoding (bsv58 transpiled separately — API migration pending)
+bsv58 = "0.1.1" # Base58 codec for BSV (ready for API migration)
 bitcoin_hashes = "0.20.0" # SHA256/Hash160
 byteorder = "1.5.0" # LE/BE read/write
 dns-lookup = "3.0.1" # DNS seed resolution
