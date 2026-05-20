@@ -4,7 +4,7 @@ use crate::messages::{COINBASE_OUTPOINT_HASH, COINBASE_OUTPOINT_INDEX, OutPoint,
 use crate::script::{NO_FLAGS, PREGENESIS_RULES, Script, TransactionChecker, op_codes};
 use crate::transaction::sighash::SigHashCache;
 use crate::util::{Error, Hash256, Result, Serializable, sha256d, var_int};
-use linked_hash_map::LinkedHashMap;
+use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::io;
@@ -49,7 +49,7 @@ impl Tx {
         &self,
         require_sighash_forkid: bool,
         use_genesis_rules: bool,
-        utxos: &LinkedHashMap<OutPoint, TxOut>,
+        utxos: &IndexMap<OutPoint, TxOut>,
         pregenesis_outputs: &HashSet<OutPoint>,
     ) -> Result<()> {
         if self.inputs.is_empty() {
@@ -395,7 +395,7 @@ mod tests {
                 lock_script: Script(vec![]),
             },
         );
-        let mut utxos = LinkedHashMap::new();
+        let mut utxos = IndexMap::new();
         utxos.insert(utxo.0.clone(), utxo.1.clone());
         let tx = Tx {
             version: 2,

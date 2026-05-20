@@ -7,7 +7,7 @@ use crate::util::{
     var_int,
 };
 use bitcoin_hashes::sha256d as bh_sha256d; // SIMD opt
-use linked_hash_map::LinkedHashMap;
+use indexmap::IndexMap;
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::io;
@@ -43,8 +43,8 @@ impl Block {
         Ok(inputs)
     }
     /// Returns a map of the new outputs generated from this block including those spent within the block.
-    pub fn outputs(&self) -> LinkedHashMap<OutPoint, TxOut> {
-        let mut outputs = LinkedHashMap::new();
+    pub fn outputs(&self) -> IndexMap<OutPoint, TxOut> {
+        let mut outputs = IndexMap::new();
         for txn in &self.txns {
             let hash = txn.hash();
             for (index, out) in txn.outputs.iter().enumerate() {
@@ -67,7 +67,7 @@ impl Block {
         &self,
         height: i32,
         network: Network,
-        utxos: &LinkedHashMap<OutPoint, TxOut>,
+        utxos: &IndexMap<OutPoint, TxOut>,
         pregenesis_outputs: &HashSet<OutPoint>,
     ) -> Result<()> {
         if self.txns.is_empty() {

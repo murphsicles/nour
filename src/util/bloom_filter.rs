@@ -70,9 +70,11 @@ impl BloomFilter {
             ));
         }
         let bit_size = (self.filter.len() * 8) as u32;
+        let mut cursor = Cursor::new(data);
         for i in 0..self.num_hash_funcs {
+            cursor.set_position(0);
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % bit_size;
+            let c = murmur3_32(&mut cursor, seed.0).unwrap() % bit_size;
             self.filter[(c / 8) as usize] |= 1u8 << (c % 8);
         }
         Ok(())
@@ -84,9 +86,11 @@ impl BloomFilter {
     #[must_use]
     pub fn contains(&self, data: &[u8]) -> bool {
         let bit_size = (self.filter.len() * 8) as u32;
+        let mut cursor = Cursor::new(data);
         for i in 0..self.num_hash_funcs {
+            cursor.set_position(0);
             let seed = Wrapping(i as u32) * Wrapping(0xFBA4C795) + Wrapping(self.tweak);
-            let c = murmur3_32(&mut Cursor::new(data), seed.0).unwrap() % bit_size;
+            let c = murmur3_32(&mut cursor, seed.0).unwrap() % bit_size;
             if self.filter[(c / 8) as usize] & (1u8 << (c % 8)) == 0 {
                 return false;
             }
