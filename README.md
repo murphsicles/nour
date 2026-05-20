@@ -1,10 +1,11 @@
 # 💡 Nour
 
-A high-performance Bitcoin SV (BSV) toolkit for transactions, P2P networking, address handling, script evaluation, node connections, and wallet management. Designed for BSV's massive on-chain scaling with async networking, efficient cryptography, and compatibility with Galaxy's high-throughput capabilities.
+A Rust library for building Bitcoin SV (BSV) applications and infrastructure, providing robust tools for P2P networking, address handling, transaction processing, script evaluation, node connections, and wallet management. Nour is optimized for BSV’s massive on-chain scaling, supporting millions of transactions per second (TPS) with async networking, efficient cryptography, and compatibility with Galaxy’s high-throughput capabilities.
 
+![Rust](https://img.shields.io/badge/Rust-1.91+-orange?logo=rust)
 [![Crates.io](https://img.shields.io/crates/v/nour.svg)](https://crates.io/crates/nour)
-[![Dependencies](https://deps.rs/repo/murphsicles/nour/status.svg)](https://deps.rs/repo/murphsicles/nour)
-[![Build Status](https://github.com/murphsicles/nour/actions/workflows/ci.yml/badge.svg)](https://github.com/murphsicles/nour/actions)
+[![Dependencies](https://deps.rs/repo/github/murphsicles/nour/status.svg)](https://deps.rs/repo/github/murphsicles/nour)
+[![Build Status](https://github.com/murphsicles/nour/actions/workflows/rust.yml/badge.svg)](https://github.com/murphsicles/nour/actions)
 ![License](https://img.shields.io/badge/license-Open%20BSV-blue)
 
 ## Features
@@ -32,8 +33,8 @@ Or use the development version:
 
 ### System Requirements
 
-- **Compiler**: Stable toolchain with good dependency resolution.
-- **Dependencies**: `libzmq3-dev` (networking), `secp256k1`, `bitcoin_hashes`, `tokio`, `bsv58`.
+- **Rust**: Stable 1.91 or later.
+- **Dependencies**: `libzmq3-dev` (networking), `secp256k1`, `bitcoin_hashes`, `tokio`, `base58` (see Cargo.toml).
 - **OS**: Linux (recommended), macOS, Windows.
 
 Install dependencies on Ubuntu:
@@ -102,11 +103,11 @@ Clone the repository and run tests:
 
     git clone https://github.com/murphsicles/nour.git
     cd nour
-    make test
+    cargo test -- --nocapture
 
 Build the library:
 
-    make build
+    cargo build --release
 
 ## Known Limitations
 
