@@ -1,6 +1,6 @@
 [package]
 name = "nour"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 license-file = "LICENSE"
 description = "High-performance Bitcoin SV toolkit for transactions, scripts, P2P, and wallets"
