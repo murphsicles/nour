@@ -2,50 +2,43 @@
 
 ## Overview
 
-Nour is a Rust library providing a foundation for building applications on Bitcoin SV (BSV) using Rust. It offers robust tools for Bitcoin SV primitive execution and consensus mechanisms, including P2P networking, address handling, transaction processing, script evaluation, node connections, wallet management, and various utility functions.
+Nour is a Zeta library providing a foundation for building applications on Bitcoin SV (BSV). It offers P2P networking, address handling, transaction processing, script evaluation, node connections, wallet management, and various utility functions.
 
-The library supports both Mainnet and Testnet, including compatibility with the Genesis upgrade and protocol version 70016. Nour is designed to power BSV applications with incredibly high throughput, supporting millions of transactions per second (TPS) through optimizations like async networking, efficient cryptographic operations, and support for the high-performance scaling of Galaxy's microservices.
+The library supports Mainnet, Testnet, and STN, including compatibility with the Genesis upgrade and protocol version 70016.
 
 ### Key Features
 
-- **P2P Protocol**: Construct, serialize, and deserialize messages for the Bitcoin SV peer-to-peer network, with async support via Tokio for high-throughput connections.
-- **Address Handling**: Encode and decode Base58 addresses for Pay-to-PubKey-Hash (P2PKH) and Pay-to-Script-Hash (P2SH).
-- **Transaction Signing**: Create and sign transactions using BSV scripts, optimized for large transactions.
-- **Script Evaluation**: Execute and validate Bitcoin SV scripts with Genesis rules (e.g., P2SH sunset, large scripts).
-- **Node Connections**: Establish and manage connections to BSV nodes with message handling, supporting async I/O for scalable applications.
-- **Wallet Support**: Derive keys and parse mnemonics for wallet applications using BIP-32 and BIP-39.
+- **P2P Protocol**: Construct, serialize, and deserialize messages for the Bitcoin SV peer-to-peer network.
+- **Address Handling**: Encode and decode Base58 addresses for P2PKH and P2SH.
+- **Transaction Signing**: Create and sign transactions using BSV scripts.
+- **Script Evaluation**: Execute and validate BSV scripts with Genesis rules.
+- **Node Connections**: Establish and manage connections to BSV nodes with message handling.
+- **Wallet Support**: Derive keys and parse mnemonics using BIP-32 and BIP-39.
 - **Network Support**: Configurations for Mainnet, Testnet, and STN, including seed node iteration.
-- **Primitives**: Utilities for hashing (Hash160, SHA256d), bloom filters, variable integers, serialization, and reactive programming.
+- **Primitives**: Hashes (Hash160, SHA256d), bloom filters, variable integers, serialization.
 
 ## Installation
 
-Add the following to your `Cargo.toml`:
+Add to your `zorb.toml`:
 
     [dependencies]
-    nour = "1.0.0"
+    nour = "0.1"
 
-For the development version:
+Then pull it down:
 
-    [dependencies]
-    nour = { git = "https://github.com/murphsicles/nour", branch = "main" }
+    zorb install
 
 ### System Requirements
 
-- Rust: Stable version 1.91 or later.
-- Dependencies: Requires libraries like `libzmq3-dev` for networking, `secp256k1`, `bitcoin_hashes`, `tokio`, `base58`, and others (see Cargo.toml).
-- Operating Systems: Linux (recommended), macOS, Windows.
-
-## Crates
-
-The primary crate is `nour`, a library crate with no additional workspace crates. Dependencies include `bytes` (serialization), `secp256k1` (cryptography), `bitcoin_hashes` (hashing), `tokio` (async networking), `base58`, and others for bloom filters and reactive utilities, managed via Cargo.toml.
+- **Zeta compiler**: Latest stable.
+- **Dependencies**: Resolved automatically by zorb — see `zorb.toml` for the full list.
+- **Operating Systems**: Linux (recommended), macOS, Windows.
 
 ## Internal Structure
 
-The library is modular, with each module focusing on a specific domain. Below is a detailed description of each module, including public types, traits, functions, constants, and examples.
+### Main Library Entry (`src/lib.z`)
 
-### Main Library Entry (`src/lib.rs`)
-
-The crate root declares public modules:
+The library root declares public modules:
 - `address`: Address encoding/decoding.
 - `messages`: P2P protocol messages.
 - `network`: Network configurations.
@@ -55,355 +48,316 @@ The crate root declares public modules:
 - `util`: Miscellaneous helpers.
 - `wallet`: Wallet and key management.
 
-No root-level re-exports or additional types are specified.
-
-### Address Module (`src/address/mod.rs`)
+### Address Module (`src/address/mod.z`)
 
 Handles encoding and decoding of BSV addresses.
 
-**Public Enums**:
-- `AddressType`: `P2PKH` or `P2SH`.
+**Public Types**:
+- `AddressType`: enum with `P2PKH` and `P2SH` variants.
 
 **Public Functions**:
-- `addr_decode(addr: &str, network: Network) -> Result<(Vec<u8>, AddressType), Error>`: Decodes a Base58 address to public key hash and type.
+- `addr_decode(addr: string, network: Network) -> ([u8], AddressType)`: Decodes a Base58 address to public key hash and type.
   - Example:
-    ```rust
+    ```zeta
     use nour::address::addr_decode;
     use nour::network::Network;
 
-    let addr = "15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5";
-    let (pubkeyhash, addr_type) = addr_decode(&addr, Network::Mainnet).unwrap();
+    let (pubkeyhash, addr_type) = addr_decode("15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5", Network::Mainnet);
     ```
-- `addr_encode(pubkeyhash: &[u8], addr_type: AddressType, network: Network) -> String`: Encodes a public key hash to a Base58 address.
+- `addr_encode(pubkeyhash: [u8], addr_type: AddressType, network: Network) -> string`: Encodes a public key hash to a Base58 address.
   - Example:
-    ```rust
+    ```zeta
     use nour::address::{addr_encode, AddressType};
     use nour::network::Network;
-    use nour::util::hash160;
 
-    let pubkeyhash = hash160(&[0; 33]);
-    let addr = addr_encode(&pubkeyhash, AddressType::P2PKH, Network::Mainnet);
+    let pubkeyhash: [u8; 20] = [0; 20];
+    let addr = addr_encode(pubkeyhash, AddressType::P2PKH, Network::Mainnet);
     ```
 
-### Messages Module (`src/messages/mod.rs`)
+### Messages Module (`src/messages/mod.z`)
 
-Defines P2P messages with sync/async serialization/deserialization, optimized for high-throughput BSV networks.
+Defines P2P message types with serialization/deserialization for BSV's peer-to-peer network.
 
 **Public Structs**:
 - `Addr`: List of node addresses.
 - `Block`: Block of transactions.
 - `BlockHeader`: Block header.
-- `BlockLocator`: Specifies blocks for GetBlocks/GetHeaders.
-- `FeeFilter`: Minimum transaction fee (e.g., 250 sats/1000 bytes, down to 10 with Galaxy & Teranode).
-- `FilterAdd`: Adds data to bloom filter.
-- `FilterLoad`: Loads bloom filter parameters.
-- `Headers`: Collection of block headers (up to 20,000).
-- `Inv`: Inventory vectors (up to 500,000).
-- `InvVect`: Single inventory vector (tx/block/etc.).
-- `MerkleBlock`: Partial merkle tree for SPV (up to 10M txs).
+- `BlockLocator`: Block locator hashes for GetBlocks/GetHeaders.
+- `FeeFilter`: Minimum transaction fee filter.
+- `FilterAdd`: Data to add to bloom filter.
+- `FilterLoad`: Bloom filter parameters to load.
+- `Headers`: Collection of block headers.
+- `Inv`: Inventory vectors.
+- `InvVect`: Single inventory vector (tx, block, etc.).
+- `MerkleBlock`: Partial merkle tree for SPV (BIP-37).
 - `MessageHeader`: Header for all messages (magic, command, size, checksum).
 - `NodeAddr`: Network address (IPv6, port, services).
 - `NodeAddrEx`: Extended node address with timestamp.
-- `OutPoint`: Transaction output reference.
+- `OutPoint`: Transaction output reference (hash + index).
 - `Ping`: Ping/pong keepalive.
-- `Reject`: Rejection message with code/reason.
-- `SendCmpct`: Compact block support (BIP-152, optional in BSV).
+- `Reject`: Rejection message with code, reason, and data.
+- `SendCmpct`: Compact block support (BIP-152).
 - `Tx`: Transaction (version, inputs, outputs, lock_time).
-- `TxIn`: Transaction input (OutPoint, unlock script, sequence).
+- `TxIn`: Transaction input (outpoint, unlock script, sequence).
 - `TxOut`: Transaction output (satoshis, lock script).
-- `Version`: Handshake capabilities (protocol 70016).
+- `Version`: Handshake message (protocol 70016).
 
 **Public Enums**:
-- `Message`: Enum for all P2P messages (e.g., `Message::Version(version)`).
+- `Message`: Union type for all P2P messages.
 
-**Submodules**:
-- `commands`: Message command strings.
+**Constants**:
+- `PROTOCOL_VERSION = 70016`
+- `NODE_BITCOIN_CASH = 1`
+- `MAX_INV_ENTRIES = 50000`
+- `MAX_PAYLOAD_SIZE`: 4 GB
+- `MAX_HEADERS = 2000`
+- `MAX_BLOCK_LOCATOR_HASHES = 2000`
+- `MAX_TOTAL_TX = 10000000000`
+- `BLOOM_UPDATE_NONE = 0`
+- `BLOOM_UPDATE_ALL = 1`
+- `BLOOM_UPDATE_P2PUBKEY_ONLY = 2`
+- `COINBASE_OUTPOINT_HASH`: zero hash
+- `COINBASE_OUTPOINT_INDEX`: 0xFFFFFFFF
+- Rejection codes: `REJECT_MALFORMED = 0x01`, `REJECT_INVALID = 0x10`, `REJECT_OBSOLETE = 0x11`, `REJECT_DUPLICATE = 0x12`, `REJECT_NONSTANDARD = 0x40`, `REJECT_DUST = 0x41`, `REJECT_INSUFFICIENTFEE = 0x42`, `REJECT_CHECKPOINT = 0x43`
+- Inventory types: `INV_VECT_ERROR = 0`, `INV_VECT_TX = 1`, `INV_VECT_BLOCK = 2`, `INV_VECT_FILTERED_BLOCK = 3`, `INV_VECT_CMPCT_BLOCK = 4`
 
-**Constants** (selected):
-- `BLOOM_UPDATE_*`: Bloom filter flags (NONE=0, ALL=1, P2PUBKEY_ONLY=2).
-- `COINBASE_OUTPOINT_*`: Coinbase markers.
-- `INV_VECT_*`: Inventory types (ERROR=0, TX=1, BLOCK=2, etc.).
-- `REJECT_*`: Rejection codes (MALFORMED=0x01, INVALID=0x10, etc.).
-- `MAX_INV_ENTRIES=50000`, `MAX_PAYLOAD_SIZE=4GB`, `MAX_TOTAL_TX=10B`, `MAX_BLOCK_LOCATOR_HASHES=2000`, `MAX_HEADERS=2000`.
-
-**Examples**:
-- Decoding a message:
-    ```rust
-    use nour::messages::Message;
-    use nour::network::Network;
-    use std::io::Cursor;
-
-    let bytes = [/* byte array */];
-    let magic = Network::Mainnet.magic();
-    let message = Message::read(&mut Cursor::new(&bytes), magic).unwrap();
-    match message {
-        Message::Headers(headers) => println!("Received {} headers", headers.headers.len()),
-        _ => println!("Other message"),
-    }
-    ```
-- Async message handling:
-    ```rust
-    use nour::messages::{Message, Ping};
-    use nour::network::Network;
-    use tokio::io;
-
-    async fn handle_message() -> io::Result<()> {
-        let magic = Network::Mainnet.magic();
-        let bytes = [/* byte array */];
-        let message = Message::read_async(&mut io::Cursor::new(&bytes), magic).await.unwrap();
-        if let Message::Ping(ping) = message {
-            println!("Ping nonce: {}", ping.nonce);
-        }
-        Ok(())
-    }
-    ```
-- Constructing a transaction:
-    ```rust
-    use nour::messages::{OutPoint, Tx, TxIn, TxOut};
-    use nour::script::op_codes;
-    use nour::util::Hash256;
-
-    let tx = Tx {
-        version: 2,
-        inputs: vec![TxIn {
-            prev_output: OutPoint { hash: Hash256([0; 32]), index: 0 },
-            unlock_script: Script(vec![op_codes::OP_1]),
-            sequence: 0,
-        }],
-        outputs: vec![TxOut {
-            satoshis: 1000,
-            lock_script: Script(vec![op_codes::OP_DUP, op_codes::OP_HASH160, /* pubkeyhash */]),
-        }],
-        lock_time: 0,
-    };
-    ```
-
-### Network Module (`src/network/mod.rs`)
+### Network Module (`src/network/mod.z`)
 
 Provides network configurations and seed node iteration.
 
-**Public Enums**:
-- `Network`: Mainnet, Testnet, STN.
-
-**Public Structs**:
-- `NetworkConfig`: Network configuration with seeds and port.
-- `SeedIter`: Iterates through DNS seeds semi-randomly.
+**Public Types**:
+- `Network`: enum with `Mainnet`, `Testnet`, `STN` variants.
+- `NetworkConfig`: Configuration struct with port, magic bytes, genesis block, address version bytes.
+- `SeedIter`: DNS seed iterator.
 
 **Public Functions**:
-- `NetworkConfig::new(network_type: u8) -> Result<NetworkConfig>`: Creates a network configuration.
-- `network_config.port() -> u16`: Returns the default TCP port.
-- `network_config.magic() -> [u8; 4]`: Returns the magic bytes.
-- `network_config.genesis_block() -> Block`: Returns the genesis block.
-- `network_config.genesis_hash() -> Hash256`: Returns the genesis block hash.
-- `network_config.addr_pubkeyhash_flag() -> u8`: Version byte for P2PKH addresses.
-- `network_config.addr_script_flag() -> u8`: Version byte for P2SH addresses.
-- `network_config.seed_iter() -> SeedIter`: Creates a DNS seed iterator.
+- `network_config_new(network_type: i64) -> NetworkConfig`: Creates a network configuration.
+- `network_config_port(config: NetworkConfig) -> i64`: Returns the default TCP port.
+- `network_config_magic(config: NetworkConfig) -> [u8; 4]`: Returns the magic bytes.
+- `network_config_genesis_block(config: NetworkConfig) -> Block`: Returns the genesis block.
+- `network_config_genesis_hash(config: NetworkConfig) -> [u8; 32]`: Returns the genesis block hash.
+- `network_config_addr_pubkeyhash_flag(config: NetworkConfig) -> u8`: Version byte for P2PKH.
+- `network_config_addr_script_flag(config: NetworkConfig) -> u8`: Version byte for P2SH.
+- `seed_iter_new(config: NetworkConfig) -> SeedIter`: Creates a DNS seed iterator.
 
 **Examples**:
 - Iterate through seed nodes:
-    ```rust
-    use nour::network::NetworkConfig;
+    ```zeta
+    use nour::network::{network_config_new, seed_iter_next};
 
-    let network = NetworkConfig::new(0).unwrap(); // Mainnet
-    for (ip, port) in network.seed_iter() {
-        println!("Seed node {}:{}", ip, port);
+    let network = network_config_new(0); // Mainnet
+    let mut iter = seed_iter_new(network);
+    while let Some((ip, port)) = seed_iter_next(iter) {
+        // Connect to seed node
     }
     ```
 
-### Peer Module (`src/peer/mod.rs`)
+### Peer Module (`src/peer/mod.z`)
 
-Manages node connections and message handling with async support.
+Manages node connections and message sending/receiving.
 
 **Public Structs**:
 - `Peer`: Node for sending/receiving messages.
-- `PeerConnected`: Connection established event.
-- `PeerDisconnected`: Connection terminated event.
-- `PeerMessage`: Received message event.
-- `SVPeerFilter`: Filters BSV full nodes.
-
-**Public Traits**:
-- `PeerFilter`: Filters peers by version.
+- `SVPeerFilter`: Filters for BSV full nodes.
 
 **Public Functions**:
-- `Peer::connect(ip, port, network: NetworkConfig, version: Version, filter: Arc<dyn PeerFilter>) -> Arc<Peer>`: Connects to a peer.
-- `peer.send(&message) -> Result<()>`: Sends a message.
-- `peer.send_async(&message) -> impl Future<Output = Result<()>>`: Sends asynchronously.
-- `peer.connected_event() -> impl Observable<PeerConnected>`: Observable for connection events.
-- Similar for `disconnected_event()`, `messages()`.
+- `peer_connect(ip: string, port: i64, network: Network, version: Version, filter: SVPeerFilter) -> Peer`: Connects to a peer.
+- `peer_send(peer: Peer, message: Message) -> i64`: Sends a message synchronously.
+- `peer_send_async(peer: Peer, message: Message)`: Sends a message asynchronously (requires `async` feature).
+- `peer_connected(peer: Peer) -> bool`: Returns true if connected.
+- `peer_disconnect(peer: Peer)`: Disconnects.
 
 **Examples**:
-- Async connection:
-    ```rust
+- Connect and send a ping:
+    ```zeta
     use nour::messages::{Message, Ping, Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION};
-    use nour::network::NetworkConfig;
-    use nour::peer::{Peer, SVPeerFilter};
-    use nour::util::secs_since;
-    use std::time::UNIX_EPOCH;
-    use tokio;
+    use nour::network::Network;
+    use nour::peer::{peer_connect, peer_send, SVPeerFilter};
 
-    #[tokio::main]
-    async fn main() -> Result<()> {
+    fn main() {
         let version = Version {
             version: PROTOCOL_VERSION,
             services: NODE_BITCOIN_CASH,
-            timestamp: secs_since(UNIX_EPOCH) as i64,
-            ..Default::default()
+            timestamp: 0,
+            user_agent: "/nour:0.1/".to_string(),
+            start_height: 0,
+            relay: true,
         };
-        let peer = Peer::connect("127.0.0.1", 8333, NetworkConfig::new(0).unwrap(), version, SVPeerFilter::new(0));
-        let ping = Message::Ping(Ping { nonce: 0 });
-        peer.send_async(&ping).await.unwrap();
-        Ok(())
+        let peer = peer_connect("127.0.0.1", 8333, Network::Mainnet, version, SVPeerFilter::new(0));
+        _ = peer_send(peer, Message::Ping(Ping { nonce: 0 }));
     }
     ```
 
-### Script Module (`src/script/mod.rs`)
+### Script Module (`src/script/mod.z`)
 
-Handles script opcodes and interpretation.
+Handles script opcodes, stack evaluation, and signature checking.
 
-**Public Structs**:
-- `Script`: Transaction script.
-- `TransactionChecker`: Validates transaction spends.
-- `TransactionlessChecker`: Fails transaction checks.
-
-**Public Traits**:
-- `Checker`: External value checks for scripts.
+**Public Types**:
+- `Script`: Transaction script with byte data and length tracking.
+- `EvalChecker`: Checker interface for transaction validation.
+- `TransactionChecker`: Full transaction validation.
+- `TransactionlessChecker`: Checker that cannot validate spends.
 
 **Submodules**:
-- `op_codes`: Script opcodes (e.g., `OP_DUP`, `OP_HASH160`).
+- `op_codes`: All BSV script opcodes (`OP_DUP`, `OP_HASH160`, `OP_CHECKSIG`, etc.).
+- `stack`: Stack data structure for script evaluation.
+- `interpreter`: Main script evaluator.
+- `checker`: Signature and transaction checking.
 
 **Constants**:
-- `NO_FLAGS`: Genesis rules.
-- `PREGENESIS_RULES`: Pre-Genesis rules.
+- `NO_FLAGS = 0`: Genesis rules.
+- `PREGENESIS_RULES`: Pre-Genesis compatibility flags.
+- `MAX_SCRIPT_SIZE = 10000`
+- `MAX_STACK_SIZE = 1000`
+- `MAX_OP_COUNT = 201`
 
 **Public Functions**:
-- `script.eval(&mut checker, flags) -> Result<()>`: Evaluates a script.
+- `script_new() -> Script`: Creates an empty script.
+- `script_append(script: Script, byte: u8)`: Appends a byte.
+- `script_append_data(script: Script, data: [u8]) -> i64`: Appends pushdata.
+- `script_append_num(script: Script, n: i64) -> i64`: Appends a number.
+- `script_eval(script: Script, checker: EvalChecker, flags: i64) -> i64`: Evaluates the script.
+- `script_debug(script: Script) -> string`: Returns debug representation.
+- `next_op(pos: i64, data: [u8]) -> i64`: Returns position of the next opcode.
 
 **Examples**:
 - Evaluate a simple script:
-    ```rust
-    use nour::script::{op_codes, Script, TransactionlessChecker, NO_FLAGS};
+    ```zeta
+    use nour::script::{script_new, script_append, script_append_num, script_eval, TransactionlessChecker, NO_FLAGS, op_codes};
 
-    let mut script = Script::new();
-    script.append(op_codes::OP_10);
-    script.append(op_codes::OP_5);
-    script.append(op_codes::OP_DIV);
-    script.eval(&mut TransactionlessChecker {}, NO_FLAGS).unwrap();
+    fn main() {
+        let mut s = script_new();
+        _ = script_append_num(s, 10);
+        _ = script_append_num(s, 5);
+        script_append(s, op_codes::OP_DIV);
+        _ = script_eval(s, TransactionlessChecker {}, NO_FLAGS);
+    }
     ```
 
-### Transaction Module (`src/transaction/mod.rs`)
+### Transaction Module (`src/transaction/mod.z`)
 
 Supports building and signing transactions.
 
-**Public Structs**:
-- `SigHashCache`: Caches sighash computations.
+**Submodules**:
+- `p2pkh`: P2PKH script creation and extraction.
+- `sighash`: BIP-143 forkid sighash and legacy sighash computation.
 
 **Public Functions**:
-- `generate_signature(private_key: &[u8;32], sighash: &Hash256, sighash_type: u32) -> Result<Vec<u8>>`: Generates a signature for a sighash.
+- `generate_signature(private_key: [u8; 32], sighash: [u8; 32], sighash_type: u8) -> [u8]`: Generates a DER-encoded ECDSA signature.
 
-**Submodules**:
-- `p2pkh`: P2PKH scripts (`create_lock_script`, `create_unlock_script`).
-- `sighash`: Sighash helpers (`sighash`, `SIGHASH_FORKID`, etc.).
+**Sighash types** (defined in `sighash.z`):
+- `SIGHASH_ALL = 1`
+- `SIGHASH_NONE = 2`
+- `SIGHASH_SINGLE = 3`
+- `SIGHASH_FORKID = 0x40`
+- `SIGHASH_ANYONECANPAY = 0x80`
+- `SIGHASH_ALL_FORKID = SIGHASH_ALL | SIGHASH_FORKID`
+- `SIGHASH_SINGLE_ANYONECANPAY_FORKID = SIGHASH_SINGLE | SIGHASH_FORKID | SIGHASH_ANYONECANPAY`
 
 **Examples**:
-- Signing a transaction:
-    ```rust
-    use nour::messages::{Tx, TxIn, TxOut};
+- Sign a P2PKH transaction input:
+    ```zeta
+    use nour::transaction::{generate_signature, SIGHASH_ALL_FORKID};
     use nour::transaction::p2pkh::{create_lock_script, create_unlock_script};
-    use nour::transaction::sighash::{sighash, SigHashCache, SIGHASH_FORKID, SIGHASH_ALL};
-    use nour::util::{hash160, Hash256};
+    use nour::transaction::sighash::sighash;
 
-    let private_key = [/* 32-byte key */];
-    let public_key = [/* 33-byte pubkey */];
-    let tx = Tx { /* initialize */ };
-    let mut cache = SigHashCache::new();
-    let sighash = sighash(&tx, 0, &[], SIGHASH_ALL | SIGHASH_FORKID, 0, &mut cache).unwrap();
-    let signature = generate_signature(&private_key, &sighash, SIGHASH_ALL | SIGHASH_FORKID).unwrap();
-    tx.inputs[0].unlock_script = create_unlock_script(&signature, &public_key);
+    fn main() {
+        let private_key: [u8; 32] = [0; 32];
+        let public_key: [u8; 33] = [2; 33];
+        let tx: Tx = Tx { /* create transaction */ };
+        let sighash_bytes = sighash(tx, 0, [], SIGHASH_ALL_FORKID, 0);
+        let signature = generate_signature(private_key, sighash_bytes, SIGHASH_ALL_FORKID);
+        // Assign unlock script
+    }
     ```
 
-### Util Module (`src/util/mod.rs`)
+### Util Module (`src/util/mod.z`)
 
-Miscellaneous helpers.
+Miscellaneous helpers and utilities.
 
 **Public Structs**:
-- `BloomFilter`: Bloom filter for SPV (max 36000 bytes, 50 hash funcs).
-- `Hash160`: 160-bit hash for addresses.
-- `Hash256`: 256-bit hash for blocks/transactions.
-- `Bits`: Bit manipulation for mnemonics.
-
-**Public Enums**:
-- `Error`: Standard error type (e.g., `IOError`, `BadData`).
-
-**Public Traits**:
-- `Serializable`: Sync serialization/deserialization.
-- `AsyncSerializable`: Async serialization/deserialization.
+- `BloomFilter`: Bloom filter for SPV (max 36000 bytes, 50 hash functions).
+- `Bits`: Bit-level data structure for mnemonic operations.
 
 **Public Functions**:
-- `hash160(data: &[u8]) -> Hash160`: RIPEMD160(SHA256(data)).
-- `sha256d(data: &[u8]) -> Hash256`: Double SHA256.
-- `var_int::{read, write, size}`: Variable integer encoding.
-- `secs_since(time: SystemTime) -> u64`: Seconds since time.
-
-**Type Aliases**:
-- `Result<T>`: `std::result::Result<T, Error>`.
+- `hash160(data: [u8]) -> [u8; 20]`: RIPEMD160(SHA256(data)).
+- `sha256d(data: [u8]) -> [u8; 32]`: Double SHA256.
+- `var_int_size(n: i64) -> i64`: Returns the size of a variable integer.
+- `var_int_write(n: i64) -> [u8]`: Writes a variable integer to bytes.
+- `var_int_read(data: [u8]) -> (i64, i64)`: Reads a variable integer, returns (value, new_offset).
+- `bits_new() -> Bits`: Creates an empty Bits array.
+- `bits_from_slice(data: [u8], len: i64) -> Bits`: Creates Bits from a slice.
+- `bits_append(bits: Bits, other: Bits)`: Appends data.
+- `bits_extract(bits: Bits, i: i64, len: i64) -> i64`: Extracts bits.
+- `bits_lshift(v: [u8], n: i64) -> [u8]`: Left-shifts a byte array.
+- `bits_rshift(v: [u8], n: i64) -> [u8]`: Right-shifts a byte array.
 
 **Constants**:
-- `BITCOIN_CASH_FORK_HEIGHT_*`, `GENESIS_UPGRADE_HEIGHT_*`: Fork heights.
-- `BLOOM_FILTER_MAX_*`: Bloom filter limits.
-
-**Submodules**:
-- `rx`: Reactive programming (`Observable`, `Observer`).
+- *Fork heights*: `BITCOIN_CASH_FORK_HEIGHT_MAINNET`, `BITCOIN_CASH_FORK_HEIGHT_TESTNET`, `GENESIS_UPGRADE_HEIGHT_MAINNET`, `GENESIS_UPGRADE_HEIGHT_TESTNET`, `GENESIS_UPGRADE_HEIGHT_STN`.
+- *Bloom filter limits*: `BLOOM_FILTER_MAX_SIZE = 36000`, `BLOOM_FILTER_MAX_HASH_FUNCS = 50`.
 
 **Examples**:
 - Hashing:
-    ```rust
-    use nour::util::{hash160, Hash256};
+    ```zeta
+    use nour::util::{hash160, sha256d};
 
-    let data = b"test";
-    let h160 = hash160(data);
-    let h256 = Hash256::sha256d(data);
+    fn main() {
+        let data: [u8] = [0x74, 0x65, 0x73, 0x74]; // "test"
+        let h160 = hash160(data);
+        let h256 = sha256d(data);
+    }
     ```
 
-### Wallet Module (`src/wallet/mod.rs`)
+### Wallet Module (`src/wallet/mod.z`)
 
-Wallet and key management with BIP-32/BIP-39.
+Wallet and key management with BIP-32 and BIP-39.
 
-**Public Structs**:
-- `ExtendedKey`: BIP-32 xpub/xprv (78 bytes).
-
-**Public Enums**:
-- `ExtendedKeyType`: Private or Public.
-- `Wordlist`: Languages (English, Spanish, etc.).
-
-**Public Functions**:
-- `derive_extended_key(input: &str, path: &str, network: Network, secp: &Secp256k1) -> Result<ExtendedKey>`: Derives key from seed or parent (m/0H/1).
-- `extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedKey>`: Master private key from seed.
-- `load_wordlist(language: Wordlist) -> &'static [String]`: Loads 2048-word list.
-- `mnemonic_encode(data: &[u8], word_list: &[String]) -> Result<Vec<String>>`: Encodes to BIP-39 mnemonic.
-- `mnemonic_decode(mnemonic: &[String], word_list: &[String]) -> Result<Vec<u8>>`: Decodes BIP-39 mnemonic.
+**Public Types**:
+- `ExtendedKey`: BIP-32 extended public or private key.
+- `ExtendedKeyType`: enum with `Private` and `Public` variants.
 
 **Constants**:
-- `HARDENED_KEY=0x80000000`: Hardened derivation.
-- `MAINNET_PRIVATE_EXTENDED_KEY`, etc.: xprv/xpub prefixes.
-- `MAX_DATA_LEN=64`: Mnemonic data limit (512 bits).
+- `HARDENED_KEY = 0x80000000`
+- `MAINNET_PRIVATE_EXTENDED_KEY`: xprv prefix bytes
+- `MAINNET_PUBLIC_EXTENDED_KEY`: xpub prefix bytes
+- `TESTNET_PRIVATE_EXTENDED_KEY`: tprv prefix bytes
+- `TESTNET_PUBLIC_EXTENDED_KEY`: tpub prefix bytes
+- `MAX_DATA_LEN = 64`: Mnemonic data limit (512 bits)
+
+**Public Functions**:
+- `hmac_sha512(key: [u8], data: [u8]) -> [u8; 64]`: HMAC-SHA512.
+- `derive_child(key: ExtendedKey, index: i64) -> ExtendedKey`: Derives a child key.
+- `extended_key_from_seed(seed: [u8], network: Network) -> ExtendedKey`: Creates master key from seed.
+- `derive_extended_key(input: [u8], path: string, network: Network) -> ExtendedKey`: Derives key from path (e.g., "m/44'/0'/0'").
+- `encode_extended_key(key: ExtendedKey) -> string`: Encodes to Base58Check.
+- `decode_extended_key(encoded: string) -> ExtendedKey`: Decodes from Base58Check.
+- `mnemonic_encode(data: [u8], wordlist: [string]) -> [string]`: Encodes data to BIP-39 mnemonic.
+- `mnemonic_decode(mnemonic: [string], wordlist: [string]) -> [u8]`: Decodes BIP-39 mnemonic to seed.
 
 **Examples**:
-- Derive key from mnemonic:
-    ```rust
+- Derive a key from a seed:
+    ```zeta
     use nour::network::Network;
-    use nour::wallet::{load_wordlist, mnemonic_decode, derive_extended_key, Wordlist};
-    use secp256k1::Secp256k1;
+    use nour::wallet::{extended_key_from_seed, derive_extended_key, encode_extended_key};
 
-    let secp = Secp256k1::new();
-    let wordlist = load_wordlist(Wordlist::English);
-    let mnemonic = ["word", /* 12-24 words */].iter().map(String::from).collect::<Vec<_>>();
-    let seed = mnemonic_decode(&mnemonic, &wordlist).unwrap();
-    let xprv = derive_extended_key(&hex::encode(seed), "m/44H/0H/0H", Network::Mainnet, &secp).unwrap();
+    fn main() {
+        let seed: [u8; 64] = [0; 64]; // 512-bit seed
+        let master = extended_key_from_seed(seed, Network::Mainnet);
+        let child = derive_extended_key(master, "m/44'/0'/0'/0/0", Network::Mainnet);
+        let encoded = encode_extended_key(child);
+        print(encoded);
+    }
     ```
 
 ## Additional Files
 
-- **.github/workflows/**: CI pipelines for testing and publishing.
-- `.gitignore`, `CHANGELOG.md`, `LICENSE` (Open BSV), `README.md`: Standard project files.
+- **zorb.toml**: Package manifest.
+- **FILETREE**: Directory structure listing.
+- **LICENSE**: Open BSV License.
+- **README.md**: Quick-start guide.
 
-This documentation covers the full Nour crate, optimized for BSV’s high-throughput applications. For further details, refer to the source code or generated Rust docs.
+The original Rust implementation is preserved on the [`rust`](https://github.com/murphsicles/nour/tree/rust) branch.
+
+---
+
+This documentation covers the full Nour Zeta library. For further details, refer to the source code.
