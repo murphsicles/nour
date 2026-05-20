@@ -1,0 +1,66 @@
+// Transaction output for Bitcoin SV P2P messages.
+
+struct TxOut {
+    satoshis: i64,
+    lock_script: [u8],
+}
+
+const MAX_LOCK_SCRIPT_LEN: usize = 10000
+
+fn tx_out_size(to: TxOut) -> usize {
+    8 + var_int_size(to.lock_script.len() as u64) + to.lock_script.len()
+}
+
+fn tx_out_read(data: [u8], offset: usize) -> (TxOut, usize) {
+    let mut o = offset
+
+    let sats_bytes = data[o..o+8]
+    let satoshis = (sats_bytes[0] as i64) |
+                   ((sats_bytes[1] as i64) << 8) |
+                   ((sats_bytes[2] as i64) << 16) |
+                   ((sats_bytes[3] as i64) << 24) |
+                   ((sats_bytes[4] as i64) << 32) |
+                   ((sats_bytes[5] as i64) << 40) |
+                   ((sats_bytes[6] as i64) << 48) |
+                   ((sats_bytes[7] as i64) << 56)
+    o += 8
+
+    let (script_len, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let script_len_usize = script_len as usize
+
+    let lock_script = data[o..o + script_len_usize]
+    o += script_len_usize
+
+    (TxOut { satoshis, lock_script }, o)
+}
+
+fn tx_out_write(to: TxOut) -> [u8] {
+    let sz = tx_out_size(to)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    out[o] = (to.satoshis & 0xff) as u8
+    out[o+1] = ((to.satoshis >> 8) & 0xff) as u8
+    out[o+2] = ((to.satoshis >> 16) & 0xff) as u8
+    out[o+3] = ((to.satoshis >> 24) & 0xff) as u8
+    out[o+4] = ((to.satoshis >> 32) & 0xff) as u8
+    out[o+5] = ((to.satoshis >> 40) & 0xff) as u8
+    out[o+6] = ((to.satoshis >> 48) & 0xff) as u8
+    out[o+7] = ((to.satoshis >> 56) & 0xff) as u8
+    o += 8
+
+    let vi_bytes = var_int_write(to.lock_script.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    out[o..o + to.lock_script.len()] = to.lock_script
+    o += to.lock_script.len()
+
+    out
+}
+
+fn tx_out_validate(to: TxOut) -> bool {
+    to.satoshis >= 0
+}

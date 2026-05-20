@@ -1,0 +1,82 @@
+// FilterLoad message for Bitcoin SV P2P, setting bloom filters (BIP-37).
+
+struct BloomFilter {
+    filter: [u8],
+    num_hash_funcs: u32,
+    tweak: u32,
+}
+
+struct FilterLoad {
+    bloom_filter: BloomFilter,
+    flags: u8,
+}
+
+const BLOOM_UPDATE_NONE: u8 = 0
+const BLOOM_UPDATE_ALL: u8 = 1
+const BLOOM_UPDATE_P2PUBKEY_ONLY: u8 = 2
+
+fn filter_load_size(fl: FilterLoad) -> usize {
+    var_int_size(fl.bloom_filter.filter.len() as u64) + fl.bloom_filter.filter.len() + 9
+}
+
+fn filter_load_read(data: [u8], offset: usize) -> (FilterLoad, usize) {
+    let mut o = offset
+
+    let (num_filters, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let filter = data[o..o + (num_filters as usize)]
+    o += num_filters as usize
+
+    let nf_bytes = data[o..o+4]
+    let num_hash_funcs = (nf_bytes[0] as u32) |
+                         ((nf_bytes[1] as u32) << 8) |
+                         ((nf_bytes[2] as u32) << 16) |
+                         ((nf_bytes[3] as u32) << 24)
+    o += 4
+
+    let tw_bytes = data[o..o+4]
+    let tweak = (tw_bytes[0] as u32) |
+                ((tw_bytes[1] as u32) << 8) |
+                ((tw_bytes[2] as u32) << 16) |
+                ((tw_bytes[3] as u32) << 24)
+    o += 4
+
+    let flags = data[o]
+    o += 1
+
+    (FilterLoad {
+        bloom_filter: BloomFilter { filter, num_hash_funcs, tweak },
+        flags,
+    }, o)
+}
+
+fn filter_load_write(fl: FilterLoad) -> [u8] {
+    let sz = filter_load_size(fl)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi_bytes = var_int_write(fl.bloom_filter.filter.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    out[o..o + fl.bloom_filter.filter.len()] = fl.bloom_filter.filter
+    o += fl.bloom_filter.filter.len()
+
+    out[o] = (fl.bloom_filter.num_hash_funcs & 0xff) as u8
+    out[o+1] = ((fl.bloom_filter.num_hash_funcs >> 8) & 0xff) as u8
+    out[o+2] = ((fl.bloom_filter.num_hash_funcs >> 16) & 0xff) as u8
+    out[o+3] = ((fl.bloom_filter.num_hash_funcs >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = (fl.bloom_filter.tweak & 0xff) as u8
+    out[o+1] = ((fl.bloom_filter.tweak >> 8) & 0xff) as u8
+    out[o+2] = ((fl.bloom_filter.tweak >> 16) & 0xff) as u8
+    out[o+3] = ((fl.bloom_filter.tweak >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = fl.flags
+    o += 1
+
+    out
+}

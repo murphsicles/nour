@@ -1,0 +1,172 @@
+// Version message for Bitcoin SV P2P handshake, defining node capabilities.
+
+struct Version {
+    version: u32,
+    services: u64,
+    timestamp: i64,
+    recv_addr: NodeAddr,
+    tx_addr: NodeAddr,
+    nonce: u64,
+    user_agent: [u8],
+    start_height: i32,
+    relay: bool,
+}
+
+const PROTOCOL_VERSION: u32 = 70016
+const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = 70001
+const UNKNOWN_IP: [u8] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 127, 0, 0, 1]
+const NODE_NONE: u64 = 0
+const NODE_NETWORK: u64 = 1
+const NODE_BITCOIN_CASH: u64 = 1 << 5
+const MAX_USER_AGENT_LEN: usize = 256
+
+fn version_size(v: Version) -> usize {
+    33 + 26 + 26 + var_int_size(v.user_agent.len() as u64) + v.user_agent.len()
+}
+
+fn version_read(data: [u8], offset: usize) -> (Version, usize) {
+    let mut o = offset
+
+    let v_bytes = data[o..o+4]
+    let version = (v_bytes[0] as u32) |
+                  ((v_bytes[1] as u32) << 8) |
+                  ((v_bytes[2] as u32) << 16) |
+                  ((v_bytes[3] as u32) << 24)
+    o += 4
+
+    let svc_bytes = data[o..o+8]
+    let services = (svc_bytes[0] as u64) |
+                   ((svc_bytes[1] as u64) << 8) |
+                   ((svc_bytes[2] as u64) << 16) |
+                   ((svc_bytes[3] as u64) << 24) |
+                   ((svc_bytes[4] as u64) << 32) |
+                   ((svc_bytes[5] as u64) << 40) |
+                   ((svc_bytes[6] as u64) << 48) |
+                   ((svc_bytes[7] as u64) << 56)
+    o += 8
+
+    let ts_bytes = data[o..o+8]
+    let timestamp = (ts_bytes[0] as i64) |
+                    ((ts_bytes[1] as i64) << 8) |
+                    ((ts_bytes[2] as i64) << 16) |
+                    ((ts_bytes[3] as i64) << 24) |
+                    ((ts_bytes[4] as i64) << 32) |
+                    ((ts_bytes[5] as i64) << 40) |
+                    ((ts_bytes[6] as i64) << 48) |
+                    ((ts_bytes[7] as i64) << 56)
+    o += 8
+
+    let (recv_addr, new_o) = node_addr_read(data, o)
+    o = new_o
+
+    let (tx_addr, new_o) = node_addr_read(data, o)
+    o = new_o
+
+    let n_bytes = data[o..o+8]
+    let nonce = (n_bytes[0] as u64) |
+                ((n_bytes[1] as u64) << 8) |
+                ((n_bytes[2] as u64) << 16) |
+                ((n_bytes[3] as u64) << 24) |
+                ((n_bytes[4] as u64) << 32) |
+                ((n_bytes[5] as u64) << 40) |
+                ((n_bytes[6] as u64) << 48) |
+                ((n_bytes[7] as u64) << 56)
+    o += 8
+
+    let (ua_size, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let ua_usize = ua_size as usize
+    let user_agent = data[o..o + ua_usize]
+    o += ua_usize
+
+    let sh_bytes = data[o..o+4]
+    let start_height = (sh_bytes[0] as i32) |
+                       ((sh_bytes[1] as i32) << 8) |
+                       ((sh_bytes[2] as i32) << 16) |
+                       ((sh_bytes[3] as i32) << 24)
+    o += 4
+
+    let relay = data[o] == 0x01
+    o += 1
+
+    (Version { version, services, timestamp, recv_addr, tx_addr, nonce, user_agent, start_height, relay }, o)
+}
+
+fn version_write(v: Version) -> [u8] {
+    let sz = version_size(v)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    out[o] = (v.version & 0xff) as u8
+    out[o+1] = ((v.version >> 8) & 0xff) as u8
+    out[o+2] = ((v.version >> 16) & 0xff) as u8
+    out[o+3] = ((v.version >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = (v.services & 0xff) as u8
+    out[o+1] = ((v.services >> 8) & 0xff) as u8
+    out[o+2] = ((v.services >> 16) & 0xff) as u8
+    out[o+3] = ((v.services >> 24) & 0xff) as u8
+    out[o+4] = ((v.services >> 32) & 0xff) as u8
+    out[o+5] = ((v.services >> 40) & 0xff) as u8
+    out[o+6] = ((v.services >> 48) & 0xff) as u8
+    out[o+7] = ((v.services >> 56) & 0xff) as u8
+    o += 8
+
+    out[o] = (v.timestamp & 0xff) as u8
+    out[o+1] = ((v.timestamp >> 8) & 0xff) as u8
+    out[o+2] = ((v.timestamp >> 16) & 0xff) as u8
+    out[o+3] = ((v.timestamp >> 24) & 0xff) as u8
+    out[o+4] = ((v.timestamp >> 32) & 0xff) as u8
+    out[o+5] = ((v.timestamp >> 40) & 0xff) as u8
+    out[o+6] = ((v.timestamp >> 48) & 0xff) as u8
+    out[o+7] = ((v.timestamp >> 56) & 0xff) as u8
+    o += 8
+
+    let recv_bytes = node_addr_write(v.recv_addr)
+    out[o..o+26] = recv_bytes
+    o += 26
+
+    let tx_bytes = node_addr_write(v.tx_addr)
+    out[o..o+26] = tx_bytes
+    o += 26
+
+    out[o] = (v.nonce & 0xff) as u8
+    out[o+1] = ((v.nonce >> 8) & 0xff) as u8
+    out[o+2] = ((v.nonce >> 16) & 0xff) as u8
+    out[o+3] = ((v.nonce >> 24) & 0xff) as u8
+    out[o+4] = ((v.nonce >> 32) & 0xff) as u8
+    out[o+5] = ((v.nonce >> 40) & 0xff) as u8
+    out[o+6] = ((v.nonce >> 48) & 0xff) as u8
+    out[o+7] = ((v.nonce >> 56) & 0xff) as u8
+    o += 8
+
+    let ua_vi = var_int_write(v.user_agent.len() as u64)
+    out[o..o+ua_vi.len()] = ua_vi
+    o += ua_vi.len()
+
+    out[o..o + v.user_agent.len()] = v.user_agent
+    o += v.user_agent.len()
+
+    out[o] = (v.start_height & 0xff) as u8
+    out[o+1] = ((v.start_height >> 8) & 0xff) as u8
+    out[o+2] = ((v.start_height >> 16) & 0xff) as u8
+    out[o+3] = ((v.start_height >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = if v.relay { 0x01 } else { 0x00 }
+    o += 1
+
+    out
+}
+
+fn version_validate(v: Version) -> bool {
+    if v.version < MIN_SUPPORTED_PROTOCOL_VERSION {
+        return false
+    }
+    if v.user_agent.len() > MAX_USER_AGENT_LEN {
+        return false
+    }
+    true
+}

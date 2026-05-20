@@ -1,0 +1,116 @@
+// Block header for Bitcoin SV P2P messages.
+
+struct BlockHeader {
+    version: u32,
+    prev_hash: [u8],
+    merkle_root: [u8],
+    timestamp: u32,
+    bits: u32,
+    nonce: u32,
+}
+
+const BLOCK_HEADER_SIZE: usize = 80
+
+fn block_header_size() -> usize {
+    BLOCK_HEADER_SIZE
+}
+
+fn block_header_read(data: [u8], offset: usize) -> (BlockHeader, usize) {
+    let mut o = offset
+
+    let v_bytes = data[o..o+4]
+    let version = (v_bytes[0] as u32) |
+                  ((v_bytes[1] as u32) << 8) |
+                  ((v_bytes[2] as u32) << 16) |
+                  ((v_bytes[3] as u32) << 24)
+    o += 4
+
+    let prev_hash = data[o..o+32]
+    o += 32
+
+    let merkle_root = data[o..o+32]
+    o += 32
+
+    let ts_bytes = data[o..o+4]
+    let timestamp = (ts_bytes[0] as u32) |
+                    ((ts_bytes[1] as u32) << 8) |
+                    ((ts_bytes[2] as u32) << 16) |
+                    ((ts_bytes[3] as u32) << 24)
+    o += 4
+
+    let b_bytes = data[o..o+4]
+    let bits = (b_bytes[0] as u32) |
+               ((b_bytes[1] as u32) << 8) |
+               ((b_bytes[2] as u32) << 16) |
+               ((b_bytes[3] as u32) << 24)
+    o += 4
+
+    let n_bytes = data[o..o+4]
+    let nonce = (n_bytes[0] as u32) |
+                ((n_bytes[1] as u32) << 8) |
+                ((n_bytes[2] as u32) << 16) |
+                ((n_bytes[3] as u32) << 24)
+    o += 4
+
+    (BlockHeader { version, prev_hash, merkle_root, timestamp, bits, nonce }, o)
+}
+
+fn block_header_write(h: BlockHeader) -> [u8] {
+    let mut out = [0; 80]
+    let mut o = 0
+
+    out[o] = (h.version & 0xff) as u8
+    out[o+1] = ((h.version >> 8) & 0xff) as u8
+    out[o+2] = ((h.version >> 16) & 0xff) as u8
+    out[o+3] = ((h.version >> 24) & 0xff) as u8
+    o += 4
+
+    out[o..o+32] = h.prev_hash
+    o += 32
+
+    out[o..o+32] = h.merkle_root
+    o += 32
+
+    out[o] = (h.timestamp & 0xff) as u8
+    out[o+1] = ((h.timestamp >> 8) & 0xff) as u8
+    out[o+2] = ((h.timestamp >> 16) & 0xff) as u8
+    out[o+3] = ((h.timestamp >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = (h.bits & 0xff) as u8
+    out[o+1] = ((h.bits >> 8) & 0xff) as u8
+    out[o+2] = ((h.bits >> 16) & 0xff) as u8
+    out[o+3] = ((h.bits >> 24) & 0xff) as u8
+    o += 4
+
+    out[o] = (h.nonce & 0xff) as u8
+    out[o+1] = ((h.nonce >> 8) & 0xff) as u8
+    out[o+2] = ((h.nonce >> 16) & 0xff) as u8
+    out[o+3] = ((h.nonce >> 24) & 0xff) as u8
+    o += 4
+
+    out
+}
+
+fn block_header_hash(h: BlockHeader) -> [u8] {
+    let bytes = block_header_write(h)
+    sha256d(bytes)
+}
+
+fn block_header_difficulty_target(bits: u32) -> ([u8], bool) {
+    let exp = (bits >> 24) as usize
+    if exp < 3 || exp > 32 {
+        return ([0; 32], false)
+    }
+    let mant = bits & 0x007FFFFF
+    let mant_bytes = [(mant >> 24) as u8, ((mant >> 16) & 0xff) as u8, ((mant >> 8) & 0xff) as u8, (mant & 0xff) as u8]
+    let mant_start = if exp >= 3 { exp - 3 } else { 0 }
+    if mant_start + 3 > 32 {
+        return ([0; 32], false)
+    }
+    let mut target = [0; 32]
+    target[mant_start] = mant_bytes[3]
+    target[mant_start + 1] = mant_bytes[2]
+    target[mant_start + 2] = mant_bytes[1]
+    (target, true)
+}

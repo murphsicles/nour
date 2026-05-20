@@ -1,0 +1,100 @@
+//! DNS seed iterator for Bitcoin SV peer discovery.
+use @net/dns-lookup
+use log.{error, info}
+use util.IpAddr
+
+/// Iterator over DNS seeds for peer discovery.
+pub struct SeedIter {
+    /// Port for discovered peers.
+    port: u16,
+    /// Discover seeds.
+    seeds: []string,
+    /// Find node IP addresses.
+    nodes: []IpAddr,
+    /// Seed index.
+    seed_index: usize,
+    /// Node index.
+    node_index: usize,
+    /// Random offset.
+    random_offset: usize,
+}
+
+pub func SeedIter.new(seeds: []string, port: u16) -> SeedIter {
+    let random_offset: usize = 0
+
+    // Simple random offset for load balancing
+    let time_seed: u64 = @sys/clock.monotonic()
+    random_offset = usize(time_seed % 100)
+
+    return SeedIter {
+        port,
+        seeds,
+        nodes: [],
+        seed_index: 0,
+        node_index: 0,
+        random_offset,
+    }
+}
+
+/// Advance the iterator and return the next (ip, port) pair.
+pub func (self: SeedIter) next() -> ?(IpAddr, u16) {
+    while self.seed_index < self.seeds.len() {
+        if self.nodes.is_empty() {
+            let i: usize = (self.seed_index + self.random_offset) % self.seeds.len()
+            info("Looking up DNS: " ++ self.seeds[i])
+            let lookup_result = dns_lookup.lookup_host(self.seeds[i])
+
+            if lookup_result.is_ok() {
+                let ip_vec: []IpAddr = lookup_result.unwrap()
+                if ip_vec.is_empty() {
+                    error("DNS lookup for " ++ self.seeds[i] ++ " returned no IPs")
+                    self.seed_index += 1
+                    continue
+                }
+                // Shuffle IPs using a simple swap-based shuffle with clock seed
+                let shuffle_seed: u64 = @sys/clock.monotonic()
+                self.nodes = shuffle_ips(ip_vec, shuffle_seed)
+                self.node_index = 0
+            } else {
+                error("Failed to look up DNS " ++ self.seeds[i] ++ ": " ++ lookup_result.unwrap_err())
+                self.seed_index += 1
+                continue
+            }
+        }
+
+        if self.node_index < self.nodes.len() {
+            let ip: IpAddr = self.nodes[self.node_index]
+            self.node_index += 1
+            if self.node_index >= self.nodes.len() {
+                self.nodes = []
+                self.seed_index += 1
+            }
+            return ?(ip, self.port)
+        } else {
+            self.nodes = []
+            self.seed_index += 1
+        }
+    }
+
+    return none
+}
+
+/// Simple Fisher-Yates shuffle of IP addresses using a time-based seed.
+func shuffle_ips(ips: []IpAddr, seed: u64) -> []IpAddr {
+    let result: []IpAddr = ips.copy()
+    let n: usize = result.len()
+    let s: u64 = seed
+
+    var i: usize = n
+    while i > 1 {
+        i -= 1
+        s = s * 6364136223846793005 + 1442695040888963407
+        let j: usize = usize(s % u64(i + 1))
+        // Swap
+        let tmp: IpAddr = result[i]
+        result[i] = result[j]
+        result[j] = tmp
+    }
+
+    return result
+}

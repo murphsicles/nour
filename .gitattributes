@@ -1,5 +1,2 @@
-# GitHub Linguist overrides for Zeta syntax highlighting
-# Zeta has its own TextMate grammar registered with Linguist
 *.z linguist-language=Zeta linguist-detectable=true
-*.zeta linguist-language=Zeta linguist-detectable=true
 zorb.toml linguist-language=TOML

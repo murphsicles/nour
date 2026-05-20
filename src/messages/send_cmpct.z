@@ -1,0 +1,46 @@
+// SendCmpct message for Bitcoin SV P2P, signaling compact block support (BIP-152).
+
+struct SendCmpct {
+    enable: u8,
+    version: u64,
+}
+
+fn send_cmpct_size() -> usize {
+    9
+}
+
+fn use_cmpctblock(sc: SendCmpct) -> bool {
+    sc.enable == 1 && sc.version == 1
+}
+
+fn send_cmpct_read(data: [u8], offset: usize) -> (SendCmpct, usize) {
+    let mut o = offset
+    let enable = data[o]
+    o += 1
+    let version_bytes = data[o..o+8]
+    let version = (version_bytes[0] as u64) |
+                  ((version_bytes[1] as u64) << 8) |
+                  ((version_bytes[2] as u64) << 16) |
+                  ((version_bytes[3] as u64) << 24) |
+                  ((version_bytes[4] as u64) << 32) |
+                  ((version_bytes[5] as u64) << 40) |
+                  ((version_bytes[6] as u64) << 48) |
+                  ((version_bytes[7] as u64) << 56)
+    o += 8
+    (SendCmpct { enable, version }, o)
+}
+
+fn send_cmpct_write(sc: SendCmpct) -> [u8] {
+    let mut out = [0; 9]
+    out[0] = sc.enable
+    let mut o = 1
+    out[o] = (sc.version & 0xff) as u8
+    out[o+1] = ((sc.version >> 8) & 0xff) as u8
+    out[o+2] = ((sc.version >> 16) & 0xff) as u8
+    out[o+3] = ((sc.version >> 24) & 0xff) as u8
+    out[o+4] = ((sc.version >> 32) & 0xff) as u8
+    out[o+5] = ((sc.version >> 40) & 0xff) as u8
+    out[o+6] = ((sc.version >> 48) & 0xff) as u8
+    out[o+7] = ((sc.version >> 56) & 0xff) as u8
+    out
+}

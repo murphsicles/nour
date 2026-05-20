@@ -1,0 +1,79 @@
+// Reject message for Bitcoin SV P2P, notifying of rejected messages.
+
+struct Reject {
+    message: [u8],
+    code: u8,
+    reason: [u8],
+    data: [u8],
+}
+
+const REJECT_MALFORMED: u8 = 0x01
+const REJECT_INVALID: u8 = 0x10
+const REJECT_OBSOLETE: u8 = 0x11
+const REJECT_DUPLICATE: u8 = 0x12
+const REJECT_NONSTANDARD: u8 = 0x40
+const REJECT_DUST: u8 = 0x41
+const REJECT_INSUFFICIENT_FEE: u8 = 0x42
+const REJECT_CHECKPOINT: u8 = 0x43
+
+const MAX_REASON_LEN: usize = 256
+
+fn reject_size(r: Reject) -> usize {
+    var_int_size(r.message.len() as u64) + r.message.len() + 1 +
+    var_int_size(r.reason.len() as u64) + r.reason.len() + r.data.len()
+}
+
+fn reject_read(data: [u8], offset: usize) -> (Reject, usize) {
+    let mut o = offset
+
+    let (msg_size, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let message = data[o..o + (msg_size as usize)]
+    o += msg_size as usize
+
+    let code = data[o]
+    o += 1
+
+    let (reason_size, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let reason = data[o..o + (reason_size as usize)]
+    o += reason_size as usize
+
+    let mut d = [] as [u8]
+    if message == [0x62, 0x6c, 0x6f, 0x63, 0x6b] || message == [0x74, 0x78] {
+        d = data[o..o+32]
+        o += 32
+    }
+
+    (Reject { message, code, reason, data: d }, o)
+}
+
+fn reject_write(r: Reject) -> [u8] {
+    let sz = reject_size(r)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi1 = var_int_write(r.message.len() as u64)
+    out[o..o+vi1.len()] = vi1
+    o += vi1.len()
+
+    out[o..o + r.message.len()] = r.message
+    o += r.message.len()
+
+    out[o] = r.code
+    o += 1
+
+    let vi2 = var_int_write(r.reason.len() as u64)
+    out[o..o+vi2.len()] = vi2
+    o += vi2.len()
+
+    out[o..o + r.reason.len()] = r.reason
+    o += r.reason.len()
+
+    out[o..o + r.data.len()] = r.data
+    o += r.data.len()
+
+    out
+}

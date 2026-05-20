@@ -1,0 +1,65 @@
+//! Atomic reader wrapper for all-or-nothing reads in P2P message handling.
+use @io
+
+/// Wraps a reader so reads become all-or-nothing.
+pub struct AtomicReader {
+    buf: []u8,
+    reader: @io.Reader,
+}
+
+pub func AtomicReader.new(reader: @io.Reader) -> AtomicReader {
+    return AtomicReader {
+        buf: [],
+        reader,
+    }
+}
+
+/// Read exactly `out.len()` bytes, returning an error on partial reads.
+/// Data is buffered internally to guarantee atomicity.
+pub func (self: AtomicReader) read(out: []u8) -> @io.Result<usize> {
+    let buf_len: usize = self.buf.len()
+    let out_len: usize = out.len()
+
+    if buf_len >= out_len {
+        // Enough data already in buffer
+        for var i: usize = 0; i < out_len; i += 1 {
+            out[i] = self.buf[i]
+        }
+        self.buf = self.buf[out_len..]
+        return Ok(out_len)
+    }
+
+    // Copy existing buffer into output
+    if buf_len > 0 {
+        for var i: usize = 0; i < buf_len; i += 1 {
+            out[i] = self.buf[i]
+        }
+    }
+
+    // Try to read the remaining bytes
+    let remaining: []u8 = out[buf_len..]
+    let read_result: @io.Result<usize> = self.reader.read(remaining)
+
+    if read_result.is_err() {
+        // Reader error — keep the buffer as-is
+        return read_result
+    }
+
+    let size: usize = read_result.unwrap()
+
+    if size == 0 {
+        return Err(@io.Error.new(@io.ErrorKind.NotConnected, "Disconnected"))
+    }
+
+    if buf_len + size < out_len {
+        // Incomplete read — buffer what we got
+        for var i: usize = 0; i < size; i += 1 {
+            self.buf.push(remaining[i])
+        }
+        return Err(@io.Error.new(@io.ErrorKind.TimedOut, "Incomplete read"))
+    }
+
+    // We read exactly enough (or more, which shouldn't happen with TCP)
+    self.buf = []
+    return Ok(out_len)
+}

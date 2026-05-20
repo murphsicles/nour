@@ -1,0 +1,50 @@
+// Addr message for Bitcoin SV P2P, sharing known node addresses.
+
+struct Addr {
+    addrs: [NodeAddrEx],
+}
+
+const MAX_ADDR_COUNT: u64 = 1000
+
+fn addr_size(a: Addr) -> usize {
+    var_int_size(a.addrs.len() as u64) + a.addrs.len() * 30
+}
+
+fn addr_read(data: [u8], offset: usize) -> (Addr, usize) {
+    let mut o = offset
+
+    let (count, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let c = count as usize
+    let mut addrs = [] as [NodeAddrEx]
+    var i = 0
+    while i < c {
+        let (na, new_o) = node_addr_ex_read(data, o)
+        addrs = addrs ++ [na]
+        o = new_o
+        i += 1
+    }
+
+    (Addr { addrs }, o)
+}
+
+fn addr_write(a: Addr) -> [u8] {
+    let sz = addr_size(a)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi_bytes = var_int_write(a.addrs.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    var i = 0
+    while i < a.addrs.len() {
+        let na_bytes = node_addr_ex_write(a.addrs[i])
+        out[o..o+30] = na_bytes
+        o += 30
+        i += 1
+    }
+
+    out
+}

@@ -1,0 +1,71 @@
+// Block locator for Bitcoin SV P2P GetBlocks/GetHeaders messages.
+
+struct BlockLocator {
+    version: u32,
+    block_locator_hashes: [[u8]],
+    hash_stop: [u8],
+}
+
+const NO_HASH_STOP: [u8] = [0; 32]
+const MAX_BLOCK_LOCATOR_HASHES: u64 = 32000
+
+fn block_locator_size(bl: BlockLocator) -> usize {
+    4 + var_int_size(bl.block_locator_hashes.len() as u64) + bl.block_locator_hashes.len() * 32 + 32
+}
+
+fn block_locator_read(data: [u8], offset: usize) -> (BlockLocator, usize) {
+    let mut o = offset
+
+    let v_bytes = data[o..o+4]
+    let version = (v_bytes[0] as u32) |
+                  ((v_bytes[1] as u32) << 8) |
+                  ((v_bytes[2] as u32) << 16) |
+                  ((v_bytes[3] as u32) << 24)
+    o += 4
+
+    let (num, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let count = num as usize
+    let mut block_locator_hashes = [] as [[u8]]
+    var i = 0
+    while i < count {
+        let hash = data[o..o+32]
+        block_locator_hashes = block_locator_hashes ++ [hash]
+        o += 32
+        i += 1
+    }
+
+    let hash_stop = data[o..o+32]
+    o += 32
+
+    (BlockLocator { version, block_locator_hashes, hash_stop }, o)
+}
+
+fn block_locator_write(bl: BlockLocator) -> [u8] {
+    let sz = block_locator_size(bl)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    out[o] = (bl.version & 0xff) as u8
+    out[o+1] = ((bl.version >> 8) & 0xff) as u8
+    out[o+2] = ((bl.version >> 16) & 0xff) as u8
+    out[o+3] = ((bl.version >> 24) & 0xff) as u8
+    o += 4
+
+    let vi_bytes = var_int_write(bl.block_locator_hashes.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    var i = 0
+    while i < bl.block_locator_hashes.len() {
+        out[o..o+32] = bl.block_locator_hashes[i]
+        o += 32
+        i += 1
+    }
+
+    out[o..o+32] = bl.hash_stop
+    o += 32
+
+    out
+}

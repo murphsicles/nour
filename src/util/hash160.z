@@ -1,0 +1,25 @@
+// Hash160 computation for Bitcoin SV (SHA256 then RIPEMD160).
+
+use crypto;
+
+// 160-bit hash (RIPEMD160(SHA256(data))).
+struct Hash160 {
+    bytes: [20]u8,
+}
+
+// Creates a new Hash160 from 20 raw bytes.
+fn Hash160_from_bytes(bytes: [20]u8) -> Hash160 {
+    return Hash160 { bytes: bytes };
+}
+
+// Computes Hash160 (RIPEMD160(SHA256(data))).
+fn hash160(data: []u8) -> Hash160 {
+    let sha: [32]u8 = crypto::sha256(data);
+    let ripe: [20]u8 = crypto::ripemd160(sha);
+    return Hash160 { bytes: ripe };
+}
+
+// Converts the hash to a hex string.
+fn Hash160_to_hex(h: *Hash160) -> string {
+    return hex_encode((*h).bytes);
+}

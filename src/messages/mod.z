@@ -1,0 +1,27 @@
+// Peer-to-peer network protocol messages for Bitcoin SV.
+// Supports all message types for P2P communication (addr, block, tx, etc.),
+// with serialization/deserialization.
+
+@mod addr
+@mod block
+@mod block_header
+@mod block_locator
+@mod fee_filter
+@mod filter_add
+@mod filter_load
+@mod headers
+@mod inv
+@mod inv_vect
+@mod merkle_block
+@mod message
+@mod message_header
+@mod node_addr
+@mod node_addr_ex
+@mod out_point
+@mod ping
+@mod reject
+@mod send_cmpct
+@mod tx
+@mod tx_in
+@mod tx_out
+@mod version

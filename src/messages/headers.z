@@ -1,0 +1,64 @@
+// Headers message for Bitcoin SV P2P, carrying block headers for chain sync.
+
+struct Headers {
+    headers: [BlockHeader],
+}
+
+const MAX_HEADERS: u64 = 32000
+
+fn headers_size(h: Headers) -> usize {
+    var_int_size(h.headers.len() as u64) + 81 * h.headers.len()
+}
+
+fn headers_read(data: [u8], offset: usize) -> (Headers, usize) {
+    let mut o = offset
+
+    let (n, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let count = n as usize
+    let mut headers = [] as [BlockHeader]
+    var i = 0
+    while i < count {
+        let (bh, new_o) = block_header_read(data, o)
+        headers = headers ++ [bh]
+        o = new_o
+        let txn_count = data[o]
+        o += 1
+        i += 1
+    }
+
+    (Headers { headers }, o)
+}
+
+fn headers_write(h: Headers) -> [u8] {
+    let sz = headers_size(h)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi_bytes = var_int_write(h.headers.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    var i = 0
+    while i < h.headers.len() {
+        let bh_bytes = block_header_write(h.headers[i])
+        out[o..o+80] = bh_bytes
+        o += 80
+        out[o] = 0  // txn_count = 0 for headers
+        o += 1
+        i += 1
+    }
+
+    out
+}
+
+fn header_hash(i: usize, headers: [BlockHeader]) -> ([u8], bool) {
+    if i + 1 < headers.len() {
+        (headers[i + 1].prev_hash, true)
+    } else if i + 1 == headers.len() {
+        (block_header_hash(headers[i]), true)
+    } else {
+        ([0; 32], false)
+    }
+}

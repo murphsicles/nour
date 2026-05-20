@@ -1,0 +1,202 @@
+// Bitcoin SV P2P message handling with serialization/deserialization.
+
+const NO_CHECKSUM: [u8] = [0x5d, 0xf6, 0xe0, 0xe2]
+const MAX_PAYLOAD_SIZE: u64 = 0x100000000 // 4GB
+
+// Command strings as [u8; 12], padded with \0
+mod commands {
+    const ADDR: [u8] = [0x61, 0x64, 0x64, 0x72, 0, 0, 0, 0, 0, 0, 0, 0]
+    const BLOCK: [u8] = [0x62, 0x6c, 0x6f, 0x63, 0x6b, 0, 0, 0, 0, 0, 0, 0]
+    const FEEFILTER: [u8] = [0x66, 0x65, 0x65, 0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0, 0, 0]
+    const FILTERADD: [u8] = [0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0x61, 0x64, 0x64, 0, 0, 0]
+    const FILTERCLEAR: [u8] = [0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0x63, 0x6c, 0x65, 0x61, 0x72, 0]
+    const FILTERLOAD: [u8] = [0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0x6c, 0x6f, 0x61, 0x64, 0, 0]
+    const GETADDR: [u8] = [0x67, 0x65, 0x74, 0x61, 0x64, 0x64, 0x72, 0, 0, 0, 0, 0]
+    const GETBLOCKS: [u8] = [0x67, 0x65, 0x74, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0, 0, 0]
+    const GETDATA: [u8] = [0x67, 0x65, 0x74, 0x64, 0x61, 0x74, 0x61, 0, 0, 0, 0, 0]
+    const GETHEADERS: [u8] = [0x67, 0x65, 0x74, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x73, 0, 0]
+    const HEADERS: [u8] = [0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x73, 0, 0, 0, 0, 0]
+    const INV: [u8] = [0x69, 0x6e, 0x76, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    const MEMPOOL: [u8] = [0x6d, 0x65, 0x6d, 0x70, 0x6f, 0x6f, 0x6c, 0, 0, 0, 0, 0]
+    const MERKLEBLOCK: [u8] = [0x6d, 0x65, 0x72, 0x6b, 0x6c, 0x65, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0]
+    const NOTFOUND: [u8] = [0x6e, 0x6f, 0x74, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0, 0, 0, 0]
+    const PING: [u8] = [0x70, 0x69, 0x6e, 0x67, 0, 0, 0, 0, 0, 0, 0, 0]
+    const PONG: [u8] = [0x70, 0x6f, 0x6e, 0x67, 0, 0, 0, 0, 0, 0, 0, 0]
+    const REJECT: [u8] = [0x72, 0x65, 0x6a, 0x65, 0x63, 0x74, 0, 0, 0, 0, 0, 0]
+    const SENDCMPCT: [u8] = [0x73, 0x65, 0x6e, 0x64, 0x63, 0x6d, 0x70, 0x63, 0x74, 0, 0, 0]
+    const SENDHEADERS: [u8] = [0x73, 0x65, 0x6e, 0x64, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x73, 0]
+    const TX: [u8] = [0x74, 0x78, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    const VERACK: [u8] = [0x76, 0x65, 0x72, 0x61, 0x63, 0x6b, 0, 0, 0, 0, 0, 0]
+    const VERSION: [u8] = [0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0, 0, 0, 0, 0]
+}
+
+enum Message {
+    Addr(Addr),
+    Block(Block),
+    FeeFilter(FeeFilter),
+    FilterAdd(FilterAdd),
+    FilterClear,
+    FilterLoad(FilterLoad),
+    GetAddr,
+    GetBlocks(BlockLocator),
+    GetData(Inv),
+    GetHeaders(BlockLocator),
+    Headers(Headers),
+    Inv(Inv),
+    Mempool,
+    MerkleBlock(MerkleBlock),
+    NotFound(Inv),
+    Other([u8]),
+    Partial(MessageHeader),
+    Ping(Ping),
+    Pong(Ping),
+    Reject(Reject),
+    SendHeaders,
+    SendCmpct(SendCmpct),
+    Tx(Tx),
+    Verack,
+    Version(Version),
+}
+
+fn message_read(data: [u8], magic: [u8]) -> (Message, usize) {
+    let mut o = 0
+
+    let (header, new_o) = message_header_read(data, o)
+    o = new_o
+
+    // Validate magic
+    if header.magic != magic {
+        return (Message::Other([]), 0)
+    }
+
+    message_read_partial(data, o, header)
+}
+
+fn message_read_partial(data: [u8], offset: usize, header: MessageHeader) -> (Message, usize) {
+    let mut o = offset
+    let sz = header.payload_size as usize
+    let payload = data[o..o+sz]
+
+    // Dispatch by command
+    if header.command == commands::ADDR {
+        let (a, _) = addr_read(payload, 0)
+        return (Message::Addr(a), o + sz)
+    }
+    if header.command == commands::BLOCK {
+        let (b, _) = block_read(payload, 0)
+        return (Message::Block(b), o + sz)
+    }
+    if header.command == commands::FEEFILTER {
+        let (f, _) = fee_filter_read(payload, 0)
+        return (Message::FeeFilter(f), o + sz)
+    }
+    if header.command == commands::FILTERADD {
+        let (fa, _) = filter_add_read(payload, 0)
+        return (Message::FilterAdd(fa), o + sz)
+    }
+    if header.command == commands::FILTERCLEAR {
+        return (Message::FilterClear, o + sz)
+    }
+    if header.command == commands::FILTERLOAD {
+        let (fl, _) = filter_load_read(payload, 0)
+        return (Message::FilterLoad(fl), o + sz)
+    }
+    if header.command == commands::GETADDR {
+        return (Message::GetAddr, o + sz)
+    }
+    if header.command == commands::GETBLOCKS {
+        let (bl, _) = block_locator_read(payload, 0)
+        return (Message::GetBlocks(bl), o + sz)
+    }
+    if header.command == commands::GETDATA {
+        let (inv, _) = inv_read(payload, 0)
+        return (Message::GetData(inv), o + sz)
+    }
+    if header.command == commands::GETHEADERS {
+        let (bl, _) = block_locator_read(payload, 0)
+        return (Message::GetHeaders(bl), o + sz)
+    }
+    if header.command == commands::HEADERS {
+        let (h, _) = headers_read(payload, 0)
+        return (Message::Headers(h), o + sz)
+    }
+    if header.command == commands::INV {
+        let (inv, _) = inv_read(payload, 0)
+        return (Message::Inv(inv), o + sz)
+    }
+    if header.command == commands::MEMPOOL {
+        return (Message::Mempool, o + sz)
+    }
+    if header.command == commands::MERKLEBLOCK {
+        let (mb, _) = merkle_block_read(payload, 0)
+        return (Message::MerkleBlock(mb), o + sz)
+    }
+    if header.command == commands::NOTFOUND {
+        let (inv, _) = inv_read(payload, 0)
+        return (Message::NotFound(inv), o + sz)
+    }
+    if header.command == commands::PING {
+        let (p, _) = ping_read(payload, 0)
+        return (Message::Ping(p), o + sz)
+    }
+    if header.command == commands::PONG {
+        let (p, _) = ping_read(payload, 0)
+        return (Message::Pong(p), o + sz)
+    }
+    if header.command == commands::REJECT {
+        let (r, _) = reject_read(payload, 0)
+        return (Message::Reject(r), o + sz)
+    }
+    if header.command == commands::SENDCMPCT {
+        let (sc, _) = send_cmpct_read(payload, 0)
+        return (Message::SendCmpct(sc), o + sz)
+    }
+    if header.command == commands::SENDHEADERS {
+        return (Message::SendHeaders, o + sz)
+    }
+    if header.command == commands::TX {
+        let (t, _) = tx_read(payload, 0)
+        return (Message::Tx(t), o + sz)
+    }
+    if header.command == commands::VERACK {
+        return (Message::Verack, o + sz)
+    }
+    if header.command == commands::VERSION {
+        let (v, _) = version_read(payload, 0)
+        return (Message::Version(v), o + sz)
+    }
+
+    (Message::Other(header.command), o + sz)
+}
+
+fn message_write_nopayload(command: [u8], magic: [u8]) -> [u8] {
+    let header = MessageHeader {
+        magic,
+        command,
+        payload_size: 0,
+        checksum: NO_CHECKSUM,
+    }
+    message_header_write(header)
+}
+
+fn sha256d_first4(data: [u8]) -> [u8] {
+    let hash = sha256d(data)
+    [hash[0], hash[1], hash[2], hash[3]]
+}
+
+fn message_write_payload(command: [u8], payload_bytes: [u8], magic: [u8]) -> [u8] {
+    let checksum = sha256d_first4(payload_bytes)
+
+    let header = MessageHeader {
+        magic,
+        command,
+        payload_size: payload_bytes.len() as u32,
+        checksum,
+    }
+
+    let mut out = [] as [u8]
+    let hdr_bytes = message_header_write(header)
+    out = out ++ hdr_bytes
+    out = out ++ payload_bytes
+    out
+}

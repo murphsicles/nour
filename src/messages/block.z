@@ -1,0 +1,100 @@
+// Block message for Bitcoin SV P2P, with validation for consensus.
+
+struct Block {
+    header: BlockHeader,
+    txns: [Tx],
+}
+
+const MAX_TXNS_COUNT: usize = 100_000_000_000
+
+fn block_size(b: Block) -> usize {
+    80 + var_int_size(b.txns.len() as u64) + sum_tx_sizes(b.txns)
+}
+
+fn sum_tx_sizes(txns: [Tx]) -> usize {
+    var total = 0
+    var i = 0
+    while i < txns.len() {
+        total += tx_size(txns[i])
+        i += 1
+    }
+    total
+}
+
+fn block_read(data: [u8], offset: usize) -> (Block, usize) {
+    let mut o = offset
+
+    let (header, new_o) = block_header_read(data, o)
+    o = new_o
+
+    let (txn_count, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let tc = txn_count as usize
+    let mut txns = [] as [Tx]
+    var i = 0
+    while i < tc {
+        let (tx, new_o) = tx_read(data, o)
+        txns = txns ++ [tx]
+        o = new_o
+        i += 1
+    }
+
+    (Block { header, txns }, o)
+}
+
+fn block_write(b: Block) -> [u8] {
+    let sz = block_size(b)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let bh_bytes = block_header_write(b.header)
+    out[o..o+80] = bh_bytes
+    o += 80
+
+    let vi_bytes = var_int_write(b.txns.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    var i = 0
+    while i < b.txns.len() {
+        let tx_bytes = tx_write(b.txns[i])
+        out[o..o+tx_bytes.len()] = tx_bytes
+        o += tx_bytes.len()
+        i += 1
+    }
+
+    out
+}
+
+fn block_merkle_root(b: Block) -> [u8] {
+    var row = [] as [[u8]]
+    var i = 0
+    while i < b.txns.len() {
+        row = row ++ [tx_hash(b.txns[i])]
+        i += 1
+    }
+
+    while row.len() > 1 {
+        var n = row.len()
+        var j = 0
+        var next_row = [] as [[u8]]
+        while j < n {
+            let h1 = row[j]
+            let h2 = if j + 1 >= n { h1 } else { row[j + 1] }
+            j = if j + 1 >= n { j + 1 } else { j + 2 }
+
+            let mut buf = [0; 64]
+            buf[0..32] = h1
+            buf[32..64] = h2
+            next_row = next_row ++ [sha256d(buf)]
+        }
+        row = next_row
+    }
+
+    if row.len() == 0 {
+        [0; 32]
+    } else {
+        row[0]
+    }
+}

@@ -1,0 +1,149 @@
+//! Network enum and config for Bitcoin SV parameters (seeds, ports, magic, genesis).
+use @encoding/hex
+use messages.{Block, BlockHeader, OutPoint, Tx, TxIn, TxOut}
+use script.Script
+use util.{Error, Hash256, Result}
+use network.SeedIter
+
+/// Bitcoin SV network types (Mainnet, Testnet, STN).
+pub enum Network {
+    Mainnet = 0,
+    Testnet = 1,
+    STN = 2,
+}
+
+/// Network configuration with persistent seeds and port.
+pub struct NetworkConfig {
+    network: Network,
+    seeds: []string,
+    port: u16,
+}
+
+pub func NetworkConfig.new(network_type: u8) -> Result<NetworkConfig> {
+    let network: Network = NetworkConfig.from_u8(network_type)?
+    let seeds: []string
+    let port: u16
+
+    if network == Network.Mainnet {
+        seeds = ["seed.bitcoinsv.io", "seed.cascharia.com", "seed.satoshisvision.network"]
+        port = 8333
+    } else if network == Network.Testnet {
+        seeds = ["testnet-seed.bitcoinsv.io", "testnet-seed.cascharia.com", "testnet-seed.bitcoincloud.net"]
+        port = 18333
+    } else {
+        seeds = ["stn-seed.bitcoinsv.io"]
+        port = 9333
+    }
+
+    return NetworkConfig { network, seeds, port }
+}
+
+/// Converts an integer to a network type.
+pub func NetworkConfig.from_u8(x: u8) -> Result<Network> {
+    if x == 0 {
+        return Ok(Network.Mainnet)
+    } else if x == 1 {
+        return Ok(Network.Testnet)
+    } else if x == 2 {
+        return Ok(Network.STN)
+    }
+    return Err(Error.BadArgument("Unknown network type: " ++ string(x)))
+}
+
+/// Returns the default TCP port.
+pub func (self: NetworkConfig) port() -> u16 {
+    return self.port
+}
+
+/// Returns the magic bytes for message headers.
+pub func (self: NetworkConfig) magic() -> [u8; 4] {
+    if self.network == Network.Mainnet {
+        return [0xe3, 0xe1, 0xf3, 0xe8]
+    } else if self.network == Network.Testnet {
+        return [0xf4, 0xe5, 0xf3, 0xf4]
+    }
+    return [0xfb, 0xce, 0xc4, 0xf9]
+}
+
+/// Returns the genesis block.
+pub func (self: NetworkConfig) genesis_block() -> Block {
+    let header: BlockHeader
+    let tx: Tx
+
+    if self.network == Network.Mainnet {
+        header = BlockHeader {
+            version: 1,
+            prev_hash: Hash256([0; 32]),
+            merkle_root: Hash256.decode("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap(),
+            timestamp: 1231006505,
+            bits: 0x1d00ffff,
+            nonce: 2083236893,
+        }
+    } else {
+        header = BlockHeader {
+            version: 1,
+            prev_hash: Hash256([0; 32]),
+            merkle_root: Hash256.decode("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap(),
+            timestamp: 1296688602,
+            bits: 0x1d00ffff,
+            nonce: 414098458,
+        }
+    }
+
+    tx = Tx {
+        version: 1,
+        inputs: [
+            TxIn {
+                prev_output: OutPoint {
+                    hash: Hash256([0; 32]),
+                    index: 0xffffffff,
+                },
+                unlock_script: Script(hex.decode("04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e642062616c6f757420666f722062616e6b73").unwrap()),
+                sequence: 0xffffffff,
+            },
+        ],
+        outputs: [
+            TxOut {
+                satoshis: 5000000000,
+                lock_script: Script(hex.decode("4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac").unwrap()),
+            },
+        ],
+        lock_time: 0,
+    }
+
+    return Block { header, txns: [tx] }
+}
+
+/// Returns the genesis block hash.
+pub func (self: NetworkConfig) genesis_hash() -> Hash256 {
+    if self.network == Network.Mainnet {
+        return Hash256.decode("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f").unwrap()
+    }
+    return Hash256.decode("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943").unwrap()
+}
+
+/// Returns the version byte flag for P2PKH-type addresses.
+pub func (self: NetworkConfig) addr_pubkeyhash_flag() -> u8 {
+    if self.network == Network.Mainnet {
+        return 0x00
+    }
+    return 0x6f
+}
+
+/// Returns the version byte flag for P2SH-type addresses.
+pub func (self: NetworkConfig) addr_script_flag() -> u8 {
+    if self.network == Network.Mainnet {
+        return 0x05
+    }
+    return 0xc4
+}
+
+/// Returns a list of DNS seeds.
+pub func (self: NetworkConfig) seeds() -> []string {
+    return self.seeds
+}
+
+/// Creates a new DNS seed iterator.
+pub func (self: NetworkConfig) seed_iter() -> SeedIter {
+    return SeedIter.new(self.seeds, self.port)
+}

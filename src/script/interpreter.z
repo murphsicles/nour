@@ -1,0 +1,1703 @@
+// interpreter.z — Script interpreter for Bitcoin SV consensus evaluation
+// Evaluates Bitcoin Script opcodes on a stack machine.
+// Supports Genesis and pre-Genesis rules via flags.
+
+const STACK_CAPACITY: i64 = 1000;
+const ALT_STACK_CAPACITY: i64 = 1000;
+const MAX_ITEM_SIZE: i64 = 1024;
+const MAX_ITEMS_PUBKEYS: i64 = 20;
+
+// Error codes
+const ERR_OK: i64 = 0;
+const ERR_SCRIPT: i64 = 1;
+const ERR_STACK_EMPTY: i64 = 2;
+const ERR_STACK_TOO_SMALL: i64 = 3;
+const ERR_BAD_OPCODE: i64 = 4;
+const ERR_BAD_PUSH: i64 = 5;
+const ERR_DIV_ZERO: i64 = 6;
+const ERR_VERIFY_FAILED: i64 = 7;
+const ERR_NOT_ENOUGH_DATA: i64 = 8;
+const ERR_EQUAL_FAILED: i64 = 9;
+const ERR_UNMATCHED_ENDIF: i64 = 10;
+const ERR_TOP_FALSE: i64 = 11;
+const ERR_SPLIT_FAILED: i64 = 12;
+const ERR_NUM2BIN_FAILED: i64 = 13;
+const ERR_MULTISIG_FAILED: i64 = 14;
+const ERR_OUT_OF_RANGE: i64 = 15;
+const ERR_CHECKER_FAILED: i64 = 16;
+const ERR_BAD_ARGUMENT: i64 = 17;
+const ERR_ITEM_TOO_LARGE: i64 = 18;
+
+// Bitwise flags for num2bin
+const SIGHASH_FORKID: u8 = 0x40;
+
+// Consensus constants
+const LOCKTIME_THRESHOLD: i32 = 500_000_000;
+const SEQUENCE_LOCKTIME_DISABLE: u32 = 1 << 31;
+const SEQUENCE_LOCKTIME_TYPE: u32 = 1 << 22;
+
+// Flags
+const NO_FLAGS: u32 = 0x00;
+const PREGENESIS_RULES: u32 = 0x01;
+
+// --- Stack data structure ---
+// Flat buffer approach: data[item_idx * MAX_ITEM_SIZE + byte_offset]
+struct ScriptStack {
+    data: [u8; STACK_CAPACITY * MAX_ITEM_SIZE],
+    len: [i64; STACK_CAPACITY],
+    count: i64,
+}
+
+fn stack_init() -> ScriptStack {
+    return ScriptStack {
+        data: [0; STACK_CAPACITY * MAX_ITEM_SIZE],
+        len: [0; STACK_CAPACITY],
+        count: 0,
+    };
+}
+
+fn stack_count(s: &ScriptStack) -> i64 {
+    return s.count;
+}
+
+fn stack_push(s: &mut ScriptStack, item: []u8) -> i64 {
+    if s.count >= STACK_CAPACITY {
+        return ERR_SCRIPT;
+    }
+    let item_len: i64 = len(item);
+    if item_len > MAX_ITEM_SIZE {
+        return ERR_ITEM_TOO_LARGE;
+    }
+    let base: i64 = s.count * MAX_ITEM_SIZE;
+    let mut i: i64 = 0;
+    while i < item_len {
+        s.data[base + i] = item[i];
+        i += 1;
+    }
+    s.len[s.count] = item_len;
+    s.count += 1;
+    return ERR_OK;
+}
+
+fn stack_pop(s: &mut ScriptStack) -> (i64, i64, i64) {
+    // Returns (error, base_offset, item_len)
+    if s.count == 0 {
+        return (ERR_STACK_EMPTY, 0, 0);
+    }
+    s.count -= 1;
+    let base: i64 = s.count * MAX_ITEM_SIZE;
+    let item_len: i64 = s.len[s.count];
+    return (ERR_OK, base, item_len);
+}
+
+fn stack_peek(s: &ScriptStack, n: i64) -> (i64, i64, i64) {
+    // n=0 is top, n=1 is second from top, etc.
+    if n < 0 || n >= s.count {
+        return (ERR_STACK_EMPTY, 0, 0);
+    }
+    let idx: i64 = s.count - 1 - n;
+    let base: i64 = idx * MAX_ITEM_SIZE;
+    let item_len: i64 = s.len[idx];
+    return (ERR_OK, base, item_len);
+}
+
+fn stack_remove(s: &mut ScriptStack, n: i64) -> (i64, i64, i64) {
+    // n=0 is top, n=1 is second from top, etc.
+    if n < 0 || n >= s.count {
+        return (ERR_STACK_EMPTY, 0, 0);
+    }
+    let idx: i64 = s.count - 1 - n;
+    let base: i64 = idx * MAX_ITEM_SIZE;
+    let item_len: i64 = s.len[idx];
+    // Shift remaining items down
+    let mut i: i64 = idx;
+    while i < s.count - 1 {
+        let src_base: i64 = (i + 1) * MAX_ITEM_SIZE;
+        let dst_base: i64 = i * MAX_ITEM_SIZE;
+        let copy_len: i64 = s.len[i + 1];
+        let mut j: i64 = 0;
+        while j < copy_len {
+            s.data[dst_base + j] = s.data[src_base + j];
+            j += 1;
+        }
+        s.len[i] = s.len[i + 1];
+        i += 1;
+    }
+    s.count -= 1;
+    return (ERR_OK, base, item_len);
+}
+
+fn stack_insert(s: &mut ScriptStack, n: i64, item: []u8) -> i64 {
+    // Insert item at position n from top (n=0 = top, n=1 = second, etc.)
+    if s.count >= STACK_CAPACITY {
+        return ERR_SCRIPT;
+    }
+    let item_len: i64 = len(item);
+    if item_len > MAX_ITEM_SIZE {
+        return ERR_ITEM_TOO_LARGE;
+    }
+    // Shift items up to make room
+    let mut i: i64 = s.count;
+    while i > s.count - n - 1 {
+        let src_base: i64 = (i - 1) * MAX_ITEM_SIZE;
+        let dst_base: i64 = i * MAX_ITEM_SIZE;
+        let copy_len: i64 = s.len[i - 1];
+        let mut j: i64 = 0;
+        while j < copy_len {
+            s.data[dst_base + j] = s.data[src_base + j];
+            j += 1;
+        }
+        s.len[i] = s.len[i - 1];
+        i -= 1;
+    }
+    let base: i64 = (s.count - n - 1) * MAX_ITEM_SIZE;
+    let mut j: i64 = 0;
+    while j < item_len {
+        s.data[base + j] = item[j];
+        j += 1;
+    }
+    s.len[s.count - n - 1] = item_len;
+    s.count += 1;
+    return ERR_OK;
+}
+
+fn stack_get_item_data(s: &ScriptStack, base: i64, item_len: i64) -> []u8 {
+    // Returns a slice into the stack's data buffer
+    return s.data[base..base + item_len];
+}
+
+// --- Number/bool encoding/decoding for stack items ---
+
+fn encode_num_result(val: i64, buf: &mut [u8]) -> i64 {
+    if val == 0 {
+        return 0;
+    }
+    let negative: bool = val < 0;
+    let abs_val: i64;
+    if negative {
+        abs_val = -val;
+    } else {
+        abs_val = val;
+    }
+    let mut idx: i64 = 0;
+    let mut remaining: i64 = abs_val;
+    while remaining > 0 {
+        buf[idx] = (remaining & 0xFF) as u8;
+        remaining >>= 8;
+        idx += 1;
+    }
+    let last: u8 = buf[idx - 1];
+    if (last & 0x80) != 0 {
+        buf[idx] = if negative { 0x80 } else { 0 };
+        idx += 1;
+    } else if negative {
+        buf[idx - 1] |= 0x80;
+    }
+    return idx;
+}
+
+fn decode_bool(data: []u8) -> bool {
+    let data_len: i64 = len(data);
+    if data_len == 0 {
+        return false;
+    }
+    let mut i: i64 = 0;
+    while i < data_len - 1 {
+        if data[i] != 0 {
+            return true;
+        }
+        i += 1;
+    }
+    return (data[data_len - 1] & 127) != 0;
+}
+
+fn decode_num(data: []u8) -> i64 {
+    let data_len: i64 = len(data);
+    if data_len == 0 {
+        return 0;
+    }
+    let mut result: i64 = 0;
+    let mut i: i64 = data_len - 1;
+    while i >= 0 {
+        result = (result << 8) | (data[i] as i64);
+        i -= 1;
+    }
+    let negative: bool = (data[data_len - 1] & 0x80) != 0;
+    if negative {
+        result &= !(0x80 << ((data_len - 1) * 8));
+        return -result;
+    }
+    return result;
+}
+
+fn pop_bool(s: &mut ScriptStack) -> (i64, bool) {
+    let (err, base, item_len): (i64, i64, i64) = stack_pop(s);
+    if err != ERR_OK {
+        return (err, false);
+    }
+    if item_len > 4 {
+        return (ERR_SCRIPT, false);
+    }
+    let data: []u8 = s.data[base..base + item_len];
+    return (ERR_OK, decode_bool(data));
+}
+
+fn pop_num(s: &mut ScriptStack) -> (i64, i32) {
+    let (err, base, item_len): (i64, i64, i64) = stack_pop(s);
+    if err != ERR_OK {
+        return (err, 0);
+    }
+    if item_len > 4 {
+        return (ERR_SCRIPT, 0);
+    }
+    let data: []u8 = s.data[base..base + item_len];
+    let n: i64 = decode_num(data);
+    if n.abs() >= (1 << 31) {
+        return (ERR_OUT_OF_RANGE, 0);
+    }
+    return (ERR_OK, n as i32);
+}
+
+fn pop_bigint(s: &mut ScriptStack) -> (i64, i64) {
+    let (err, base, item_len): (i64, i64, i64) = stack_pop(s);
+    if err != ERR_OK {
+        return (err, 0);
+    }
+    if item_len == 0 {
+        return (ERR_OK, 0);
+    }
+    // Decode LE bytes with sign to i64
+    let data: []u8 = s.data[base..base + item_len];
+    let mut result: i64 = 0;
+    let mut i: i64 = item_len - 1;
+    while i >= 0 {
+        result = (result << 8) | (data[i] as i64);
+        i -= 1;
+    }
+    let negative: bool = (data[item_len - 1] & 0x80) != 0;
+    if negative {
+        result &= !(0x80 << ((item_len - 1) * 8));
+        return (ERR_OK, -result);
+    }
+    return (ERR_OK, result);
+}
+
+fn encode_bigint_buf(n: i64, buf: &mut [u8]) -> i64 {
+    return encode_num_result(n, buf);
+}
+
+// --- Checker interface for eval ---
+
+struct EvalChecker {
+    mode: i64,  // 0 = transactionless, 1 = transaction
+    tx_lock_time: u32,
+    tx_version: u32,
+    input_sequence: u32,
+    input_index: i64,
+    satoshis: i64,
+    require_sighash_forkid: bool,
+}
+
+fn checker_transactionless() -> EvalChecker {
+    return EvalChecker {
+        mode: 0,
+        tx_lock_time: 0,
+        tx_version: 0,
+        input_sequence: 0,
+        input_index: 0,
+        satoshis: 0,
+        require_sighash_forkid: false,
+    };
+}
+
+fn checker_transaction(
+    tx_lock_time: u32,
+    tx_version: u32,
+    input_sequence: u32,
+    input_index: i64,
+    satoshis: i64,
+    require_forkid: bool,
+) -> EvalChecker {
+    return EvalChecker {
+        mode: 1,
+        tx_lock_time: tx_lock_time,
+        tx_version: tx_version,
+        input_sequence: input_sequence,
+        input_index: input_index,
+        satoshis: satoshis,
+        require_sighash_forkid: require_forkid,
+    };
+}
+
+fn check_sig(checker: &EvalChecker, sig: []u8, pubkey: []u8, script: []u8) -> (i64, bool) {
+    if checker.mode == 0 {
+        return (ERR_CHECKER_FAILED, false);
+    }
+    // Stub: requires external secp256k1 + sighash
+    // For now, validates that sig is non-empty and has sighash type
+    if len(sig) == 0 {
+        return (ERR_OK, false);
+    }
+    let sighash_type: u8 = sig[len(sig) - 1];
+    _ = sighash_type;
+    _ = pubkey;
+    _ = script;
+    // Full implementation TODO: sighash computation + secp256k1 verify
+    return (ERR_OK, len(sig) > 1);
+}
+
+fn check_locktime(checker: &EvalChecker, locktime: i32) -> (i64, bool) {
+    if checker.mode == 0 {
+        return (ERR_CHECKER_FAILED, false);
+    }
+    if locktime < 0 {
+        return (ERR_OK, false);
+    }
+    let tx_locktime: i32 = checker.tx_lock_time as i32;
+    let locktime_type: bool = locktime >= LOCKTIME_THRESHOLD;
+    let tx_type: bool = tx_locktime >= LOCKTIME_THRESHOLD;
+    if locktime_type != tx_type {
+        return (ERR_OK, false);
+    }
+    if locktime > tx_locktime {
+        return (ERR_OK, false);
+    }
+    if checker.input_sequence == 0xFFFFFFFF {
+        return (ERR_OK, false);
+    }
+    return (ERR_OK, true);
+}
+
+fn check_sequence(checker: &EvalChecker, sequence: i32) -> (i64, bool) {
+    if checker.mode == 0 {
+        return (ERR_CHECKER_FAILED, false);
+    }
+    if sequence < 0 {
+        return (ERR_OK, false);
+    }
+    let seq_u32: u32 = sequence as u32;
+    if (seq_u32 & SEQUENCE_LOCKTIME_DISABLE) != 0 {
+        return (ERR_OK, true);
+    }
+    if checker.tx_version < 2 {
+        return (ERR_OK, false);
+    }
+    let tx_seq: u32 = checker.input_sequence;
+    if (tx_seq & SEQUENCE_LOCKTIME_DISABLE) != 0 {
+        return (ERR_OK, false);
+    }
+    let seq_masked: u32 = seq_u32 & 0x0000FFFF;
+    let tx_masked: u32 = tx_seq & 0x0000FFFF;
+    let seq_type: bool = seq_masked >= SEQUENCE_LOCKTIME_TYPE;
+    let tx_type: bool = tx_masked >= SEQUENCE_LOCKTIME_TYPE;
+    if seq_type != tx_type {
+        return (ERR_OK, false);
+    }
+    if seq_masked > tx_masked {
+        return (ERR_OK, false);
+    }
+    return (ERR_OK, true);
+}
+
+// --- Helper functions ---
+
+fn next_op(i: i64, script: []u8) -> i64 {
+    let script_len: i64 = len(script);
+    if i >= script_len {
+        return script_len;
+    }
+    let op: u8 = script[i];
+    if op >= 1 && op <= 75 {
+        let data_len: i64 = op as i64;
+        return i + 1 + data_len;
+    }
+    if op == OP_PUSHDATA1 {
+        if i + 2 > script_len {
+            return script_len;
+        }
+        let data_len: i64 = script[i + 1] as i64;
+        return i + 2 + data_len;
+    }
+    if op == OP_PUSHDATA2 {
+        if i + 3 > script_len {
+            return script_len;
+        }
+        let data_len: i64 = (script[i + 1] as i64) | ((script[i + 2] as i64) << 8);
+        return i + 3 + data_len;
+    }
+    if op == OP_PUSHDATA4 {
+        if i + 5 > script_len {
+            return script_len;
+        }
+        let data_len: i64 = (script[i + 1] as i64)
+            | ((script[i + 2] as i64) << 8)
+            | ((script[i + 3] as i64) << 16)
+            | ((script[i + 4] as i64) << 24);
+        return i + 5 + data_len;
+    }
+    return i + 1;
+}
+
+fn skip_branch(script: []u8, mut i: i64) -> i64 {
+    let mut depth: i64 = 0;
+    let script_len: i64 = len(script);
+    while i < script_len {
+        let op: u8 = script[i];
+        if op == OP_IF || op == OP_NOTIF {
+            depth += 1;
+        } else if op == OP_ELSE {
+            if depth == 0 {
+                return i;
+            }
+        } else if op == OP_ENDIF {
+            if depth == 0 {
+                return i;
+            }
+            depth -= 1;
+        }
+        i = next_op(i, script);
+    }
+    return script_len;
+}
+
+fn remains(i: i64, need: i64, script: []u8) -> i64 {
+    if i + need > len(script) {
+        return ERR_NOT_ENOUGH_DATA;
+    }
+    return ERR_OK;
+}
+
+fn check_stack_size(minsize: i64, s: &ScriptStack) -> i64 {
+    if s.count < minsize {
+        return ERR_STACK_TOO_SMALL;
+    }
+    return ERR_OK;
+}
+
+fn prefork(sig: []u8) -> bool {
+    if len(sig) == 0 {
+        return false;
+    }
+    return (sig[len(sig) - 1] & SIGHASH_FORKID) == 0;
+}
+
+fn remove_sig(sig: []u8, script: []u8) -> []u8 {
+    let sig_len: i64 = len(sig);
+    if sig_len == 0 || len(script) == 0 {
+        return script;
+    }
+    // Build result by copying matching parts
+    let script_len: i64 = len(script);
+    let mut result: [u8; 65536] = [0; 65536];
+    let mut result_len: i64 = 0;
+    let mut i: i64 = 0;
+    let mut start: i64 = 0;
+
+    while i + sig_len <= script_len {
+        // Check if script[i..i+sig_len] matches sig
+        let mut match_found: bool = true;
+        let mut j: i64 = 0;
+        while j < sig_len {
+            if script[i + j] != sig[j] {
+                match_found = false;
+                break;
+            }
+            j += 1;
+        }
+        if match_found {
+            // Copy from start to i
+            let mut k: i64 = start;
+            while k < i {
+                result[result_len] = script[k];
+                result_len += 1;
+                k += 1;
+            }
+            start = i + sig_len;
+            i = start;
+        } else {
+            i = next_op(i, script);
+        }
+    }
+    // Copy remaining
+    let mut k: i64 = start;
+    while k < script_len {
+        result[result_len] = script[k];
+        result_len += 1;
+        k += 1;
+    }
+    // Return slice
+    return result[0..result_len];
+}
+
+// --- Main eval function ---
+fn eval(script: []u8, checker: &EvalChecker, flags: u32) -> i64 {
+    let mut stack: ScriptStack = stack_init();
+    let mut alt_stack: ScriptStack = stack_init();
+    let mut branch_exec: [bool; 64] = [false; 64];
+    let mut branch_depth: i64 = 0;
+    let mut check_index: i64 = 0;
+    let mut i: i64 = 0;
+    let script_len: i64 = len(script);
+
+    while i < script_len {
+        // Skip disabled branches
+        if branch_depth > 0 && !branch_exec[branch_depth - 1] {
+            i = skip_branch(script, i);
+            if i >= script_len {
+                break;
+            }
+        }
+
+        let op: u8 = script[i];
+        let mut err: i64;
+
+        // --- Push constants (OP_0 through OP_16) ---
+        if op == OP_0 {
+            err = stack_push(&mut stack, [0; 0]);
+            if err != ERR_OK { return err; }
+        } else if op == OP_1NEGATE {
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(-1, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+        } else if op >= OP_1 && op <= OP_16 {
+            let val: i64 = (op - OP_1 + 1) as i64;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(val, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        // --- Data push (1..75) ---
+        } else if op >= 1 && op <= 75 {
+            let data_len: i64 = op as i64;
+            err = remains(i + 1, data_len, script);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, script[i + 1..i + 1 + data_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_PUSHDATA1 {
+            err = remains(i + 1, 1, script);
+            if err != ERR_OK { return err; }
+            let data_len: i64 = script[i + 1] as i64;
+            err = remains(i + 2, data_len, script);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, script[i + 2..i + 2 + data_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_PUSHDATA2 {
+            err = remains(i + 1, 2, script);
+            if err != ERR_OK { return err; }
+            let data_len: i64 = (script[i + 1] as i64) | ((script[i + 2] as i64) << 8);
+            err = remains(i + 3, data_len, script);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, script[i + 3..i + 3 + data_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_PUSHDATA4 {
+            err = remains(i + 1, 4, script);
+            if err != ERR_OK { return err; }
+            let data_len: i64 = (script[i + 1] as i64)
+                | ((script[i + 2] as i64) << 8)
+                | ((script[i + 3] as i64) << 16)
+                | ((script[i + 4] as i64) << 24);
+            err = remains(i + 5, data_len, script);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, script[i + 5..i + 5 + data_len]);
+            if err != ERR_OK { return err; }
+
+        // --- Flow control ---
+        } else if op == OP_NOP {
+            // no-op
+
+        } else if op == OP_IF {
+            let (verr, val): (i64, bool) = pop_bool(&mut stack);
+            if verr != ERR_OK { return verr; }
+            if branch_depth >= 64 {
+                return ERR_SCRIPT;
+            }
+            branch_exec[branch_depth] = val;
+            branch_depth += 1;
+
+        } else if op == OP_NOTIF {
+            let (verr, val): (i64, bool) = pop_bool(&mut stack);
+            if verr != ERR_OK { return verr; }
+            if branch_depth >= 64 {
+                return ERR_SCRIPT;
+            }
+            branch_exec[branch_depth] = !val;
+            branch_depth += 1;
+
+        } else if op == OP_ELSE {
+            if branch_depth == 0 {
+                return ERR_SCRIPT;
+            }
+            branch_exec[branch_depth - 1] = !branch_exec[branch_depth - 1];
+
+        } else if op == OP_ENDIF {
+            if branch_depth == 0 {
+                return ERR_SCRIPT;
+            }
+            branch_depth -= 1;
+
+        } else if op == OP_VERIFY {
+            let (verr, val): (i64, bool) = pop_bool(&mut stack);
+            if verr != ERR_OK { return verr; }
+            if !val {
+                return ERR_VERIFY_FAILED;
+            }
+
+        } else if op == OP_RETURN {
+            if (flags & PREGENESIS_RULES) == PREGENESIS_RULES {
+                return ERR_SCRIPT;
+            }
+            break;
+
+        // --- Stack operations ---
+        } else if op == OP_TOALTSTACK {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (perr, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            if perr != ERR_OK { return perr; }
+            err = stack_push(&mut alt_stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_FROMALTSTACK {
+            err = check_stack_size(1, &alt_stack);
+            if err != ERR_OK { return err; }
+            let (perr, base, item_len): (i64, i64, i64) = stack_pop(&mut alt_stack);
+            if perr != ERR_OK { return perr; }
+            err = stack_push(&mut stack, alt_stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_IFDUP {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 0);
+            let data: []u8 = stack.data[base..base + item_len];
+            if decode_bool(data) {
+                err = stack_push(&mut stack, data);
+                if err != ERR_OK { return err; }
+            }
+
+        } else if op == OP_DEPTH {
+            let depth: i64 = stack.count;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(depth, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_DROP {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, _, _): (i64, i64, i64) = stack_pop(&mut stack);
+
+        } else if op == OP_DUP {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 0);
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NIP {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, _, _): (i64, i64, i64) = stack_remove(&mut stack, 1);
+
+        } else if op == OP_OVER {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 1);
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_PICK {
+            let (nerr, n): (i64, i32) = pop_num(&mut stack);
+            if nerr != ERR_OK { return nerr; }
+            if n < 0 {
+                return ERR_SCRIPT;
+            }
+            err = check_stack_size((n as i64) + 1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, n as i64);
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_ROLL {
+            let (nerr, n): (i64, i32) = pop_num(&mut stack);
+            if nerr != ERR_OK { return nerr; }
+            if n < 0 {
+                return ERR_SCRIPT;
+            }
+            err = check_stack_size((n as i64) + 1, &stack);
+            if err != ERR_OK { return err; }
+            let (rerr, base, item_len): (i64, i64, i64) = stack_remove(&mut stack, n as i64);
+            if rerr != ERR_OK { return rerr; }
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_ROT {
+            err = check_stack_size(3, &stack);
+            if err != ERR_OK { return err; }
+            let (rerr, base, item_len): (i64, i64, i64) = stack_remove(&mut stack, 2);
+            if rerr != ERR_OK { return rerr; }
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_SWAP {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (rerr, base, item_len): (i64, i64, i64) = stack_remove(&mut stack, 1);
+            if rerr != ERR_OK { return rerr; }
+            err = stack_push(&mut stack, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_TUCK {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 0);
+            err = stack_insert(&mut stack, 1, stack.data[base..base + item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_2DROP {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, _, _): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, _, _): (i64, i64, i64) = stack_pop(&mut stack);
+
+        } else if op == OP_2DUP {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base1, len1): (i64, i64, i64) = stack_peek(&stack, 0);
+            let (_, base2, len2): (i64, i64, i64) = stack_peek(&stack, 1);
+            err = stack_push(&mut stack, stack.data[base2..base2 + len2]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base1..base1 + len1]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_3DUP {
+            err = check_stack_size(3, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base0, len0): (i64, i64, i64) = stack_peek(&stack, 0);
+            let (_, base1, len1): (i64, i64, i64) = stack_peek(&stack, 1);
+            let (_, base2, len2): (i64, i64, i64) = stack_peek(&stack, 2);
+            err = stack_push(&mut stack, stack.data[base2..base2 + len2]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base1..base1 + len1]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base0..base0 + len0]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_2OVER {
+            err = check_stack_size(4, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base2, len2): (i64, i64, i64) = stack_peek(&stack, 2);
+            let (_, base3, len3): (i64, i64, i64) = stack_peek(&stack, 3);
+            err = stack_push(&mut stack, stack.data[base3..base3 + len3]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base2..base2 + len2]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_2ROT {
+            err = check_stack_size(6, &stack);
+            if err != ERR_OK { return err; }
+            let (rerr1, base5, len5): (i64, i64, i64) = stack_remove(&mut stack, 5);
+            if rerr1 != ERR_OK { return rerr1; }
+            let (rerr2, base4, len4): (i64, i64, i64) = stack_remove(&mut stack, 4);
+            if rerr2 != ERR_OK { return rerr2; }
+            err = stack_push(&mut stack, stack.data[base5..base5 + len5]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base4..base4 + len4]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_2SWAP {
+            err = check_stack_size(4, &stack);
+            if err != ERR_OK { return err; }
+            let (rerr1, base3, len3): (i64, i64, i64) = stack_remove(&mut stack, 3);
+            if rerr1 != ERR_OK { return rerr1; }
+            let (rerr2, base2, len2): (i64, i64, i64) = stack_remove(&mut stack, 2);
+            if rerr2 != ERR_OK { return rerr2; }
+            err = stack_push(&mut stack, stack.data[base3..base3 + len3]);
+            if err != ERR_OK { return err; }
+            err = stack_push(&mut stack, stack.data[base2..base2 + len2]);
+            if err != ERR_OK { return err; }
+
+        // --- Splice operations ---
+        } else if op == OP_CAT {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base1, len1): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base2, len2): (i64, i64, i64) = stack_pop(&mut stack);
+            let total_len: i64 = len1 + len2;
+            if total_len > MAX_ITEM_SIZE {
+                return ERR_ITEM_TOO_LARGE;
+            }
+            // Build concatenated data in a temporary buffer
+            let mut cat_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut k: i64 = 0;
+            while k < len2 {
+                cat_buf[k] = stack.data[base2 + k];
+                k += 1;
+            }
+            while k < total_len {
+                cat_buf[k] = stack.data[base1 + (k - len2)];
+                k += 1;
+            }
+            err = stack_push(&mut stack, cat_buf[0..total_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_SPLIT {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (nerr, n): (i64, i32) = pop_num(&mut stack);
+            if nerr != ERR_OK { return nerr; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            let x: []u8 = stack.data[base..base + item_len];
+            if n < 0 {
+                return ERR_SPLIT_FAILED;
+            }
+            if (n as i64) > item_len {
+                return ERR_SPLIT_FAILED;
+            }
+            if n == 0 {
+                let mut zero_buf: [u8; 8] = [0; 8];
+                let zero_len: i64 = encode_num_result(0, &mut zero_buf);
+                err = stack_push(&mut stack, zero_buf[0..zero_len]);
+                if err != ERR_OK { return err; }
+                err = stack_push(&mut stack, x);
+                if err != ERR_OK { return err; }
+            } else if (n as i64) == item_len {
+                err = stack_push(&mut stack, x);
+                if err != ERR_OK { return err; }
+                let mut zero_buf: [u8; 8] = [0; 8];
+                let zero_len: i64 = encode_num_result(0, &mut zero_buf);
+                err = stack_push(&mut stack, zero_buf[0..zero_len]);
+                if err != ERR_OK { return err; }
+            } else {
+                let left: []u8 = x[0..n];
+                let right: []u8 = x[n..item_len];
+                err = stack_push(&mut stack, left);
+                if err != ERR_OK { return err; }
+                err = stack_push(&mut stack, right);
+                if err != ERR_OK { return err; }
+            }
+
+        } else if op == OP_SIZE {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 0);
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(item_len, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        // --- Bitwise ---
+        } else if op == OP_INVERT {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            let mut invert_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut k: i64 = 0;
+            while k < item_len {
+                invert_buf[k] = !stack.data[base + k];
+                k += 1;
+            }
+            err = stack_push(&mut stack, invert_buf[0..item_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_AND {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_a, len_a): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_b, len_b): (i64, i64, i64) = stack_pop(&mut stack);
+            if len_a != len_b {
+                return ERR_SCRIPT;
+            }
+            let mut result_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut k: i64 = 0;
+            while k < len_a {
+                result_buf[k] = stack.data[base_a + k] & stack.data[base_b + k];
+                k += 1;
+            }
+            err = stack_push(&mut stack, result_buf[0..len_a]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_OR {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_a, len_a): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_b, len_b): (i64, i64, i64) = stack_pop(&mut stack);
+            if len_a != len_b {
+                return ERR_SCRIPT;
+            }
+            let mut result_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut k: i64 = 0;
+            while k < len_a {
+                result_buf[k] = stack.data[base_a + k] | stack.data[base_b + k];
+                k += 1;
+            }
+            err = stack_push(&mut stack, result_buf[0..len_a]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_XOR {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_a, len_a): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_b, len_b): (i64, i64, i64) = stack_pop(&mut stack);
+            if len_a != len_b {
+                return ERR_SCRIPT;
+            }
+            let mut result_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut k: i64 = 0;
+            while k < len_a {
+                result_buf[k] = stack.data[base_a + k] ^ stack.data[base_b + k];
+                k += 1;
+            }
+            err = stack_push(&mut stack, result_buf[0..len_a]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_EQUAL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_a, len_a): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_b, len_b): (i64, i64, i64) = stack_pop(&mut stack);
+            let equal: bool;
+            if len_a != len_b {
+                equal = false;
+            } else {
+                equal = true;
+                let mut k: i64 = 0;
+                while k < len_a {
+                    if stack.data[base_a + k] != stack.data[base_b + k] {
+                        equal = false;
+                        break;
+                    }
+                    k += 1;
+                }
+            }
+            let mut buf: [u8; 8] = [0; 8];
+            let val: i64;
+            if equal { val = 1; } else { val = 0; }
+            let buf_len: i64 = encode_num_result(val, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_EQUALVERIFY {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_a, len_a): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_b, len_b): (i64, i64, i64) = stack_pop(&mut stack);
+            if len_a != len_b {
+                return ERR_EQUAL_FAILED;
+            }
+            let mut equal: bool = true;
+            let mut k: i64 = 0;
+            while k < len_a {
+                if stack.data[base_a + k] != stack.data[base_b + k] {
+                    equal = false;
+                    break;
+                }
+                k += 1;
+            }
+            if !equal {
+                return ERR_EQUAL_FAILED;
+            }
+
+        // --- Arithmetic ---
+        } else if op == OP_1ADD {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let result: i64 = x + 1;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_1SUB {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let result: i64 = x - 1;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NEGATE {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let result: i64 = -x;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_ABS {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let mut result: i64 = x;
+            if result < 0 {
+                result = -result;
+            }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NOT {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let result: i64;
+            if x == 0 { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_0NOTEQUAL {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, x): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let result: i64;
+            if x == 0 { result = 0; } else { result = 1; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_ADD {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64 = a + b;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_SUB {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64 = a - b;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_MUL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64 = a * b;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_DIV {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            if b == 0 {
+                return ERR_DIV_ZERO;
+            }
+            let result: i64 = a / b;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_MOD {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            if b == 0 {
+                return ERR_DIV_ZERO;
+            }
+            let result: i64 = a % b;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_LSHIFT {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (nerr, n): (i64, i32) = pop_num(&mut stack);
+            if nerr != ERR_OK { return nerr; }
+            let (berr, v): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            if n < 0 {
+                return ERR_BAD_ARGUMENT;
+            }
+            let result: i64 = v << n;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_RSHIFT {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (nerr, n): (i64, i32) = pop_num(&mut stack);
+            if nerr != ERR_OK { return nerr; }
+            let (berr, v): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            if n < 0 {
+                return ERR_BAD_ARGUMENT;
+            }
+            let result: i64 = v >> n;
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_BOOLAND {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a != 0 && b != 0 { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_BOOLOR {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a != 0 || b != 0 { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NUMEQUAL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a == b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NUMEQUALVERIFY {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            if a != b {
+                return ERR_EQUAL_FAILED;
+            }
+
+        } else if op == OP_NUMNOTEQUAL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a != b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_LESSTHAN {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a < b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_GREATERTHAN {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a > b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_LESSTHANOREQUAL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a <= b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_GREATERTHANOREQUAL {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a >= b { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_MIN {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a < b { result = a; } else { result = b; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_MAX {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (berr, b): (i64, i64) = pop_bigint(&mut stack);
+            if berr != ERR_OK { return berr; }
+            let (aerr, a): (i64, i64) = pop_bigint(&mut stack);
+            if aerr != ERR_OK { return aerr; }
+            let result: i64;
+            if a > b { result = a; } else { result = b; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_WITHIN {
+            err = check_stack_size(3, &stack);
+            if err != ERR_OK { return err; }
+            let (merr, max): (i64, i64) = pop_bigint(&mut stack);
+            if merr != ERR_OK { return merr; }
+            let (minerr, min): (i64, i64) = pop_bigint(&mut stack);
+            if minerr != ERR_OK { return minerr; }
+            let (xerr, x): (i64, i64) = pop_bigint(&mut stack);
+            if xerr != ERR_OK { return xerr; }
+            let result: i64;
+            if x >= min && x < max { result = 1; } else { result = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(result, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_NUM2BIN {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (merr, m): (i64, i64) = pop_bigint(&mut stack);
+            if merr != ERR_OK { return merr; }
+            let (_, base_n, len_n): (i64, i64, i64) = stack_pop(&mut stack);
+            let n_data: []u8 = stack.data[base_n..base_n + len_n];
+            if m < 1 {
+                return ERR_NUM2BIN_FAILED;
+            }
+            if m < len_n {
+                return ERR_NUM2BIN_FAILED;
+            }
+            if m > 2147483647 {
+                return ERR_NUM2BIN_FAILED;
+            }
+            let m_usize: i64 = m;
+            let mut v: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut neg: u8 = 0;
+            if len_n > 0 {
+                neg = n_data[len_n - 1] & 128;
+            }
+            // Copy n bytes reversed into v
+            let mut vi: i64 = 0;
+            let mut ni: i64 = len_n - 1;
+            while ni >= 0 {
+                v[vi] = n_data[ni];
+                if ni == len_n - 1 {
+                    v[vi] &= 127;
+                }
+                vi += 1;
+                ni -= 1;
+            }
+            // Pad remaining with zeros
+            while vi < m_usize {
+                v[vi] = 0;
+                vi += 1;
+            }
+            // Reverse the result
+            let mut result_buf: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut ri: i64 = 0;
+            let mut vi2: i64 = m_usize - 1;
+            while vi2 >= 0 {
+                result_buf[ri] = v[vi2];
+                ri += 1;
+                vi2 -= 1;
+            }
+            // Apply sign bit
+            result_buf[0] |= neg;
+            err = stack_push(&mut stack, result_buf[0..m_usize]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_BIN2NUM {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            let v: []u8 = stack.data[base..base + item_len];
+            // Reverse and decode
+            let mut rev: [u8; MAX_ITEM_SIZE] = [0; MAX_ITEM_SIZE];
+            let mut ri: i64 = 0;
+            let mut vi: i64 = item_len - 1;
+            while vi >= 0 {
+                rev[ri] = v[vi];
+                ri += 1;
+                vi -= 1;
+            }
+            let n: i64 = decode_num(rev[0..item_len]);
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(n, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        // --- Cryptographic operations ---
+        } else if op == OP_RIPEMD160 {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            // TODO: External RIPEMD160 hash function
+            // For now, push empty result placeholder
+            let mut hash_buf: [u8; 20] = [0; 20];
+            let v: []u8 = stack.data[base..base + item_len];
+            _ = v;
+            // hash_buf = ripemd160(v) — requires external function
+            err = stack_push(&mut stack, hash_buf[0..20]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_SHA1 {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            // TODO: External SHA1 hash function
+            let mut hash_buf: [u8; 20] = [0; 20];
+            _ = stack.data[base..base + item_len];
+            err = stack_push(&mut stack, hash_buf[0..20]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_SHA256 {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            // TODO: External SHA256 hash function
+            let mut hash_buf: [u8; 32] = [0; 32];
+            _ = stack.data[base..base + item_len];
+            err = stack_push(&mut stack, hash_buf[0..32]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_HASH160 {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            // TODO: External HASH160 (RIPEMD160(SHA256(data)))
+            let mut hash_buf: [u8; 20] = [0; 20];
+            _ = stack.data[base..base + item_len];
+            err = stack_push(&mut stack, hash_buf[0..20]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_HASH256 {
+            err = check_stack_size(1, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base, item_len): (i64, i64, i64) = stack_pop(&mut stack);
+            // TODO: External HASH256 (SHA256(SHA256(data)))
+            let mut hash_buf: [u8; 32] = [0; 32];
+            _ = stack.data[base..base + item_len];
+            err = stack_push(&mut stack, hash_buf[0..32]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_CODESEPARATOR {
+            check_index = i + 1;
+
+        } else if op == OP_CHECKSIG {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_pk, len_pk): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_sig, len_sig): (i64, i64, i64) = stack_pop(&mut stack);
+            let sig: []u8 = stack.data[base_sig..base_sig + len_sig];
+            let pubkey: []u8 = stack.data[base_pk..base_pk + len_pk];
+            let cleaned_script: []u8;
+            let mut cleaned_buf: [u8; 65536] = [0; 65536];
+            if prefork(sig) {
+                let removed: []u8 = remove_sig(sig, script[check_index..len(script)]);
+                let mut ci: i64 = 0;
+                while ci < len(removed) {
+                    cleaned_buf[ci] = removed[ci];
+                    ci += 1;
+                }
+                cleaned_script = cleaned_buf[0..ci];
+            } else {
+                cleaned_script = script[check_index..len(script)];
+            }
+            let (cerr, success): (i64, bool) = check_sig(checker, sig, pubkey, cleaned_script);
+            if cerr != ERR_OK { return cerr; }
+            let val: i64;
+            if success { val = 1; } else { val = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(val, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_CHECKSIGVERIFY {
+            err = check_stack_size(2, &stack);
+            if err != ERR_OK { return err; }
+            let (_, base_pk, len_pk): (i64, i64, i64) = stack_pop(&mut stack);
+            let (_, base_sig, len_sig): (i64, i64, i64) = stack_pop(&mut stack);
+            let sig: []u8 = stack.data[base_sig..base_sig + len_sig];
+            let pubkey: []u8 = stack.data[base_pk..base_pk + len_pk];
+            let cleaned_script: []u8;
+            let mut cleaned_buf: [u8; 65536] = [0; 65536];
+            if prefork(sig) {
+                let removed: []u8 = remove_sig(sig, script[check_index..len(script)]);
+                let mut ci: i64 = 0;
+                while ci < len(removed) {
+                    cleaned_buf[ci] = removed[ci];
+                    ci += 1;
+                }
+                cleaned_script = cleaned_buf[0..ci];
+            } else {
+                cleaned_script = script[check_index..len(script)];
+            }
+            let (cerr, success): (i64, bool) = check_sig(checker, sig, pubkey, cleaned_script);
+            if cerr != ERR_OK { return cerr; }
+            if !success {
+                return ERR_VERIFY_FAILED;
+            }
+
+        } else if op == OP_CHECKMULTISIG {
+            let (merr, success): (i64, bool) = check_multisig(&mut stack, checker, script, check_index);
+            if merr != ERR_OK { return merr; }
+            let val: i64;
+            if success { val = 1; } else { val = 0; }
+            let mut buf: [u8; 8] = [0; 8];
+            let buf_len: i64 = encode_num_result(val, &mut buf);
+            err = stack_push(&mut stack, buf[0..buf_len]);
+            if err != ERR_OK { return err; }
+
+        } else if op == OP_CHECKMULTISIGVERIFY {
+            let (merr, success): (i64, bool) = check_multisig(&mut stack, checker, script, check_index);
+            if merr != ERR_OK { return merr; }
+            if !success {
+                return ERR_MULTISIG_FAILED;
+            }
+
+        } else if op == OP_CHECKLOCKTIMEVERIFY {
+            if (flags & PREGENESIS_RULES) == PREGENESIS_RULES {
+                let (nerr, locktime): (i64, i32) = pop_num(&mut stack);
+                if nerr != ERR_OK { return nerr; }
+                let (cerr, ok): (i64, bool) = check_locktime(checker, locktime);
+                if cerr != ERR_OK { return cerr; }
+                if !ok {
+                    return ERR_CHECKER_FAILED;
+                }
+            }
+
+        } else if op == OP_CHECKSEQUENCEVERIFY {
+            if (flags & PREGENESIS_RULES) == PREGENESIS_RULES {
+                let (nerr, sequence): (i64, i32) = pop_num(&mut stack);
+                if nerr != ERR_OK { return nerr; }
+                let (cerr, ok): (i64, bool) = check_sequence(checker, sequence);
+                if cerr != ERR_OK { return cerr; }
+                if !ok {
+                    return ERR_CHECKER_FAILED;
+                }
+            }
+
+        // --- NOPs ---
+        } else if op == OP_NOP1 || op == OP_NOP4 || op == OP_NOP5
+            || op == OP_NOP6 || op == OP_NOP7 || op == OP_NOP8
+            || op == OP_NOP9 || op == OP_NOP10 {
+            // no-op
+
+        } else {
+            return ERR_BAD_OPCODE;
+        }
+
+        i = next_op(i, script);
+    }
+
+    if branch_depth > 0 {
+        return ERR_UNMATCHED_ENDIF;
+    }
+    err = check_stack_size(1, &stack);
+    if err != ERR_OK { return err; }
+    let (_, base, item_len): (i64, i64, i64) = stack_peek(&stack, 0);
+    let top: []u8 = stack.data[base..base + item_len];
+    if !decode_bool(top) {
+        return ERR_TOP_FALSE;
+    }
+    return ERR_OK;
+}
+
+// --- CheckMultisig ---
+fn check_multisig(
+    stack: &mut ScriptStack,
+    checker: &EvalChecker,
+    script: []u8,
+    check_index: i64,
+) -> (i64, bool) {
+    let (nerr, total): (i64, i32) = pop_num(stack);
+    if nerr != ERR_OK { return (nerr, false); }
+    if total < 0 {
+        return (ERR_SCRIPT, false);
+    }
+    if total > 20 {
+        return (ERR_SCRIPT, false);
+    }
+    let check_err: i64 = check_stack_size(total as i64, stack);
+    if check_err != ERR_OK { return (check_err, false); }
+
+    // Pop total pubkeys
+    let mut keys_data: [u8; MAX_ITEMS_PUBKEYS * 65] = [0; MAX_ITEMS_PUBKEYS * 65];
+    let mut keys_len: [i64; MAX_ITEMS_PUBKEYS] = [0; MAX_ITEMS_PUBKEYS];
+    let mut ki: i64 = 0;
+    while ki < total as i64 {
+        let (_, base, item_len): (i64, i64, i64) = stack_pop(stack);
+        let mut ji: i64 = 0;
+        while ji < item_len {
+            keys_data[ki * 65 + ji] = stack.data[base + ji];
+            ji += 1;
+        }
+        keys_len[ki] = item_len;
+        ki += 1;
+    }
+
+    let (rerr, required): (i64, i32) = pop_num(stack);
+    if rerr != ERR_OK { return (rerr, false); }
+    if required < 0 || required > total {
+        return (ERR_SCRIPT, false);
+    }
+
+    // Pop required signatures
+    let mut sigs_data: [u8; MAX_ITEMS_PUBKEYS * 80] = [0; MAX_ITEMS_PUBKEYS * 80];
+    let mut sigs_len: [i64; MAX_ITEMS_PUBKEYS] = [0; MAX_ITEMS_PUBKEYS];
+    let mut si: i64 = 0;
+    while si < required as i64 {
+        let (_, base, item_len): (i64, i64, i64) = stack_pop(stack);
+        let mut ji: i64 = 0;
+        while ji < item_len {
+            sigs_data[si * 80 + ji] = stack.data[base + ji];
+            ji += 1;
+        }
+        sigs_len[si] = item_len;
+        si += 1;
+    }
+
+    // Pop dummy (always required for the off-by-one)
+    let dummy_err: i64 = check_stack_size(1, stack);
+    if dummy_err != ERR_OK { return (dummy_err, false); }
+    let (_, _, _): (i64, i64, i64) = stack_pop(stack);
+
+    // Build cleaned script (remove sigs if legacy/pre-forkid)
+    let mut cleaned_buf: [u8; 65536] = [0; 65536];
+    let mut cleaned_len: i64 = 0;
+    let rest_script: []u8 = script[check_index..len(script)];
+    // Start with the full script
+    let mut ci: i64 = 0;
+    while ci < len(rest_script) {
+        cleaned_buf[ci] = rest_script[ci];
+        ci += 1;
+    }
+    cleaned_len = ci;
+
+    // Remove each pre-fork sig from cleaned script
+    let mut sig_idx: i64 = 0;
+    while sig_idx < required as i64 {
+        let sig_slice: []u8 = sigs_data[sig_idx * 80..sig_idx * 80 + sigs_len[sig_idx]];
+        if prefork(sig_slice) {
+            // Apply remove_sig on current cleaned
+            let removed: []u8 = remove_sig(sig_slice, cleaned_buf[0..cleaned_len]);
+            // Copy back
+            let mut rci: i64 = 0;
+            while rci < len(removed) {
+                cleaned_buf[rci] = removed[rci];
+                rci += 1;
+            }
+            cleaned_len = rci;
+        }
+        sig_idx += 1;
+    }
+
+    // Verify: advance through keys for each sig until match or no keys left
+    let mut key_idx: i64 = 0;
+    let mut idx: i64 = 0;
+    while idx < required as i64 {
+        if key_idx >= total as i64 {
+            return (ERR_OK, false);
+        }
+        let sig_slice: []u8 = sigs_data[idx * 80..idx * 80 + sigs_len[idx]];
+        let key_slice: []u8 = keys_data[key_idx * 65..key_idx * 65 + keys_len[key_idx]];
+        let (cerr, ok): (i64, bool) = check_sig(checker, sig_slice, key_slice, cleaned_buf[0..cleaned_len]);
+        if cerr != ERR_OK { return (cerr, false); }
+        if ok {
+            idx += 1;
+        }
+        key_idx += 1;
+    }
+
+    return (ERR_OK, idx == required as i64);
+}

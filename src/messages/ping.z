@@ -1,0 +1,37 @@
+// Ping/Pong payload for Bitcoin SV P2P keepalive messages.
+
+struct Ping {
+    nonce: u64,
+}
+
+fn ping_size() -> usize {
+    8
+}
+
+fn ping_read(data: [u8], offset: usize) -> (Ping, usize) {
+    let mut o = offset
+    let nonce_bytes = data[o..o+8]
+    let nonce = (nonce_bytes[0] as u64) |
+                ((nonce_bytes[1] as u64) << 8) |
+                ((nonce_bytes[2] as u64) << 16) |
+                ((nonce_bytes[3] as u64) << 24) |
+                ((nonce_bytes[4] as u64) << 32) |
+                ((nonce_bytes[5] as u64) << 40) |
+                ((nonce_bytes[6] as u64) << 48) |
+                ((nonce_bytes[7] as u64) << 56)
+    o += 8
+    (Ping { nonce }, o)
+}
+
+fn ping_write(p: Ping) -> [u8] {
+    let mut out = [0; 8]
+    out[0] = (p.nonce & 0xff) as u8
+    out[1] = ((p.nonce >> 8) & 0xff) as u8
+    out[2] = ((p.nonce >> 16) & 0xff) as u8
+    out[3] = ((p.nonce >> 24) & 0xff) as u8
+    out[4] = ((p.nonce >> 32) & 0xff) as u8
+    out[5] = ((p.nonce >> 40) & 0xff) as u8
+    out[6] = ((p.nonce >> 48) & 0xff) as u8
+    out[7] = ((p.nonce >> 56) & 0xff) as u8
+    out
+}

@@ -1,0 +1,138 @@
+// Transaction message for Bitcoin SV P2P, supporting large txs for high TPS.
+
+struct Tx {
+    version: u32,
+    inputs: [TxIn],
+    outputs: [TxOut],
+    lock_time: u32,
+}
+
+const MAX_SATOSHIS: i64 = 21_000_000 * 100_000_000
+const MAX_INPUTS: u64 = 100_000_000
+const MAX_OUTPUTS: u64 = 100_000_000
+
+fn tx_size(t: Tx) -> usize {
+    8 + var_int_size(t.inputs.len() as u64) + sum_tx_in_sizes(t.inputs) +
+    var_int_size(t.outputs.len() as u64) + sum_tx_out_sizes(t.outputs)
+}
+
+fn sum_tx_in_sizes(inputs: [TxIn]) -> usize {
+    var total = 0
+    var i = 0
+    while i < inputs.len() {
+        total += tx_in_size(inputs[i])
+        i += 1
+    }
+    total
+}
+
+fn sum_tx_out_sizes(outputs: [TxOut]) -> usize {
+    var total = 0
+    var i = 0
+    while i < outputs.len() {
+        total += tx_out_size(outputs[i])
+        i += 1
+    }
+    total
+}
+
+fn tx_read(data: [u8], offset: usize) -> (Tx, usize) {
+    let mut o = offset
+
+    let v_bytes = data[o..o+4]
+    let version = (v_bytes[0] as u32) |
+                  ((v_bytes[1] as u32) << 8) |
+                  ((v_bytes[2] as u32) << 16) |
+                  ((v_bytes[3] as u32) << 24)
+    o += 4
+
+    let (n_inputs, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let ni = n_inputs as usize
+    let mut inputs = [] as [TxIn]
+    var i = 0
+    while i < ni {
+        let (txin, new_o) = tx_in_read(data, o)
+        inputs = inputs ++ [txin]
+        o = new_o
+        i += 1
+    }
+
+    let (n_outputs, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let no = n_outputs as usize
+    let mut outputs = [] as [TxOut]
+    var j = 0
+    while j < no {
+        let (txout, new_o) = tx_out_read(data, o)
+        outputs = outputs ++ [txout]
+        o = new_o
+        j += 1
+    }
+
+    let lt_bytes = data[o..o+4]
+    let lock_time = (lt_bytes[0] as u32) |
+                    ((lt_bytes[1] as u32) << 8) |
+                    ((lt_bytes[2] as u32) << 16) |
+                    ((lt_bytes[3] as u32) << 24)
+    o += 4
+
+    (Tx { version, inputs, outputs, lock_time }, o)
+}
+
+fn tx_write(t: Tx) -> [u8] {
+    let sz = tx_size(t)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    out[o] = (t.version & 0xff) as u8
+    out[o+1] = ((t.version >> 8) & 0xff) as u8
+    out[o+2] = ((t.version >> 16) & 0xff) as u8
+    out[o+3] = ((t.version >> 24) & 0xff) as u8
+    o += 4
+
+    let vi1 = var_int_write(t.inputs.len() as u64)
+    out[o..o+vi1.len()] = vi1
+    o += vi1.len()
+
+    var i = 0
+    while i < t.inputs.len() {
+        let ti_bytes = tx_in_write(t.inputs[i])
+        out[o..o+ti_bytes.len()] = ti_bytes
+        o += ti_bytes.len()
+        i += 1
+    }
+
+    let vi2 = var_int_write(t.outputs.len() as u64)
+    out[o..o+vi2.len()] = vi2
+    o += vi2.len()
+
+    var j = 0
+    while j < t.outputs.len() {
+        let to_bytes = tx_out_write(t.outputs[j])
+        out[o..o+to_bytes.len()] = to_bytes
+        o += to_bytes.len()
+        j += 1
+    }
+
+    out[o] = (t.lock_time & 0xff) as u8
+    out[o+1] = ((t.lock_time >> 8) & 0xff) as u8
+    out[o+2] = ((t.lock_time >> 16) & 0xff) as u8
+    out[o+3] = ((t.lock_time >> 24) & 0xff) as u8
+    o += 4
+
+    out
+}
+
+fn tx_hash(t: Tx) -> [u8] {
+    let bytes = tx_write(t)
+    sha256d(bytes)
+}
+
+fn tx_coinbase(t: Tx) -> bool {
+    t.inputs.len() == 1 &&
+    t.inputs[0].prev_output.hash == COINBASE_OUTPOINT_HASH &&
+    t.inputs[0].prev_output.index == COINBASE_OUTPOINT_INDEX
+}

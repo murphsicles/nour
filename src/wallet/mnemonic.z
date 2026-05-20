@@ -1,0 +1,169 @@
+// BIP-39 mnemonic encoding/decoding for Bitcoin SV wallet seed phrases.
+// Pure Zeta implementation using @crypto/bitcoin-hashes for SHA-256 checksum.
+
+use @crypto/bitcoin-hashes::Sha256
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const MAX_DATA_LEN: i64 = 512 / 8  // 64 bytes = 512 bits
+const WORDS_IN_WORDLIST: i64 = 2048
+
+// ─── Bit Helpers ───────────────────────────────────────────────────────────
+
+// Extract `count` bits from a byte array starting at bit position `bit_start`.
+// Returns the extracted value as u16 (max 11 bits for BIP-39 word indices).
+fn bits_extract(data: [u8], bit_start: i64, count: i64) -> u16 {
+    let mut result: u16 = 0;
+    let mut i: i64 = 0;
+    while i < count {
+        let byte_idx = (bit_start + i) / 8;
+        let bit_idx = (bit_start + i) % 8;
+        let bit = (data[byte_idx] >> (7 - bit_idx)) & 1;
+        result = (result << 1) | (bit as u16);
+        i += 1;
+    }
+    return result;
+}
+
+// Set `count` bits at position `bit_start` in a byte array to the given value.
+fn bits_set(data: [u8], bit_start: i64, count: i64, value: u16) {
+    let mut i: i64 = 0;
+    while i < count {
+        let byte_idx = (bit_start + i) / 8;
+        let bit_idx = (bit_start + i) % 8;
+        let bit = ((value >> (count - 1 - i)) & 1) as u8;
+        if bit != 0 {
+            data[byte_idx] = data[byte_idx] | (1 << (7 - bit_idx));
+        } else {
+            data[byte_idx] = data[byte_idx] & !(1 << (7 - bit_idx));
+        }
+        i += 1;
+    }
+}
+
+// ─── BIP-39 Mnemonic Encode ────────────────────────────────────────────────
+
+fn mnemonic_encode(data: [u8], word_list: [[u8]; WORDS_IN_WORDLIST]) -> [[u8]] {
+    let data_len = len(data);
+    
+    // Validate: not empty, multiple of 4, not too long
+    if data_len == 0 || data_len % 4 != 0 || data_len > MAX_DATA_LEN {
+        return [];
+    }
+
+    // SHA-256 checksum: cs_len = data_len / 4
+    let cs_len: i64 = data_len / 4;
+    let hash = Sha256::hash(data);
+    let hash_bytes = hash.to_byte_array();
+
+    // Combined data + checksum bits
+    let total_bits = data_len * 8 + cs_len;
+    let word_count = total_bits / 11;
+
+    let mut words: [[u8]; 12] = [[]; 12]; // Max 24 words, min 12
+    let mut wi: i64 = 0;
+
+    while wi < word_count {
+        let bit_start = wi * 11;
+        // Build the 11-bit index from data + checksum
+        let mut val: u16 = 0;
+        let mut bi: i64 = 0;
+        while bi < 11 {
+            let abs_pos = bit_start + bi;
+            let byte_idx: i64;
+            let bit_idx: i64;
+            let byte_val: u8;
+
+            if abs_pos < data_len * 8 {
+                // From data
+                byte_idx = abs_pos / 8;
+                bit_idx = abs_pos % 8;
+                byte_val = data[byte_idx];
+            } else {
+                // From checksum
+                let cs_pos = abs_pos - data_len * 8;
+                byte_idx = cs_pos / 8;
+                bit_idx = cs_pos % 8;
+                byte_val = hash_bytes[byte_idx];
+            }
+
+            let bit = (byte_val >> (7 - bit_idx)) & 1;
+            val = (val << 1) | (bit as u16);
+            bi += 1;
+        }
+
+        words[wi] = word_list[val as i64];
+        wi += 1;
+    }
+
+    return words[0..word_count];
+}
+
+// ─── BIP-39 Mnemonic Decode ────────────────────────────────────────────────
+
+fn mnemonic_decode(mnemonic: [[u8]], word_list: [[u8]; WORDS_IN_WORDLIST]) -> [u8] {
+    let mnemonic_len = len(mnemonic);
+    if mnemonic_len == 0 {
+        return [];
+    }
+
+    // Validate: mnemonic_len * 11 must be divisible by 33
+    if (mnemonic_len * 11) % 33 != 0 {
+        return [0; 0]; // Use a sentinel — caller checks length
+    }
+
+    let total_bits = mnemonic_len * 11;
+    let data_bits = total_bits * 32 / 33;
+    let cs_bits = total_bits / 33;
+
+    let data_bytes = data_bits / 8;
+    let mut result: [u8; 64] = [0; 64]; // Max 64 bytes
+
+    // Build the full bitstring from word indices
+    let mut wi: i64 = 0;
+    while wi < mnemonic_len {
+        // Find index of this word
+        let mut word_idx: u16 = 2048; // Invalid sentinel
+        let mut wj: i64 = 0;
+        while wj < WORDS_IN_WORDLIST {
+            if slice_eq(word_list[wj], mnemonic[wi]) {
+                word_idx = wj as u16;
+                break;
+            }
+            wj += 1;
+        }
+
+        if word_idx >= 2048 {
+            return [0; 0]; // Word not found
+        }
+
+        // Write 11 bits into result
+        bits_set(result, wi * 11, 11, word_idx);
+        wi += 1;
+    }
+
+    // Verify checksum
+    let hash = Sha256::hash(result[0..data_bytes]);
+    let hash_bytes = hash.to_byte_array();
+
+    let found_cs = bits_extract(result, data_bits, cs_bits);
+    let expected_cs = bits_extract(hash_bytes, 0, cs_bits);
+
+    if found_cs != expected_cs {
+        return [0; 0]; // Checksum mismatch
+    }
+
+    return result[0..data_bytes];
+}
+
+// ─── Utility ───────────────────────────────────────────────────────────────
+
+fn slice_eq(a: [u8], b: [u8]) -> bool {
+    if len(a) != len(b) { return false; }
+    let mut i: i64 = 0;
+    while i < len(a) {
+        if a[i] != b[i] { return false; }
+        i += 1;
+    }
+    return true;
+}

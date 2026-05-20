@@ -1,0 +1,122 @@
+// Lightweight event handling system for Bitcoin SV toolkit.
+// Simple observer pattern — no thread safety, no locks, no channels.
+// Observers are function pointers (callbacks).
+
+// Stores observers for a particular event type (i64).
+struct SubjectI64 {
+    observers: []fn(event: i64),
+}
+
+// Creates a new empty subject for i64 events.
+fn SubjectI64_new() -> SubjectI64 {
+    return SubjectI64 { observers: [] };
+}
+
+// Subscribes an observer to receive events.
+fn SubjectI64_subscribe(s: *SubjectI64, obs: fn(event: i64)) {
+    (*s).observers += obs;
+}
+
+// Emits an event to all observers.
+fn SubjectI64_next(s: *SubjectI64, event: i64) {
+    let mut i: i64 = 0;
+    while i < len((*s).observers) {
+        (*s).observers[i](event);
+        i += 1;
+    }
+}
+
+// Stores observers for a particular event type (string).
+struct SubjectString {
+    observers: []fn(event: string),
+}
+
+// Creates a new empty subject for string events.
+fn SubjectString_new() -> SubjectString {
+    return SubjectString { observers: [] };
+}
+
+// Subscribes an observer to receive string events.
+fn SubjectString_subscribe(s: *SubjectString, obs: fn(event: string)) {
+    (*s).observers += obs;
+}
+
+// Emits a string event to all observers.
+fn SubjectString_next(s: *SubjectString, event: string) {
+    let mut i: i64 = 0;
+    while i < len((*s).observers) {
+        (*s).observers[i](event);
+        i += 1;
+    }
+}
+
+// A subject that only emits a single i64 value.
+// After a value is emitted once, all future calls to next() are ignored.
+struct SingleI64 {
+    observers: []fn(event: i64),
+    value: i64,
+    emitted: bool,
+}
+
+// Creates a new SingleI64 with no observers and no value.
+fn SingleI64_new() -> SingleI64 {
+    return SingleI64 { observers: [], value: 0, emitted: false };
+}
+
+// Subscribes an observer. If a value has already been emitted,
+// the observer is called immediately with that value.
+fn SingleI64_subscribe(s: *SingleI64, obs: fn(event: i64)) {
+    if (*s).emitted {
+        obs((*s).value);
+    } else {
+        (*s).observers += obs;
+    }
+}
+
+// Emits a value (only the first emission has effect).
+fn SingleI64_next(s: *SingleI64, event: i64) {
+    if !(*s).emitted {
+        (*s).emitted = true;
+        (*s).value = event;
+        let mut i: i64 = 0;
+        while i < len((*s).observers) {
+            (*s).observers[i](event);
+            i += 1;
+        }
+    }
+}
+
+// A subject that only emits a single string value.
+struct SingleString {
+    observers: []fn(event: string),
+    value: string,
+    emitted: bool,
+}
+
+// Creates a new SingleString with no observers and no value.
+fn SingleString_new() -> SingleString {
+    return SingleString { observers: [], value: "", emitted: false };
+}
+
+// Subscribes an observer. If a value has already been emitted,
+// the observer is called immediately with that value.
+fn SingleString_subscribe(s: *SingleString, obs: fn(event: string)) {
+    if (*s).emitted {
+        obs((*s).value);
+    } else {
+        (*s).observers += obs;
+    }
+}
+
+// Emits a value (only the first emission has effect).
+fn SingleString_next(s: *SingleString, event: string) {
+    if !(*s).emitted {
+        (*s).emitted = true;
+        (*s).value = event;
+        let mut i: i64 = 0;
+        while i < len((*s).observers) {
+            (*s).observers[i](event);
+            i += 1;
+        }
+    }
+}

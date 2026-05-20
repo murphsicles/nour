@@ -1,0 +1,38 @@
+// OutPoint for Bitcoin SV P2P, referencing transaction outputs.
+
+struct OutPoint {
+    hash: [u8],
+    index: u32,
+}
+
+const COINBASE_OUTPOINT_HASH: [u8] = [0; 32]
+const COINBASE_OUTPOINT_INDEX: u32 = 0xffffffff
+
+fn out_point_size() -> usize {
+    36
+}
+
+fn out_point_read(data: [u8], offset: usize) -> (OutPoint, usize) {
+    let mut o = offset
+    let hash = data[o..o+32]
+    o += 32
+    let index_bytes = data[o..o+4]
+    let index = (index_bytes[0] as u32) |
+                ((index_bytes[1] as u32) << 8) |
+                ((index_bytes[2] as u32) << 16) |
+                ((index_bytes[3] as u32) << 24)
+    o += 4
+    (OutPoint { hash, index }, o)
+}
+
+fn out_point_write(op: OutPoint) -> [u8] {
+    let mut out = [0; 36]
+    let mut o = 0
+    out[o..o+32] = op.hash
+    o += 32
+    out[o] = (op.index & 0xff) as u8
+    out[o+1] = ((op.index >> 8) & 0xff) as u8
+    out[o+2] = ((op.index >> 16) & 0xff) as u8
+    out[o+3] = ((op.index >> 24) & 0xff) as u8
+    out
+}

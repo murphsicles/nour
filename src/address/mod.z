@@ -1,0 +1,92 @@
+//! Address handling for Bitcoin SV: P2PKH and P2SH encoding/decoding in base58check format.
+//!
+//! Supports Mainnet, Testnet, and STN networks with checksum verification using double-SHA256.
+//! Payload must be exactly 20 bytes (Hash160). Optimized for high-throughput applications.
+
+use @crypto/bsv58.{decode_full, encode}
+use network.Network
+use util.{Error, Result, sha256d}
+
+const MAINNET_P2PKH_VERSION: u8 = 0x00
+const MAINNET_P2SH_VERSION: u8 = 0x05
+const TESTNET_P2PKH_VERSION: u8 = 0x6F
+const TESTNET_P2SH_VERSION: u8 = 0xC4
+
+/// Encodes a base58check address from version byte and 20-byte payload.
+///
+/// Returns Error if payload is not exactly 20 bytes.
+pub func encode_address(network: Network, version: u8, payload: [u8]) -> Result<string> {
+    if payload.len() != 20 {
+        return Err(Error.BadArgument("Payload must be 20 bytes"))
+    }
+    let mut v: [u8; 25] = [0u8; 25]
+    v[0] = version
+    let mut i: i64 = 0
+    while i < 20 {
+        v[i + 1] = payload[i]
+        i += 1
+    }
+    let checksum: [u8] = sha256d(v[0..21])
+    let mut j: i64 = 0
+    while j < 4 {
+        v[21 + j] = checksum[j]
+        j += 1
+    }
+    return Ok(encode(v))
+}
+
+/// Decodes a base58check address into version and payload.
+///
+/// Uses bsv58's decode_full with checksum validation.
+/// Returns a 21-byte array (version byte + 20-byte payload).
+/// Returns Error on decode failure or invalid length.
+pub func decode_address(input: string) -> Result<[u8]> {
+    let bytes: [u8] = decode_full(input, true)
+    if bytes.len() == 0 {
+        return Err(Error.BadArgument("Base58 decode error: invalid input"))
+    }
+    if bytes.len() != 21 {
+        return Err(Error.BadData("Invalid address length"))
+    }
+    return Ok(bytes)
+}
+
+/// Encodes a P2PKH address from 20-byte pubkey hash.
+pub func encode_p2pkh_address(network: Network, pubkey_hash: [u8]) -> Result<string> {
+    let version: u8
+    if network == Network.Mainnet {
+        version = MAINNET_P2PKH_VERSION
+    } else {
+        version = TESTNET_P2PKH_VERSION
+    }
+    return encode_address(network, version, pubkey_hash)
+}
+
+/// Encodes a P2SH address from 20-byte script hash.
+pub func encode_p2sh_address(network: Network, script_hash: [u8]) -> Result<string> {
+    let version: u8
+    if network == Network.Mainnet {
+        version = MAINNET_P2SH_VERSION
+    } else {
+        version = TESTNET_P2SH_VERSION
+    }
+    return encode_address(network, version, script_hash)
+}
+
+/// Validates an address version against the network (P2PKH or P2SH only).
+///
+/// Returns Error if version mismatches network.
+pub func validate_address(network: Network, address: string) -> Result {
+    let decoded: [u8] = decode_address(address)?
+    let version: u8 = decoded[0]
+    let valid: bool
+    if network == Network.Mainnet {
+        valid = version == MAINNET_P2PKH_VERSION || version == MAINNET_P2SH_VERSION
+    } else {
+        valid = version == TESTNET_P2PKH_VERSION || version == TESTNET_P2SH_VERSION
+    }
+    if !valid {
+        return Err(Error.BadData("Invalid address version for network"))
+    }
+    return Ok
+}

@@ -1,0 +1,88 @@
+// Standard error handling types for the nour library.
+// Errors are represented as structs with a kind string and message.
+// Functions return i64 error codes (0 = success, negative = error).
+
+// Standard error type used in the library.
+struct Error {
+    // Error kind: "BadArgument", "BadData", "FromHexError", "FromUtf8Error",
+    // "IllegalState", "InvalidOperation", "IOError", "ParseIntError",
+    // "ScriptError", "Secp256k1Error", "Timeout", "Unsupported"
+    kind: string,
+    // Human-readable error description.
+    message: string,
+}
+
+// Error code constants (returned by functions to indicate failure).
+const ERR_SUCCESS: i64 = 0;
+const ERR_BAD_ARGUMENT: i64 = -1;
+const ERR_BAD_DATA: i64 = -2;
+const ERR_FROM_HEX: i64 = -3;
+const ERR_FROM_UTF8: i64 = -4;
+const ERR_ILLEGAL_STATE: i64 = -5;
+const ERR_INVALID_OPERATION: i64 = -6;
+const ERR_IO_ERROR: i64 = -7;
+const ERR_PARSE_INT: i64 = -8;
+const ERR_SCRIPT_ERROR: i64 = -9;
+const ERR_SECP256K1: i64 = -10;
+const ERR_TIMEOUT: i64 = -11;
+const ERR_UNSUPPORTED: i64 = -12;
+
+// Creates a new Error struct.
+fn Error_new(kind: string, message: string) -> Error {
+    return Error { kind: kind, message: message };
+}
+
+// Creates a "BadArgument" error.
+fn Error_bad_argument(message: string) -> Error {
+    return Error { kind: "BadArgument", message: message };
+}
+
+// Creates a "BadData" error.
+fn Error_bad_data(message: string) -> Error {
+    return Error { kind: "BadData", message: message };
+}
+
+// Creates a "FromHexError" error.
+fn Error_from_hex(message: string) -> Error {
+    return Error { kind: "FromHexError", message: message };
+}
+
+// Creates an "IOError" error.
+fn Error_io(message: string) -> Error {
+    return Error { kind: "IOError", message: message };
+}
+
+// Creates a "Timeout" error.
+fn Error_timeout() -> Error {
+    return Error { kind: "Timeout", message: "The operation timed out" };
+}
+
+// Creates an "Unsupported" error.
+fn Error_unsupported(message: string) -> Error {
+    return Error { kind: "Unsupported", message: message };
+}
+
+// Converts an error code to a default error struct.
+fn Error_from_code(code: i64) -> Error {
+    if code == ERR_BAD_ARGUMENT {
+        return Error { kind: "BadArgument", message: "Invalid argument" };
+    }
+    if code == ERR_BAD_DATA {
+        return Error { kind: "BadData", message: "Invalid data" };
+    }
+    if code == ERR_FROM_HEX {
+        return Error { kind: "FromHexError", message: "Hex decoding error" };
+    }
+    if code == ERR_TIMEOUT {
+        return Error { kind: "Timeout", message: "The operation timed out" };
+    }
+    if code == ERR_UNSUPPORTED {
+        return Error { kind: "Unsupported", message: "Unsupported operation" };
+    }
+    return Error { kind: "Unknown", message: "Unknown error" };
+}
+
+// Formats the error as a human-readable string.
+fn Error_to_string(e: *Error) -> string {
+    return (*e).kind + ": " + (*e).message;
+}

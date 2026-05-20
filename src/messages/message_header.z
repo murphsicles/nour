@@ -1,0 +1,70 @@
+// Message header for Bitcoin SV P2P messages.
+
+struct MessageHeader {
+    magic: [u8],
+    command: [u8],
+    payload_size: u32,
+    checksum: [u8],
+}
+
+const MESSAGE_HEADER_SIZE: usize = 24
+
+fn message_header_size() -> usize {
+    MESSAGE_HEADER_SIZE
+}
+
+fn message_header_read(data: [u8], offset: usize) -> (MessageHeader, usize) {
+    let mut o = offset
+    let magic = data[o..o+4]
+    o += 4
+    let command = data[o..o+12]
+    o += 12
+
+    let size_bytes = data[o..o+4]
+    let payload_size = (size_bytes[0] as u32) |
+                       ((size_bytes[1] as u32) << 8) |
+                       ((size_bytes[2] as u32) << 16) |
+                       ((size_bytes[3] as u32) << 24)
+    o += 4
+
+    let checksum = data[o..o+4]
+    o += 4
+
+    (MessageHeader { magic, command, payload_size, checksum }, o)
+}
+
+fn message_header_write(h: MessageHeader) -> [u8] {
+    let mut out = [0; 24]
+    let mut o = 0
+
+    out[o..o+4] = h.magic
+    o += 4
+    out[o..o+12] = h.command
+    o += 12
+
+    out[o] = (h.payload_size & 0xff) as u8
+    out[o+1] = ((h.payload_size >> 8) & 0xff) as u8
+    out[o+2] = ((h.payload_size >> 16) & 0xff) as u8
+    out[o+3] = ((h.payload_size >> 24) & 0xff) as u8
+    o += 4
+
+    out[o..o+4] = h.checksum
+    o += 4
+
+    out
+}
+
+fn message_header_validate(h: MessageHeader, magic: [u8], max_size: u64) -> bool {
+    if h.magic != magic {
+        return false
+    }
+    if (h.payload_size as u64) > max_size {
+        return false
+    }
+    true
+}
+
+fn message_header_payload(h: MessageHeader, data: [u8], offset: usize) -> ([u8], bool) {
+    let payload = data[offset..offset + (h.payload_size as usize)]
+    (payload, true)
+}

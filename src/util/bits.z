@@ -1,0 +1,193 @@
+// Bit array management for Bitcoin SV script operations (e.g., LSHIFT/RSHIFT).
+
+const LSHIFT_MASK: [8]u8 = [0xff, 0x7f, 0x3f, 0x1f, 0x0f, 0x07, 0x03, 0x01];
+const RSHIFT_MASK: [8]u8 = [0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80];
+
+// Manages an array of bits.
+struct Bits {
+    data: []u8,
+    len: i64,
+}
+
+// Creates an empty bit array.
+fn Bits_new() -> Bits {
+    return Bits { data: [], len: 0 };
+}
+
+// Creates a bits array with default capacity for a certain size.
+fn Bits_with_capacity(capacity: i64) -> Bits {
+    return Bits { data: [], len: 0 };
+}
+
+// Creates the bits from a byte slice.
+fn Bits_from_slice(data: []u8, bit_len: i64) -> Bits {
+    let mut vec: []u8 = [] + data;
+    let max_bit_len: i64 = len(data) * 8;
+    let actual_len: i64 = if bit_len < max_bit_len { bit_len } else { max_bit_len };
+    let byte_len: i64 = (actual_len + 7) / 8;
+    // Truncate to byte_len
+    let mut trimmed: []u8 = [];
+    let mut i: i64 = 0;
+    while i < byte_len && i < len(vec) {
+        trimmed += vec[i];
+        i += 1;
+    }
+    let rem: i64 = actual_len % 8;
+    if rem != 0 {
+        let last_idx: i64 = len(trimmed) - 1;
+        let mask_val: u8 = !(((1u32 << (8 - rem)) - 1) as u8);
+        trimmed[last_idx] = trimmed[last_idx] & mask_val;
+    }
+    return Bits { data: trimmed, len: actual_len };
+}
+
+// Appends data to the bit array.
+fn Bits_append(b: *Bits, other: *Bits) {
+    let mut i: i64 = 0;
+    while i < (*other).len / 8 {
+        Bits_append_byte(b, (*other).data[i], 8);
+        i += 1;
+    }
+    let rem: i64 = (*other).len % 8;
+    if rem != 0 {
+        Bits_append_byte(b, (*other).data[i], rem);
+    }
+}
+
+// Appends a byte or less to the bit array.
+fn Bits_append_byte(b: *Bits, byte: u8, bit_len: i64) {
+    let end: i64 = (*b).len % 8;
+    if end == 0 {
+        (*b).data += byte;
+        (*b).len += bit_len;
+    } else {
+        let last_idx: i64 = len((*b).data) - 1;
+        (*b).data[last_idx] = (*b).data[last_idx] | (byte >> end);
+        if bit_len > 8 - end {
+            (*b).data += byte << (8 - end);
+        }
+        (*b).len += bit_len;
+    }
+}
+
+// Gets a range out of the bit array, right-aligned.
+fn Bits_extract(b: *Bits, start: i64, bit_len: i64) -> i64 {
+    if start + bit_len > (*b).len {
+        return 0;
+    }
+    let end: i64 = start + bit_len;
+    let mut curr: i64 = 0;
+    let mut i: i64 = start;
+    let first_byte: i64 = start / 8;
+    let last_byte: i64 = (start + bit_len + 7) / 8;
+    let mut j: i64 = first_byte;
+    while j < last_byte {
+        let remaining: i64 = end - i;
+        let space_in_byte: i64 = 8 - (i - j * 8);
+        let b_len: i64 = if remaining < space_in_byte { remaining } else { space_in_byte };
+        curr = (curr << b_len) | (Bits_extract_byte(b, i, b_len) as i64);
+        i += b_len;
+        j += 1;
+    }
+    return curr;
+}
+
+// Extracts a byte or less from the bit array, right-aligned.
+fn Bits_extract_byte(b: *Bits, i: i64, bit_len: i64) -> u8 {
+    let offset: i64 = i % 8;
+    let shift_amt: i64 = 8 - offset - bit_len;
+    let byte_val: u8 = (*b).data[i / 8];
+    let shifted: u8 = byte_val >> shift_amt;
+    let mask: u8 = if bit_len == 0 {
+        0u8
+    } else {
+        ((1u32 << bit_len) - 1) as u8
+    };
+    return shifted & mask;
+}
+
+// Left shifts a byte array by n bits.
+fn lshift(v: []u8, n: i64) -> []u8 {
+    if n == 0 {
+        return [] + v;
+    }
+    let bit_shift: i64 = n % 8;
+    let byte_shift: i64 = n / 8;
+    let vlen: i64 = len(v);
+    if byte_shift >= vlen {
+        let mut result: []u8 = [];
+        let mut i: i64 = 0;
+        while i < vlen {
+            result += 0u8;
+            i += 1;
+        }
+        return result;
+    }
+    let mask: u8 = LSHIFT_MASK[bit_shift];
+    let overflow_mask: u8 = !mask;
+    let mut result: []u8 = [];
+    let mut ri: i64 = 0;
+    while ri < vlen {
+        result += 0u8;
+        ri += 1;
+    }
+    let mut i: i64 = vlen - 1;
+    while i >= 0 {
+        let k: i64 = i - byte_shift;
+        if k >= 0 && k < vlen {
+            let mut val: u8 = v[i] & mask;
+            val = val << bit_shift;
+            result[k] = result[k] | val;
+        }
+        if bit_shift > 0 && k - 1 >= 0 {
+            let mut carryval: u8 = v[i] & overflow_mask;
+            carryval = carryval >> (8 - bit_shift);
+            result[k - 1] = result[k - 1] | carryval;
+        }
+        i -= 1;
+    }
+    return result;
+}
+
+// Right shifts a byte array by n bits.
+fn rshift(v: []u8, n: i64) -> []u8 {
+    if n == 0 {
+        return [] + v;
+    }
+    let bit_shift: i64 = n % 8;
+    let byte_shift: i64 = n / 8;
+    let vlen: i64 = len(v);
+    if byte_shift >= vlen {
+        let mut result: []u8 = [];
+        let mut i: i64 = 0;
+        while i < vlen {
+            result += 0u8;
+            i += 1;
+        }
+        return result;
+    }
+    let mask: u8 = RSHIFT_MASK[bit_shift];
+    let overflow_mask: u8 = !mask;
+    let mut result: []u8 = [];
+    let mut ri: i64 = 0;
+    while ri < vlen {
+        result += 0u8;
+        ri += 1;
+    }
+    let mut i: i64 = 0;
+    while i < vlen {
+        let k: i64 = i + byte_shift;
+        if k < vlen {
+            let mut val: u8 = v[i] & mask;
+            val = val >> bit_shift;
+            result[k] = result[k] | val;
+        }
+        if bit_shift > 0 && k + 1 < vlen {
+            let mut carryval: u8 = v[i] & overflow_mask;
+            carryval = carryval << (8 - bit_shift);
+            result[k + 1] = result[k + 1] | carryval;
+        }
+        i += 1;
+    }
+    return result;
+}

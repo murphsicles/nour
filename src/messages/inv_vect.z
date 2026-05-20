@@ -1,0 +1,48 @@
+// Inventory vector for Bitcoin SV P2P, identifying objects by type and hash.
+
+struct InvVect {
+    obj_type: u32,
+    hash: [u8],
+}
+
+const INV_VECT_ERROR: u32 = 0
+const INV_VECT_TX: u32 = 1
+const INV_VECT_BLOCK: u32 = 2
+const INV_VECT_FILTERED_BLOCK: u32 = 3
+const INV_VECT_COMPACT_BLOCK: u32 = 4
+
+fn inv_vect_size() -> usize {
+    36
+}
+
+fn inv_vect_read(data: [u8], offset: usize) -> (InvVect, usize) {
+    let mut o = offset
+
+    let type_bytes = data[o..o+4]
+    let obj_type = (type_bytes[0] as u32) |
+                   ((type_bytes[1] as u32) << 8) |
+                   ((type_bytes[2] as u32) << 16) |
+                   ((type_bytes[3] as u32) << 24)
+    o += 4
+
+    let hash = data[o..o+32]
+    o += 32
+
+    (InvVect { obj_type, hash }, o)
+}
+
+fn inv_vect_write(iv: InvVect) -> [u8] {
+    let mut out = [0; 36]
+    let mut o = 0
+
+    out[o] = (iv.obj_type & 0xff) as u8
+    out[o+1] = ((iv.obj_type >> 8) & 0xff) as u8
+    out[o+2] = ((iv.obj_type >> 16) & 0xff) as u8
+    out[o+3] = ((iv.obj_type >> 24) & 0xff) as u8
+    o += 4
+
+    out[o..o+32] = iv.hash
+    o += 32
+
+    out
+}

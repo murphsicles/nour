@@ -1,0 +1,62 @@
+// Transaction input for Bitcoin SV P2P messages.
+
+struct TxIn {
+    prev_output: OutPoint,
+    unlock_script: [u8],
+    sequence: u32,
+}
+
+const MAX_UNLOCK_SCRIPT_LEN: usize = 520
+
+fn tx_in_size(ti: TxIn) -> usize {
+    36 + var_int_size(ti.unlock_script.len() as u64) + ti.unlock_script.len() + 4
+}
+
+fn tx_in_read(data: [u8], offset: usize) -> (TxIn, usize) {
+    let mut o = offset
+
+    let (prev_output, new_o) = out_point_read(data, o)
+    o = new_o
+
+    let (script_len, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let script_len_usize = script_len as usize
+
+    let unlock_script = data[o..o + script_len_usize]
+    o += script_len_usize
+
+    let seq_bytes = data[o..o+4]
+    let sequence = (seq_bytes[0] as u32) |
+                   ((seq_bytes[1] as u32) << 8) |
+                   ((seq_bytes[2] as u32) << 16) |
+                   ((seq_bytes[3] as u32) << 24)
+    o += 4
+
+    (TxIn { prev_output, unlock_script, sequence }, o)
+}
+
+fn tx_in_write(ti: TxIn) -> [u8] {
+    let sz = tx_in_size(ti)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let op_bytes = out_point_write(ti.prev_output)
+    out[o..o+36] = op_bytes
+    o += 36
+
+    let vi_bytes = var_int_write(ti.unlock_script.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    out[o..o + ti.unlock_script.len()] = ti.unlock_script
+    o += ti.unlock_script.len()
+
+    out[o] = (ti.sequence & 0xff) as u8
+    out[o+1] = ((ti.sequence >> 8) & 0xff) as u8
+    out[o+2] = ((ti.sequence >> 16) & 0xff) as u8
+    out[o+3] = ((ti.sequence >> 24) & 0xff) as u8
+    o += 4
+
+    out
+}

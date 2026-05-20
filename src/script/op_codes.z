@@ -1,0 +1,146 @@
+// op_codes.z — Script opcodes for Bitcoin SV consensus execution
+// Constants grouped by category, matching BIP-16/34/65/68/112/143 and BSV Genesis upgrades.
+
+// Pushdata and Constants
+const OP_0: u8 = 0;
+const OP_FALSE: u8 = 0;
+const OP_PUSH: u8 = 0;
+const OP_PUSHDATA1: u8 = 76;
+const OP_PUSHDATA2: u8 = 77;
+const OP_PUSHDATA4: u8 = 78;
+const OP_1NEGATE: u8 = 79;
+const OP_1: u8 = 81;
+const OP_TRUE: u8 = 81;
+const OP_2: u8 = 82;
+const OP_3: u8 = 83;
+const OP_4: u8 = 84;
+const OP_5: u8 = 85;
+const OP_6: u8 = 86;
+const OP_7: u8 = 87;
+const OP_8: u8 = 88;
+const OP_9: u8 = 89;
+const OP_10: u8 = 90;
+const OP_11: u8 = 91;
+const OP_12: u8 = 92;
+const OP_13: u8 = 93;
+const OP_14: u8 = 94;
+const OP_15: u8 = 95;
+const OP_16: u8 = 96;
+
+// Flow Control
+const OP_NOP: u8 = 97;
+const OP_IF: u8 = 99;
+const OP_NOTIF: u8 = 100;
+const OP_ELSE: u8 = 103;
+const OP_ENDIF: u8 = 104;
+const OP_VERIFY: u8 = 105;
+const OP_RETURN: u8 = 106;
+
+// Stack Operations
+const OP_TOALTSTACK: u8 = 107;
+const OP_FROMALTSTACK: u8 = 108;
+const OP_IFDUP: u8 = 115;
+const OP_DEPTH: u8 = 116;
+const OP_DROP: u8 = 117;
+const OP_DUP: u8 = 118;
+const OP_NIP: u8 = 119;
+const OP_OVER: u8 = 120;
+const OP_PICK: u8 = 121;
+const OP_ROLL: u8 = 122;
+const OP_ROT: u8 = 123;
+const OP_SWAP: u8 = 124;
+const OP_TUCK: u8 = 125;
+const OP_2DROP: u8 = 109;
+const OP_2DUP: u8 = 110;
+const OP_3DUP: u8 = 111;
+const OP_2OVER: u8 = 112;
+const OP_2ROT: u8 = 113;
+const OP_2SWAP: u8 = 114;
+
+// Splice
+const OP_CAT: u8 = 126;
+const OP_SPLIT: u8 = 127;
+const OP_SIZE: u8 = 130;
+const OP_NUM2BIN: u8 = 128;
+const OP_BIN2NUM: u8 = 129;
+
+// Bitwise Logic
+const OP_INVERT: u8 = 131;
+const OP_AND: u8 = 132;
+const OP_OR: u8 = 133;
+const OP_XOR: u8 = 134;
+const OP_EQUAL: u8 = 135;
+const OP_EQUALVERIFY: u8 = 136;
+
+// Arithmetic
+const OP_1ADD: u8 = 139;
+const OP_1SUB: u8 = 140;
+const OP_NEGATE: u8 = 143;
+const OP_ABS: u8 = 144;
+const OP_NOT: u8 = 145;
+const OP_0NOTEQUAL: u8 = 146;
+const OP_ADD: u8 = 147;
+const OP_SUB: u8 = 148;
+const OP_MUL: u8 = 149;
+const OP_DIV: u8 = 150;
+const OP_MOD: u8 = 151;
+const OP_LSHIFT: u8 = 152;
+const OP_RSHIFT: u8 = 153;
+const OP_BOOLAND: u8 = 154;
+const OP_BOOLOR: u8 = 155;
+const OP_NUMEQUAL: u8 = 156;
+const OP_NUMEQUALVERIFY: u8 = 157;
+const OP_NUMNOTEQUAL: u8 = 158;
+const OP_LESSTHAN: u8 = 159;
+const OP_GREATERTHAN: u8 = 160;
+const OP_LESSTHANOREQUAL: u8 = 161;
+const OP_GREATERTHANOREQUAL: u8 = 162;
+const OP_MIN: u8 = 163;
+const OP_MAX: u8 = 164;
+const OP_WITHIN: u8 = 165;
+
+// Cryptography
+const OP_RIPEMD160: u8 = 166;
+const OP_SHA1: u8 = 167;
+const OP_SHA256: u8 = 168;
+const OP_HASH160: u8 = 169;
+const OP_HASH256: u8 = 170;
+const OP_CODESEPARATOR: u8 = 171;
+const OP_CHECKSIG: u8 = 172;
+const OP_CHECKSIGVERIFY: u8 = 173;
+const OP_CHECKMULTISIG: u8 = 174;
+const OP_CHECKMULTISIGVERIFY: u8 = 175;
+
+// Locktime
+const OP_CHECKLOCKTIMEVERIFY: u8 = 177;
+const OP_CHECKSEQUENCEVERIFY: u8 = 178;
+
+// Pseudo-words (internal)
+const OP_PUBKEYHASH: u8 = 253;
+const OP_PUBKEY: u8 = 254;
+const OP_INVALIDOPCODE: u8 = 255;
+
+// Reserved (invalid unless unexecuted IF)
+const OP_RESERVED: u8 = 80;
+const OP_VER: u8 = 98;
+const OP_VERIF: u8 = 101;
+const OP_VERNOTIF: u8 = 102;
+const OP_RESERVED1: u8 = 137;
+const OP_RESERVED2: u8 = 138;
+
+// NOPs (ignored)
+const OP_NOP1: u8 = 176;
+const OP_NOP4: u8 = 179;
+const OP_NOP5: u8 = 180;
+const OP_NOP6: u8 = 181;
+const OP_NOP7: u8 = 182;
+const OP_NOP8: u8 = 183;
+const OP_NOP9: u8 = 184;
+const OP_NOP10: u8 = 185;
+
+// Opcodes >= this are invalid
+const OP_INVALID_ABOVE: u8 = 186;
+
+// Disabled (pre-Genesis)
+const OP_2MUL: u8 = 141;
+const OP_2DIV: u8 = 142;

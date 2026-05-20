@@ -1,0 +1,54 @@
+// Inv message for Bitcoin SV P2P, announcing inventory vectors (e.g., tx, block).
+
+struct Inv {
+    objects: [InvVect],
+}
+
+const MAX_INV_ENTRIES: usize = 500000
+
+fn inv_size(inv: Inv) -> usize {
+    var_int_size(inv.objects.len() as u64) + 36 * inv.objects.len()
+}
+
+fn inv_read(data: [u8], offset: usize) -> (Inv, usize) {
+    let mut o = offset
+
+    let (num, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let count = num as usize
+    let mut objects = [] as [InvVect]
+    var i = 0
+    while i < count {
+        let (iv, new_o) = inv_vect_read(data, o)
+        objects = objects ++ [iv]
+        o = new_o
+        i += 1
+    }
+
+    (Inv { objects }, o)
+}
+
+fn inv_write(inv: Inv) -> [u8] {
+    let sz = inv_size(inv)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi_bytes = var_int_write(inv.objects.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    var i = 0
+    while i < inv.objects.len() {
+        let iv_bytes = inv_vect_write(inv.objects[i])
+        out[o..o+36] = iv_bytes
+        o += 36
+        i += 1
+    }
+
+    out
+}
+
+fn inv_validate(inv: Inv) -> bool {
+    inv.objects.len() <= MAX_INV_ENTRIES
+}

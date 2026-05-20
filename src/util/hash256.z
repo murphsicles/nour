@@ -1,0 +1,110 @@
+// 256-bit hash for blocks and transactions in Bitcoin SV.
+// Interpreted as a single little-endian number for display.
+use crypto;
+
+// 256-bit hash for blocks and transactions.
+struct Hash256 {
+    bytes: [32]u8,
+}
+
+// Creates a new Hash256 from 32 raw bytes.
+fn Hash256_from_bytes(bytes: [32]u8) -> Hash256 {
+    return Hash256 { bytes: bytes };
+}
+
+// Converts the hash into a hex string (big-endian display order).
+fn Hash256_encode(h: *Hash256) -> string {
+    // Reverse bytes for big-endian display, then hex encode
+    let mut reversed: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        reversed[31 - i] = (*h).bytes[i];
+        i += 1;
+    }
+    return hex_encode(reversed);
+}
+
+// Converts a string of 64 hex characters into a hash.
+// Returns hash on success, or an error struct on failure.
+fn Hash256_decode(s: string) -> (Hash256, i64) {
+    let bytes: []u8 = hex_decode(s);
+    if len(bytes) != 32 {
+        return (Hash256 { bytes: [0u8; 32] }, -1);
+    }
+    let mut hash_bytes: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        hash_bytes[i] = bytes[i];
+        i += 1;
+    }
+    // Reverse from big-endian display to internal little-endian
+    let mut reversed: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        reversed[31 - i] = hash_bytes[i];
+        i += 1;
+    }
+    return (Hash256 { bytes: reversed }, 0);
+}
+
+// Hashes data twice using SHA256.
+fn sha256d(data: []u8) -> Hash256 {
+    let h: [32]u8 = crypto::sha256d(data);
+    return Hash256 { bytes: h };
+}
+
+// Reads a Hash256 from raw bytes (little-endian).
+fn Hash256_read(buf: []u8, pos: i64) -> (Hash256, i64) {
+    if pos + 32 > len(buf) {
+        return (Hash256 { bytes: [0u8; 32] }, -1);
+    }
+    let mut bytes: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        bytes[i] = buf[pos + i];
+        i += 1;
+    }
+    return (Hash256 { bytes: bytes }, pos + 32);
+}
+
+// Writes a Hash256 to a buffer (raw little-endian bytes).
+// Returns new position or -1 if buffer too small.
+fn Hash256_write(h: *Hash256, buf: []u8, pos: i64) -> i64 {
+    if pos + 32 > len(buf) {
+        return -1;
+    }
+    let mut i: i64 = 0;
+    while i < 32 {
+        buf[pos + i] = (*h).bytes[i];
+        i += 1;
+    }
+    return pos + 32;
+}
+
+// Compares two Hash256 values.
+// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+fn Hash256_cmp(a: *Hash256, b: *Hash256) -> i64 {
+    let mut i: i64 = 31;
+    while i >= 0 {
+        if (*a).bytes[i] < (*b).bytes[i] {
+            return -1;
+        }
+        if (*a).bytes[i] > (*b).bytes[i] {
+            return 1;
+        }
+        i -= 1;
+    }
+    return 0;
+}
+
+// Returns true if two Hash256 values are equal.
+fn Hash256_eq(a: *Hash256, b: *Hash256) -> bool {
+    let mut i: i64 = 0;
+    while i < 32 {
+        if (*a).bytes[i] != (*b).bytes[i] {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}

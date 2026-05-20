@@ -1,0 +1,67 @@
+// Network address for Bitcoin SV P2P node discovery.
+
+struct NodeAddr {
+    services: u64,
+    ip: [u8],
+    port: u16,
+}
+
+fn node_addr_size() -> usize {
+    26
+}
+
+fn node_addr_new(ip: [u8], port: u16) -> NodeAddr {
+    NodeAddr {
+        services: 0,
+        ip,
+        port,
+    }
+}
+
+fn node_addr_read(data: [u8], offset: usize) -> (NodeAddr, usize) {
+    let mut o = offset
+
+    let svc_bytes = data[o..o+8]
+    let services = (svc_bytes[0] as u64) |
+                   ((svc_bytes[1] as u64) << 8) |
+                   ((svc_bytes[2] as u64) << 16) |
+                   ((svc_bytes[3] as u64) << 24) |
+                   ((svc_bytes[4] as u64) << 32) |
+                   ((svc_bytes[5] as u64) << 40) |
+                   ((svc_bytes[6] as u64) << 48) |
+                   ((svc_bytes[7] as u64) << 56)
+    o += 8
+
+    let ip = data[o..o+16]
+    o += 16
+
+    let port_bytes = data[o..o+2]
+    let port = ((port_bytes[0] as u16) << 8) | (port_bytes[1] as u16)
+    o += 2
+
+    (NodeAddr { services, ip, port }, o)
+}
+
+fn node_addr_write(a: NodeAddr) -> [u8] {
+    let mut out = [0; 26]
+    let mut o = 0
+
+    out[o] = (a.services & 0xff) as u8
+    out[o+1] = ((a.services >> 8) & 0xff) as u8
+    out[o+2] = ((a.services >> 16) & 0xff) as u8
+    out[o+3] = ((a.services >> 24) & 0xff) as u8
+    out[o+4] = ((a.services >> 32) & 0xff) as u8
+    out[o+5] = ((a.services >> 40) & 0xff) as u8
+    out[o+6] = ((a.services >> 48) & 0xff) as u8
+    out[o+7] = ((a.services >> 56) & 0xff) as u8
+    o += 8
+
+    out[o..o+16] = a.ip
+    o += 16
+
+    out[o] = ((a.port >> 8) & 0xff) as u8
+    out[o+1] = (a.port & 0xff) as u8
+    o += 2
+
+    out
+}

@@ -1,0 +1,110 @@
+// Variable length integer (varint) ser/des for Bitcoin SV P2P.
+// Varints use a compact encoding: values <= 252 fit in 1 byte,
+// larger values use prefix bytes (0xfd, 0xfe, 0xff) followed by
+// the value in little-endian format.
+
+// Returns the number of bytes required for the varint.
+fn size(n: i64) -> i64 {
+    if n <= 252 {
+        return 1;
+    }
+    if n <= 0xffff {
+        return 3;
+    }
+    if n <= 0xffffffff {
+        return 5;
+    }
+    return 9;
+}
+
+// Writes a varint to the buffer at the given position.
+// Returns the new position after writing, or -1 if the buffer is too small.
+fn write(n: i64, buf: []u8, pos: i64) -> i64 {
+    if n <= 252 {
+        if pos >= len(buf) {
+            return -1;
+        }
+        buf[pos] = n as u8;
+        return pos + 1;
+    }
+    if n <= 0xffff {
+        if pos + 3 > len(buf) {
+            return -1;
+        }
+        buf[pos] = 0xfd;
+        buf[pos + 1] = (n & 0xff) as u8;
+        buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+        return pos + 3;
+    }
+    if n <= 0xffffffff {
+        if pos + 5 > len(buf) {
+            return -1;
+        }
+        buf[pos] = 0xfe;
+        buf[pos + 1] = (n & 0xff) as u8;
+        buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+        buf[pos + 3] = ((n >> 16) & 0xff) as u8;
+        buf[pos + 4] = ((n >> 24) & 0xff) as u8;
+        return pos + 5;
+    }
+    // n > 0xffffffff
+    if pos + 9 > len(buf) {
+        return -1;
+    }
+    buf[pos] = 0xff;
+    buf[pos + 1] = (n & 0xff) as u8;
+    buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+    buf[pos + 3] = ((n >> 16) & 0xff) as u8;
+    buf[pos + 4] = ((n >> 24) & 0xff) as u8;
+    buf[pos + 5] = ((n >> 32) & 0xff) as u8;
+    buf[pos + 6] = ((n >> 40) & 0xff) as u8;
+    buf[pos + 7] = ((n >> 48) & 0xff) as u8;
+    buf[pos + 8] = ((n >> 56) & 0xff) as u8;
+    return pos + 9;
+}
+
+// Reads a varint from the buffer at the given position.
+// Returns (value, new_position) on success, or (-1, pos) if reading past the buffer end.
+fn read(buf: []u8, pos: i64) -> (i64, i64) {
+    if pos >= len(buf) {
+        return (-1, pos);
+    }
+    let n0: u8 = buf[pos];
+    if n0 == 0xff {
+        if pos + 9 > len(buf) {
+            return (-1, pos);
+        }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        val |= (buf[pos + 3] as i64) << 16;
+        val |= (buf[pos + 4] as i64) << 24;
+        val |= (buf[pos + 5] as i64) << 32;
+        val |= (buf[pos + 6] as i64) << 40;
+        val |= (buf[pos + 7] as i64) << 48;
+        val |= (buf[pos + 8] as i64) << 56;
+        return (val, pos + 9);
+    }
+    if n0 == 0xfe {
+        if pos + 5 > len(buf) {
+            return (-1, pos);
+        }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        val |= (buf[pos + 3] as i64) << 16;
+        val |= (buf[pos + 4] as i64) << 24;
+        return (val, pos + 5);
+    }
+    if n0 == 0xfd {
+        if pos + 3 > len(buf) {
+            return (-1, pos);
+        }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        return (val, pos + 3);
+    }
+    // Single byte value
+    return (n0 as i64, pos + 1);
+}

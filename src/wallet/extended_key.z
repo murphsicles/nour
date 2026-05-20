@@ -1,0 +1,362 @@
+// BIP-32 extended keys for Bitcoin SV wallets (xpub/xprv).
+// Pure Zeta implementation with HMAC-SHA512 via @crypto/bitcoin-hashes.
+
+use @crypto/bitcoin-hashes::{Sha256, Sha512}
+use bsv58
+
+// ─── Version Bytes ─────────────────────────────────────────────────────────
+
+const MAINNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xAD, 0xE4]
+const MAINNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x88, 0xB2, 0x1E]
+const TESTNET_PRIVATE_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x83, 0x94]
+const TESTNET_PUBLIC_EXTENDED_KEY: [u8; 4] = [0x04, 0x35, 0x87, 0xCF]
+const HARDENED_KEY: u32 = 0x80000000
+
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+enum ExtendedKeyType {
+    Private,
+    Public,
+}
+
+enum Network {
+    Mainnet,
+    Testnet,
+    STN,
+}
+
+struct ExtendedKey {
+    bytes: [u8; 78],
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+fn be_u32_from_4(b0: u8, b1: u8, b2: u8, b3: u8) -> u32 {
+    return (b0 as u32) << 24 | (b1 as u32) << 16 | (b2 as u32) << 8 | b3 as u32;
+}
+
+fn u32_to_be_bytes(val: u32) -> (u8, u8, u8, u8) {
+    return ((val >> 24) as u8, (val >> 16) as u8, (val >> 8) as u8, val as u8);
+}
+
+fn slice_eq(a: [u8], b: [u8]) -> bool {
+    if len(a) != len(b) { return false; }
+    let mut i: i64 = 0;
+    while i < len(a) {
+        if a[i] != b[i] { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+fn copy_4(src: [u8], soff: i64) -> [u8; 4] {
+    return [src[soff], src[soff + 1], src[soff + 2], src[soff + 3]];
+}
+
+fn copy_32(src: [u8], soff: i64) -> [u8; 32] {
+    let mut dst: [u8; 32] = [0; 32];
+    let mut i: i64 = 0;
+    while i < 32 { dst[i] = src[soff + i]; i += 1; }
+    return dst;
+}
+
+fn copy_33(src: [u8], soff: i64) -> [u8; 33] {
+    let mut dst: [u8; 33] = [0; 33];
+    let mut i: i64 = 0;
+    while i < 33 { dst[i] = src[soff + i]; i += 1; }
+    return dst;
+}
+
+// ─── HMAC-SHA512 (RFC 2104, block size 128 for SHA-512) ────────────────────
+
+fn hmac_sha512(key: [u8], data: [u8]) -> [u8; 64] {
+    let block_size: i64 = 128;
+    let mut k: [u8; 128] = [0; 128];
+    let k_len = len(key);
+
+    if k_len > block_size {
+        let hash = Sha512::hash(key);
+        let hb = hash.to_byte_array();
+        let mut i: i64 = 0;
+        while i < 64 { k[i] = hb[i]; i += 1; }
+    } else {
+        let mut i: i64 = 0;
+        while i < k_len { k[i] = key[i]; i += 1; }
+    }
+
+    let mut i_key: [u8; 128] = [0; 128];
+    let mut o_key: [u8; 128] = [0; 128];
+    let mut i: i64 = 0;
+    while i < block_size {
+        i_key[i] = k[i] ^ 0x36;
+        o_key[i] = k[i] ^ 0x5c;
+        i += 1;
+    }
+
+    let data_len = len(data);
+    let mut inner_input: [u8; 4096] = [0; 4096];
+    let mut ii: i64 = 0;
+    while ii < block_size { inner_input[ii] = i_key[ii]; ii += 1; }
+    let mut di: i64 = 0;
+    while di < data_len { inner_input[block_size + di] = data[di]; di += 1; }
+
+    let inner_hash = Sha512::hash(inner_input[0..block_size + data_len]);
+    let inner_bytes = inner_hash.to_byte_array();
+
+    let mut outer_input: [u8; 4096] = [0; 4096];
+    let mut oi: i64 = 0;
+    while oi < block_size { outer_input[oi] = o_key[oi]; oi += 1; }
+    let mut hi: i64 = 0;
+    while hi < 64 { outer_input[block_size + hi] = inner_bytes[hi]; hi += 1; }
+
+    let outer_hash = Sha512::hash(outer_input[0..block_size + 64]);
+    return outer_hash.to_byte_array();
+}
+
+// ─── Extended Key Accessors ────────────────────────────────────────────────
+
+fn extended_key_version(key: ExtendedKey) -> [u8; 4] {
+    return copy_4(key.bytes, 0);
+}
+
+fn extended_key_depth(key: ExtendedKey) -> u8 {
+    return key.bytes[4];
+}
+
+fn extended_key_parent_fingerprint(key: ExtendedKey) -> [u8; 4] {
+    return copy_4(key.bytes, 5);
+}
+
+fn extended_key_child_number(key: ExtendedKey) -> u32 {
+    return be_u32_from_4(key.bytes[9], key.bytes[10], key.bytes[11], key.bytes[12]);
+}
+
+fn extended_key_chain_code(key: ExtendedKey) -> [u8; 32] {
+    return copy_32(key.bytes, 13);
+}
+
+fn extended_key_keydata(key: ExtendedKey) -> [u8; 33] {
+    return copy_33(key.bytes, 45);
+}
+
+fn extended_key_is_private(key: ExtendedKey) -> bool {
+    let v = extended_key_version(key);
+    return slice_eq(v, MAINNET_PRIVATE_EXTENDED_KEY) ||
+           slice_eq(v, TESTNET_PRIVATE_EXTENDED_KEY);
+}
+
+// ─── Encode / Decode ───────────────────────────────────────────────────────
+
+fn encode_extended_key(key: ExtendedKey) -> string {
+    let sha = Sha256::hash(key.bytes);
+    let sha_bytes = sha.to_byte_array();
+    let sha2 = Sha256::hash(sha_bytes);
+    let checksum = sha2.to_byte_array();
+
+    let mut v: [u8; 82] = [0; 82];
+    let mut i: i64 = 0;
+    while i < 78 { v[i] = key.bytes[i]; i += 1; }
+    let mut j: i64 = 0;
+    while j < 4 { v[78 + j] = checksum[j]; j += 1; }
+
+    return bsv58::encode(v[0..82]);
+}
+
+fn decode_extended_key(s: string) -> ExtendedKey {
+    let v = bsv58::decode_full(s, true);
+    if len(v) != 78 { return ExtendedKey { bytes: [0; 78] }; }
+    let mut bytes: [u8; 78] = [0; 78];
+    let mut i: i64 = 0;
+    while i < 78 { bytes[i] = v[i]; i += 1; }
+    return ExtendedKey { bytes: bytes };
+}
+
+// ─── Derive Child Key (BIP-32) ─────────────────────────────────────────────
+
+fn derive_child(key: ExtendedKey, index: u32) -> ExtendedKey {
+    let is_private = extended_key_is_private(key);
+    let is_hardened = index >= HARDENED_KEY;
+
+    if !is_private && is_hardened {
+        return ExtendedKey { bytes: [0; 78] };
+    }
+
+    let kd = extended_key_keydata(key);
+    let cc = extended_key_chain_code(key);
+
+    // Build HMAC input: public_key or 0x00 || private_key, then index BE
+    let mut hmac_in: [u8; 128] = [0; 128];
+    let mut hlen: i64 = 0;
+
+    if is_private {
+        // kd[0] == 0x00 for private, bytes 1..33 are the secret
+        let priv_bytes: [u8; 32] = copy_32(kd, 1);
+        if is_hardened {
+            hmac_in[0] = 0;
+            hlen = 1;
+            let mut i: i64 = 0;
+            while i < 32 { hmac_in[hlen + i] = priv_bytes[i]; i += 1; }
+            hlen += 32;
+        } else {
+            let pk = crypto::secp256k1_pubkey_from_secret(priv_bytes);
+            let mut i: i64 = 0;
+            while i < 33 { hmac_in[hlen + i] = pk[i]; i += 1; }
+            hlen += 33;
+        }
+    } else {
+        // Public key is entire 33 bytes
+        let mut i: i64 = 0;
+        while i < 33 { hmac_in[hlen + i] = kd[i]; i += 1; }
+        hlen += 33;
+    }
+
+    let (b0, b1, b2, b3) = u32_to_be_bytes(index);
+    hmac_in[hlen] = b0; hmac_in[hlen + 1] = b1;
+    hmac_in[hlen + 2] = b2; hmac_in[hlen + 3] = b3;
+    hlen += 4;
+
+    let hmac_out = hmac_sha512(cc[0..32], hmac_in[0..hlen]);
+    let il: [u8; 32] = copy_32(hmac_out, 0);
+    let new_cc: [u8; 32] = copy_32(hmac_out, 32);
+
+    // Parent pubkey for fingerprint
+    let parent_pub: [u8; 33] = if is_private {
+        let priv_bytes: [u8; 32] = copy_32(kd, 1);
+        crypto::secp256k1_pubkey_from_secret(priv_bytes)
+    } else {
+        kd
+    };
+    let fp_hash = Sha256::hash(parent_pub);
+    let fp_bytes = fp_hash.to_byte_array();
+
+    let mut child: [u8; 78] = [0; 78];
+    // Version
+    let ver = extended_key_version(key);
+    child[0] = ver[0]; child[1] = ver[1]; child[2] = ver[2]; child[3] = ver[3];
+    // Depth
+    child[4] = key.bytes[4] + 1;
+    // Parent fingerprint
+    child[5] = fp_bytes[0]; child[6] = fp_bytes[1];
+    child[7] = fp_bytes[2]; child[8] = fp_bytes[3];
+    // Child number
+    child[9] = b0; child[10] = b1; child[11] = b2; child[12] = b3;
+    // Chain code
+    let mut ci: i64 = 0;
+    while ci < 32 { child[13 + ci] = new_cc[ci]; ci += 1; }
+    // Key data
+    if is_private {
+        let priv_bytes: [u8; 32] = copy_32(kd, 1);
+        let new_sk = crypto::secp256k1_secret_add(priv_bytes, il);
+        child[45] = 0;
+        let mut si: i64 = 0;
+        while si < 32 { child[46 + si] = new_sk[si]; si += 1; }
+    } else {
+        let new_pk = crypto::secp256k1_pubkey_tweak_add(kd, il);
+        let mut pi: i64 = 0;
+        while pi < 33 { child[45 + pi] = new_pk[pi]; pi += 1; }
+    }
+
+    return ExtendedKey { bytes: child };
+}
+
+// ─── Derive from Seed ──────────────────────────────────────────────────────
+
+fn extended_key_from_seed(seed: [u8], network: Network) -> ExtendedKey {
+    let seed_str: [u8] = "Bitcoin seed" as [u8];
+    let hmac_result = hmac_sha512(seed_str, seed);
+    let il: [u8; 32] = copy_32(hmac_result, 0);
+    let chain_code: [u8; 32] = copy_32(hmac_result, 32);
+
+    let mut key: [u8; 78] = [0; 78];
+
+    let version: [u8; 4] = match network {
+        Network::Mainnet => MAINNET_PRIVATE_EXTENDED_KEY,
+        _ => TESTNET_PRIVATE_EXTENDED_KEY,
+    };
+    key[0] = version[0]; key[1] = version[1];
+    key[2] = version[2]; key[3] = version[3];
+
+    key[4] = 0; // depth 0
+    // parent fingerprint = 0, child number = 0 (already zeroed)
+
+    let mut ci: i64 = 0;
+    while ci < 32 { key[13 + ci] = chain_code[ci]; ci += 1; }
+
+    key[45] = 0; // private prefix
+    let mut si: i64 = 0;
+    while si < 32 { key[46 + si] = il[si]; si += 1; }
+
+    return ExtendedKey { bytes: key };
+}
+
+// ─── Derive from Path ──────────────────────────────────────────────────────
+
+fn derive_extended_key(input: string, path: string, network: Network) -> ExtendedKey {
+    if path == "" || path == "m" {
+        return extended_key_from_seed(hex_decode(input), network);
+    }
+
+    let mut key = decode_extended_key(input);
+
+    // Parse derivation path: skip "m/" prefix
+    let pbytes: [u8] = path as [u8];
+    let plen = len(pbytes);
+    let mut i: i64 = 0;
+    if i < plen && pbytes[i] == 'm' { i += 1; }
+    if i < plen && pbytes[i] == '/' { i += 1; }
+
+    while i < plen {
+        // Skip '/'
+        if pbytes[i] == '/' { i += 1; continue; }
+        if i >= plen { break; }
+
+        // Parse number
+        let mut val: u32 = 0;
+        let mut hardened: bool = false;
+        while i < plen && pbytes[i] != '/' {
+            let c = pbytes[i];
+            if c >= '0' && c <= '9' {
+                val = val * 10 + (c - '0') as u32;
+            }
+            i += 1;
+        }
+        // Check for hardened marker (last char before '/' or end)
+        if i > 0 {
+            let prev = pbytes[i - 1];
+            if prev == '\'' || prev == 'H' {
+                hardened = true;
+            }
+        }
+
+        if hardened { val += HARDENED_KEY; }
+        key = derive_child(key, val);
+    }
+
+    return key;
+}
+
+// ─── Hex Decode ────────────────────────────────────────────────────────────
+
+fn hex_digit(c: u8) -> u8 {
+    if c >= '0' && c <= '9' { return c - '0'; }
+    if c >= 'a' && c <= 'f' { return c - 'a' + 10; }
+    if c >= 'A' && c <= 'F' { return c - 'A' + 10; }
+    return 0;
+}
+
+fn hex_decode(s: string) -> [u8] {
+    let bytes: [u8] = s as [u8];
+    let sl = len(bytes);
+    if sl % 2 != 0 { return []; }
+    let mut result: [u8; 256] = [0; 256];
+    let mut ri: i64 = 0;
+    let mut si: i64 = 0;
+    while si < sl {
+        let hi = hex_digit(bytes[si]);
+        let lo = hex_digit(bytes[si + 1]);
+        result[ri] = (hi << 4) | lo;
+        ri += 1;
+        si += 2;
+    }
+    return result[0..ri];
+}

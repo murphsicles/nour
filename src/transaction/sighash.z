@@ -1,0 +1,377 @@
+// Transaction sighash computation for signing in Bitcoin SV.
+// Supports legacy (pre-2017) and BIP-143 (post-fork with forkid) algorithms.
+
+use std.crypto
+
+// ─── Sighash Type Constants ────────────────────────────────────────────────
+
+const FORK_ID: u32 = 0  // 24-bit BSV fork ID
+
+const SIGHASH_ALL: u8 = 0x01          // Signs all outputs
+const SIGHASH_NONE: u8 = 0x02         // Signs no outputs (anyone spend)
+const SIGHASH_SINGLE: u8 = 0x03       // Signs only matching output
+const SIGHASH_ANYONECANPAY: u8 = 0x80 // Anyone can add inputs
+const SIGHASH_FORKID: u8 = 0x40       // BSV/BCH fork flag (post-2017)
+
+const OP_CODESEPARATOR: u8 = 171
+
+// ─── Minimal Transaction Types (inline for self-containment) ───────────────
+
+struct OutPoint {
+    hash: [u8; 32],
+    index: u32,
+}
+
+struct TxIn {
+    prev_output: OutPoint,
+    unlock_script: [u8],
+    sequence: u32,
+}
+
+struct TxOut {
+    satoshis: i64,
+    lock_script: [u8],
+}
+
+struct Tx {
+    version: u32,
+    inputs: [TxIn],
+    outputs: [TxOut],
+    lock_time: u32,
+}
+
+// ─── Helpers: Little-Endian Integer Writing ────────────────────────────────
+
+fn write_u32_le(buf: [u8], off: i64, val: u32) {
+    buf[off] = (val & 0xFF) as u8;
+    buf[off + 1] = ((val >> 8) & 0xFF) as u8;
+    buf[off + 2] = ((val >> 16) & 0xFF) as u8;
+    buf[off + 3] = ((val >> 24) & 0xFF) as u8;
+}
+
+fn write_i64_le(buf: [u8], off: i64, val: i64) {
+    buf[off] = (val & 0xFF) as u8;
+    buf[off + 1] = ((val >> 8) & 0xFF) as u8;
+    buf[off + 2] = ((val >> 16) & 0xFF) as u8;
+    buf[off + 3] = ((val >> 24) & 0xFF) as u8;
+    buf[off + 4] = ((val >> 32) & 0xFF) as u8;
+    buf[off + 5] = ((val >> 40) & 0xFF) as u8;
+    buf[off + 6] = ((val >> 48) & 0xFF) as u8;
+    buf[off + 7] = ((val >> 56) & 0xFF) as u8;
+}
+
+// ─── Helpers: Double SHA-256 ───────────────────────────────────────────────
+
+fn sha256d(data: [u8]) -> [u8; 32] {
+    let first: [u8; 32] = crypto::sha256(data);
+    return crypto::sha256(first);
+}
+
+// ─── Outpoint serialization ────────────────────────────────────────────────
+
+fn write_outpoint(buf: [u8], off: i64, op: OutPoint) {
+    let mut i: i64 = 0;
+    while i < 32 {
+        buf[off + i] = op.hash[i];
+        i += 1;
+    }
+    write_u32_le(buf, off + 32, op.index);
+}
+
+// ─── TxOut serialization ───────────────────────────────────────────────────
+
+fn write_txout(buf: [u8], off: i64, out: TxOut) -> i64 {
+    write_i64_le(buf, off, out.satoshis);
+    let script_len = len(out.lock_script);
+    let script_varint_size = var_int_write(buf, off + 8, script_len);
+    let mut i: i64 = 0;
+    while i < script_len {
+        buf[off + 8 + script_varint_size + i] = out.lock_script[i];
+        i += 1;
+    }
+    return 8 + script_varint_size + script_len;
+}
+
+// ─── Variable-length Integer (Bitcoin CompactSize) ─────────────────────────
+
+fn var_int_write(buf: [u8], off: i64, val: i64) -> i64 {
+    if val < 253 {
+        buf[off] = val as u8;
+        return 1;
+    } else if val < 65536 {
+        buf[off] = 253;
+        buf[off + 1] = (val & 0xFF) as u8;
+        buf[off + 2] = ((val >> 8) & 0xFF) as u8;
+        return 3;
+    } else if val < 4294967296 {
+        buf[off] = 254;
+        write_u32_le(buf, off + 1, val as u32);
+        return 5;
+    } else {
+        buf[off] = 255;
+        write_u32_le(buf, off + 1, (val & 0xFFFFFFFF) as u32);
+        write_u32_le(buf, off + 5, ((val >> 32) & 0xFFFFFFFF) as u32);
+        return 9;
+    }
+}
+
+fn var_int_size(val: i64) -> i64 {
+    if val < 253 { return 1; }
+    if val < 65536 { return 3; }
+    if val < 4294967296 { return 5; }
+    return 9;
+}
+
+// ─── Hash all prevouts (each: 32-byte hash + 4-byte index LE) ──────────────
+
+fn hash_prevouts(tx: Tx) -> [u8; 32] {
+    let n = len(tx.inputs);
+    if n == 0 { return [0; 32]; }
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut off: i64 = 0;
+    let mut i: i64 = 0;
+    while i < n {
+        write_outpoint(buf, off, tx.inputs[i].prev_output);
+        off += 36;
+        i += 1;
+    }
+    return sha256d(buf[0..off]);
+}
+
+// ─── Hash all sequences (each: 4 bytes LE) ─────────────────────────────────
+
+fn hash_sequences(tx: Tx) -> [u8; 32] {
+    let n = len(tx.inputs);
+    if n == 0 { return [0; 32]; }
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut off: i64 = 0;
+    let mut i: i64 = 0;
+    while i < n {
+        write_u32_le(buf, off, tx.inputs[i].sequence);
+        off += 4;
+        i += 1;
+    }
+    return sha256d(buf[0..off]);
+}
+
+// ─── Hash all outputs (each: 8-byte satoshis LE + varint script + script) ──
+
+fn hash_outputs(tx: Tx) -> [u8; 32] {
+    let n = len(tx.outputs);
+    if n == 0 { return [0; 32]; }
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut off: i64 = 0;
+    let mut i: i64 = 0;
+    while i < n {
+        off += write_txout(buf, off, tx.outputs[i]);
+        i += 1;
+    }
+    return sha256d(buf[0..off]);
+}
+
+// ─── Main Sighash Entry Point ──────────────────────────────────────────────
+
+/// Computes sighash digest for signing.
+/// Uses BIP-143 if FORKID set in sighash_type, legacy otherwise.
+/// Returns zeroed 32-byte array on error (input out of range).
+pub fn sighash(tx: Tx, n_input: i64, script_code: [u8], satoshis: i64,
+               sighash_type: u8) -> [u8; 32] {
+    if (sighash_type & SIGHASH_FORKID) != 0 {
+        return bip143_sighash(tx, n_input, script_code, satoshis, sighash_type);
+    } else {
+        return legacy_sighash(tx, n_input, script_code, sighash_type);
+    }
+}
+
+// ─── BIP-143 Sighash ───────────────────────────────────────────────────────
+
+/// BIP-143 sighash (post-2017, forkid).
+/// Serializes: version | hashPrevouts | hashSequence | outpoint | script | value |
+///             sequence | hashOutputs | locktime | (forkid<<8 | type)
+fn bip143_sighash(tx: Tx, n_input: i64, script_code: [u8], satoshis: i64,
+                  sighash_type: u8) -> [u8; 32] {
+    if n_input >= len(tx.inputs) {
+        return [0; 32];
+    }
+
+    let base_type = sighash_type & 0x1F;
+    let anyone_can_pay = (sighash_type & SIGHASH_ANYONECANPAY) != 0;
+
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut off: i64 = 0;
+
+    // 1. nVersion (4 bytes LE)
+    write_u32_le(buf, off, tx.version);
+    off += 4;
+
+    // 2. hashPrevouts (32 bytes)
+    if !anyone_can_pay {
+        let hp = hash_prevouts(tx);
+        let mut k: i64 = 0;
+        while k < 32 { buf[off + k] = hp[k]; k += 1; }
+    }
+    off += 32;
+
+    // 3. hashSequence (32 bytes)
+    if !anyone_can_pay && base_type != SIGHASH_SINGLE && base_type != SIGHASH_NONE {
+        let hs = hash_sequences(tx);
+        let mut k: i64 = 0;
+        while k < 32 { buf[off + k] = hs[k]; k += 1; }
+    }
+    off += 32;
+
+    // 4. Outpoint (36 bytes)
+    write_outpoint(buf, off, tx.inputs[n_input].prev_output);
+    off += 36;
+
+    // 5. ScriptCode (varint-prefixed)
+    let sc_len = len(script_code);
+    let sc_vsize = var_int_write(buf, off, sc_len);
+    off += sc_vsize;
+    let mut si: i64 = 0;
+    while si < sc_len { buf[off + si] = script_code[si]; si += 1; }
+    off += sc_len;
+
+    // 6. Value (8 bytes LE i64)
+    write_i64_le(buf, off, satoshis);
+    off += 8;
+
+    // 7. nSequence (4 bytes LE u32)
+    write_u32_le(buf, off, tx.inputs[n_input].sequence);
+    off += 4;
+
+    // 8. hashOutputs (32 bytes)
+    if base_type != SIGHASH_SINGLE && base_type != SIGHASH_NONE {
+        let ho = hash_outputs(tx);
+        let mut k: i64 = 0;
+        while k < 32 { buf[off + k] = ho[k]; k += 1; }
+    } else if base_type == SIGHASH_SINGLE && n_input < len(tx.outputs) {
+        let mut single_buf: [u8; 128] = [0; 128];
+        let slen = write_txout(single_buf, 0, tx.outputs[n_input]);
+        let sh = sha256d(single_buf[0..slen]);
+        let mut k: i64 = 0;
+        while k < 32 { buf[off + k] = sh[k]; k += 1; }
+    }
+    off += 32;
+
+    // 9. nLockTime (4 bytes LE)
+    write_u32_le(buf, off, tx.lock_time);
+    off += 4;
+
+    // 10. Sighash type: (FORK_ID << 8) | type (4 bytes LE)
+    let sh_type: u32 = (FORK_ID << 8) | (sighash_type as u32);
+    write_u32_le(buf, off, sh_type);
+    off += 4;
+
+    return sha256d(buf[0..off]);
+}
+
+// ─── Legacy Sighash ────────────────────────────────────────────────────────
+
+/// Legacy sighash (pre-2017).
+/// Serializes modified tx copy: version | inputs (sub_script or empty,
+/// seq=0 for NONE/SINGLE) | outputs (truncated/empty) | locktime | type.
+fn legacy_sighash(tx: Tx, n_input: i64, script_code: [u8], sighash_type: u8) -> [u8; 32] {
+    if n_input >= len(tx.inputs) {
+        return [0; 32];
+    }
+
+    let base_type = sighash_type & 0x1F;
+    let anyone_can_pay = (sighash_type & SIGHASH_ANYONECANPAY) != 0;
+
+    // Build sub_script (remove OP_CODESEPARATORs)
+    let mut sub_script: [u8; 4096] = [0; 4096];
+    let mut sslen: i64 = 0;
+    let sc_len = len(script_code);
+    let mut i: i64 = 0;
+    while i < sc_len {
+        if script_code[i] != OP_CODESEPARATOR {
+            sub_script[sslen] = script_code[i];
+            sslen += 1;
+        }
+        i += 1;
+    }
+
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut off: i64 = 0;
+
+    // Version
+    write_u32_le(buf, off, tx.version);
+    off += 4;
+
+    // Inputs
+    let n_inputs_total = len(tx.inputs);
+    let n_inputs_to_write = if anyone_can_pay { 1 } else { n_inputs_total };
+    let n_inputs_vsize = var_int_write(buf, off, n_inputs_to_write);
+    off += n_inputs_vsize;
+
+    let mut ii: i64 = 0;
+    while ii < n_inputs_total {
+        let input_idx = if anyone_can_pay { n_input } else { ii };
+        let use_sub_script = input_idx == n_input;
+
+        // Outpoint
+        write_outpoint(buf, off, tx.inputs[input_idx].prev_output);
+        off += 36;
+
+        // Script
+        if use_sub_script {
+            let ss_vsize = var_int_write(buf, off, sslen);
+            off += ss_vsize;
+            let mut si: i64 = 0;
+            while si < sslen { buf[off + si] = sub_script[si]; si += 1; }
+            off += sslen;
+        } else {
+            buf[off] = 0; // empty script varint
+            off += 1;
+        }
+
+        // Sequence
+        let seq_zero = (base_type == SIGHASH_NONE || base_type == SIGHASH_SINGLE) && !use_sub_script;
+        if seq_zero {
+            write_u32_le(buf, off, 0);
+        } else {
+            write_u32_le(buf, off, tx.inputs[input_idx].sequence);
+        }
+        off += 4;
+
+        if anyone_can_pay { break; }
+        ii += 1;
+    }
+
+    // Outputs
+    let n_outputs_total = len(tx.outputs);
+    let num_outputs: i64 = if base_type == SIGHASH_NONE {
+        0
+    } else if base_type == SIGHASH_SINGLE {
+        n_input + 1
+    } else {
+        n_outputs_total
+    };
+
+    let n_outs_vsize = var_int_write(buf, off, num_outputs);
+    off += n_outs_vsize;
+
+    let mut oi: i64 = 0;
+    while oi < num_outputs {
+        if oi < n_outputs_total {
+            off += write_txout(buf, off, tx.outputs[oi]);
+        } else {
+            write_i64_le(buf, off, 0);
+            off += 8;
+            buf[off] = 0; // empty script varint
+            off += 1;
+        }
+        oi += 1;
+    }
+
+    // Locktime
+    write_u32_le(buf, off, tx.lock_time);
+    off += 4;
+
+    // Sighash type (4 bytes LE)
+    write_u32_le(buf, off, sighash_type as u32);
+    off += 4;
+
+    return sha256d(buf[0..off]);
+}

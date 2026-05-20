@@ -1,0 +1,86 @@
+// Module declaration for nour::util — miscellaneous helpers for Bitcoin SV toolkit.
+// Re-exports public types and functions from submodules.
+
+use bits;
+use bloom_filter;
+use hash160;
+use hash256;
+use result;
+use serdes;
+use var_int;
+
+// Bits — bit array operations
+pub use bits::lshift;
+pub use bits::rshift;
+pub use bits::Bits;
+pub use bits::Bits_new;
+pub use bits::Bits_with_capacity;
+pub use bits::Bits_from_slice;
+pub use bits::Bits_append;
+pub use bits::Bits_extract;
+
+// Bloom filter
+pub use bloom_filter::BloomFilter;
+pub use bloom_filter::BloomFilter_new;
+pub use bloom_filter::BloomFilter_add;
+pub use bloom_filter::BloomFilter_contains;
+pub use bloom_filter::BloomFilter_validate;
+pub use bloom_filter::BloomFilter_read;
+pub use bloom_filter::BloomFilter_write;
+pub use bloom_filter::BLOOM_FILTER_MAX_FILTER_SIZE;
+pub use bloom_filter::BLOOM_FILTER_MAX_HASH_FUNCS;
+
+// Hash160
+pub use hash160::Hash160;
+pub use hash160::hash160;
+pub use hash160::Hash160_from_bytes;
+pub use hash160::Hash160_to_hex;
+
+// Hash256
+pub use hash256::Hash256;
+pub use hash256::sha256d;
+pub use hash256::Hash256_from_bytes;
+pub use hash256::Hash256_encode;
+pub use hash256::Hash256_decode;
+pub use hash256::Hash256_read;
+pub use hash256::Hash256_write;
+pub use hash256::Hash256_cmp;
+pub use hash256::Hash256_eq;
+
+// Result / Error types
+pub use result::Error;
+pub use result::Error_new;
+pub use result::Error_bad_argument;
+pub use result::Error_bad_data;
+pub use result::Error_from_hex;
+pub use result::Error_io;
+pub use result::Error_timeout;
+pub use result::Error_unsupported;
+pub use result::Error_from_code;
+pub use result::Error_to_string;
+pub use result::ERR_SUCCESS;
+pub use result::ERR_BAD_ARGUMENT;
+pub use result::ERR_BAD_DATA;
+pub use result::ERR_FROM_HEX;
+pub use result::ERR_ILLEGAL_STATE;
+pub use result::ERR_INVALID_OPERATION;
+pub use result::ERR_IO_ERROR;
+pub use result::ERR_TIMEOUT;
+pub use result::ERR_UNSUPPORTED;
+
+// Serialization helpers
+pub use serdes::read_16;
+pub use serdes::write_16;
+pub use serdes::read_32;
+pub use serdes::write_32;
+
+// Varint
+pub use var_int::size;
+pub use var_int::write;
+pub use var_int::read;
+
+// Block height constants
+pub BITCOIN_CASH_FORK_HEIGHT_MAINNET: i64 = 478558;
+pub BITCOIN_CASH_FORK_HEIGHT_TESTNET: i64 = 1155875;
+pub GENESIS_UPGRADE_HEIGHT_MAINNET: i64 = 620538;
+pub GENESIS_UPGRADE_HEIGHT_TESTNET: i64 = 1344302;

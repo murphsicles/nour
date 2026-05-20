@@ -1,0 +1,11 @@
+// lib.z — Nour: High-performance Bitcoin SV toolkit for Zeta
+// Transpiled from Rust. Pure Zeta. Zero dependencies on the old world.
+
+pub mod address;
+pub mod messages;
+pub mod network;
+pub mod peer;
+pub mod script;
+pub mod transaction;
+pub mod util;
+pub mod wallet;

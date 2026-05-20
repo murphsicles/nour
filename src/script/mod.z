@@ -1,0 +1,231 @@
+// mod.z — Script opcodes and interpreter for Bitcoin SV
+// Supports building and evaluating transaction scripts with checkers for validation.
+// Aligned with BSV consensus (pre-Genesis rules via flags).
+
+const MAX_PUSH_DATA: i64 = 4294967295;  // 2^32 - 1
+
+// Transaction script as a sequence of opcodes and data.
+struct Script {
+    data: [u8; 65536],
+    len: i64,
+}
+
+fn script_new() -> Script {
+    return Script {
+        data: [0; 65536],
+        len: 0,
+    };
+}
+
+fn script_append(s: &mut Script, byte: u8) {
+    if s.len < 65536 {
+        s.data[s.len] = byte;
+        s.len += 1;
+    }
+}
+
+fn script_append_slice(s: &mut Script, slice: []u8) {
+    let mut i: i64 = 0;
+    while i < len(slice) && s.len < 65536 {
+        s.data[s.len] = slice[i];
+        s.len += 1;
+        i += 1;
+    }
+}
+
+fn script_append_data(s: &mut Script, data: []u8) -> i64 {
+    let data_len: i64 = len(data);
+    if data_len > MAX_PUSH_DATA {
+        return 1;  // BadArgument
+    }
+
+    if data_len == 0 {
+        script_append(s, OP_0);
+    } else if data_len <= 75 {
+        script_append(s, data_len as u8);
+        script_append_slice(s, data);
+    } else if data_len <= 255 {
+        script_append(s, OP_PUSHDATA1);
+        script_append(s, data_len as u8);
+        script_append_slice(s, data);
+    } else if data_len <= 65535 {
+        script_append(s, OP_PUSHDATA2);
+        script_append(s, (data_len & 0xFF) as u8);
+        script_append(s, ((data_len >> 8) & 0xFF) as u8);
+        script_append_slice(s, data);
+    } else {
+        script_append(s, OP_PUSHDATA4);
+        script_append(s, (data_len & 0xFF) as u8);
+        script_append(s, ((data_len >> 8) & 0xFF) as u8);
+        script_append(s, ((data_len >> 16) & 0xFF) as u8);
+        script_append(s, ((data_len >> 24) & 0xFF) as u8);
+        script_append_slice(s, data);
+    }
+    return 0;
+}
+
+fn script_append_num(s: &mut Script, n: i32) -> i64 {
+    let mut buf: [u8; 8] = [0; 8];
+    let buf_len: i64;
+    if n == 0 {
+        buf_len = 0;
+    } else {
+        let negative: bool = n < 0;
+        let abs_n: i64;
+        if negative { abs_n = -(n as i64); } else { abs_n = n as i64; }
+        let mut idx: i64 = 0;
+        let mut remaining: i64 = abs_n;
+        while remaining > 0 {
+            buf[idx] = (remaining & 0xFF) as u8;
+            remaining >>= 8;
+            idx += 1;
+        }
+        let last: u8 = buf[idx - 1];
+        if (last & 0x80) != 0 {
+            buf[idx] = if negative { 0x80 } else { 0 };
+            idx += 1;
+        } else if negative {
+            buf[idx - 1] |= 0x80;
+        }
+        buf_len = idx;
+    }
+    return script_append_data(s, buf[0..buf_len]);
+}
+
+fn script_eval(s: &Script, checker: &EvalChecker, flags: u32) -> i64 {
+    return eval(s.data[0..s.len], checker, flags);
+}
+
+// --- Debug formatting ---
+fn script_debug(s: &Script) -> string {
+    let mut ret: string = "[";
+    let mut i: i64 = 0;
+    let script_len: i64 = s.len;
+
+    while i < script_len {
+        if i != 0 {
+            ret += " ";
+        }
+        let op: u8 = s.data[i];
+
+        // Named opcodes
+        if op == OP_0 { ret += "OP_0"; }
+        else if op == OP_1NEGATE { ret += "OP_1NEGATE"; }
+        else if op == OP_1 { ret += "OP_1"; }
+        else if op == OP_2 { ret += "OP_2"; }
+        else if op == OP_3 { ret += "OP_3"; }
+        else if op == OP_4 { ret += "OP_4"; }
+        else if op == OP_5 { ret += "OP_5"; }
+        else if op == OP_6 { ret += "OP_6"; }
+        else if op == OP_7 { ret += "OP_7"; }
+        else if op == OP_8 { ret += "OP_8"; }
+        else if op == OP_9 { ret += "OP_9"; }
+        else if op == OP_10 { ret += "OP_10"; }
+        else if op == OP_11 { ret += "OP_11"; }
+        else if op == OP_12 { ret += "OP_12"; }
+        else if op == OP_13 { ret += "OP_13"; }
+        else if op == OP_14 { ret += "OP_14"; }
+        else if op == OP_15 { ret += "OP_15"; }
+        else if op == OP_16 { ret += "OP_16"; }
+        else if op >= 1 && op <= 75 {
+            let data_len: i64 = op as i64;
+            ret += "OP_PUSH";
+            ret += data_len as string;
+            ret += " ";
+            let end: i64 = i + 1 + data_len;
+            if end <= script_len {
+                let mut j: i64 = i + 1;
+                while j < end {
+                    let hi: u8 = (s.data[j] >> 4) & 0x0F;
+                    let lo: u8 = s.data[j] & 0x0F;
+                    if hi < 10 { ret += (b'0' + hi) as char; }
+                    else { ret += (b'a' + hi - 10) as char; }
+                    if lo < 10 { ret += (b'0' + lo) as char; }
+                    else { ret += (b'a' + lo - 10) as char; }
+                    j += 1;
+                }
+            }
+        }
+        else if op == OP_PUSHDATA1 { ret += "OP_PUSHDATA1"; }
+        else if op == OP_PUSHDATA2 { ret += "OP_PUSHDATA2"; }
+        else if op == OP_PUSHDATA4 { ret += "OP_PUSHDATA4"; }
+        else if op == OP_NOP { ret += "OP_NOP"; }
+        else if op == OP_IF { ret += "OP_IF"; }
+        else if op == OP_NOTIF { ret += "OP_NOTIF"; }
+        else if op == OP_ELSE { ret += "OP_ELSE"; }
+        else if op == OP_ENDIF { ret += "OP_ENDIF"; }
+        else if op == OP_VERIFY { ret += "OP_VERIFY"; }
+        else if op == OP_RETURN { ret += "OP_RETURN"; }
+        else if op == OP_TOALTSTACK { ret += "OP_TOALTSTACK"; }
+        else if op == OP_FROMALTSTACK { ret += "OP_FROMALTSTACK"; }
+        else if op == OP_IFDUP { ret += "OP_IFDUP"; }
+        else if op == OP_DEPTH { ret += "OP_DEPTH"; }
+        else if op == OP_DROP { ret += "OP_DROP"; }
+        else if op == OP_DUP { ret += "OP_DUP"; }
+        else if op == OP_NIP { ret += "OP_NIP"; }
+        else if op == OP_OVER { ret += "OP_OVER"; }
+        else if op == OP_PICK { ret += "OP_PICK"; }
+        else if op == OP_ROLL { ret += "OP_ROLL"; }
+        else if op == OP_ROT { ret += "OP_ROT"; }
+        else if op == OP_SWAP { ret += "OP_SWAP"; }
+        else if op == OP_TUCK { ret += "OP_TUCK"; }
+        else if op == OP_2DROP { ret += "OP_2DROP"; }
+        else if op == OP_2DUP { ret += "OP_2DUP"; }
+        else if op == OP_3DUP { ret += "OP_3DUP"; }
+        else if op == OP_2OVER { ret += "OP_2OVER"; }
+        else if op == OP_2ROT { ret += "OP_2ROT"; }
+        else if op == OP_2SWAP { ret += "OP_2SWAP"; }
+        else if op == OP_CAT { ret += "OP_CAT"; }
+        else if op == OP_SPLIT { ret += "OP_SPLIT"; }
+        else if op == OP_SIZE { ret += "OP_SIZE"; }
+        else if op == OP_AND { ret += "OP_AND"; }
+        else if op == OP_OR { ret += "OP_OR"; }
+        else if op == OP_XOR { ret += "OP_XOR"; }
+        else if op == OP_EQUAL { ret += "OP_EQUAL"; }
+        else if op == OP_EQUALVERIFY { ret += "OP_EQUALVERIFY"; }
+        else if op == OP_1ADD { ret += "OP_1ADD"; }
+        else if op == OP_1SUB { ret += "OP_1SUB"; }
+        else if op == OP_NEGATE { ret += "OP_NEGATE"; }
+        else if op == OP_ABS { ret += "OP_ABS"; }
+        else if op == OP_NOT { ret += "OP_NOT"; }
+        else if op == OP_0NOTEQUAL { ret += "OP_0NOTEQUAL"; }
+        else if op == OP_ADD { ret += "OP_ADD"; }
+        else if op == OP_SUB { ret += "OP_SUB"; }
+        else if op == OP_DIV { ret += "OP_DIV"; }
+        else if op == OP_MOD { ret += "OP_MOD"; }
+        else if op == OP_BOOLAND { ret += "OP_BOOLAND"; }
+        else if op == OP_BOOLOR { ret += "OP_BOOLOR"; }
+        else if op == OP_NUMEQUAL { ret += "OP_NUMEQUAL"; }
+        else if op == OP_NUMEQUALVERIFY { ret += "OP_NUMEQUALVERIFY"; }
+        else if op == OP_NUMNOTEQUAL { ret += "OP_NUMNOTEQUAL"; }
+        else if op == OP_LESSTHAN { ret += "OP_LESSTHAN"; }
+        else if op == OP_GREATERTHAN { ret += "OP_GREATERTHAN"; }
+        else if op == OP_LESSTHANOREQUAL { ret += "OP_LESSTHANOREQUAL"; }
+        else if op == OP_GREATERTHANOREQUAL { ret += "OP_GREATERTHANOREQUAL"; }
+        else if op == OP_MIN { ret += "OP_MIN"; }
+        else if op == OP_MAX { ret += "OP_MAX"; }
+        else if op == OP_WITHIN { ret += "OP_WITHIN"; }
+        else if op == OP_NUM2BIN { ret += "OP_NUM2BIN"; }
+        else if op == OP_BIN2NUM { ret += "OP_BIN2NUM"; }
+        else if op == OP_RIPEMD160 { ret += "OP_RIPEMD160"; }
+        else if op == OP_SHA1 { ret += "OP_SHA1"; }
+        else if op == OP_SHA256 { ret += "OP_SHA256"; }
+        else if op == OP_HASH160 { ret += "OP_HASH160"; }
+        else if op == OP_HASH256 { ret += "OP_HASH256"; }
+        else if op == OP_CODESEPARATOR { ret += "OP_CODESEPARATOR"; }
+        else if op == OP_CHECKSIG { ret += "OP_CHECKSIG"; }
+        else if op == OP_CHECKSIGVERIFY { ret += "OP_CHECKSIGVERIFY"; }
+        else if op == OP_CHECKMULTISIG { ret += "OP_CHECKMULTISIG"; }
+        else if op == OP_CHECKMULTISIGVERIFY { ret += "OP_CHECKMULTISIGVERIFY"; }
+        else if op == OP_CHECKLOCKTIMEVERIFY { ret += "OP_CHECKLOCKTIMEVERIFY"; }
+        else if op == OP_CHECKSEQUENCEVERIFY { ret += "OP_CHECKSEQUENCEVERIFY"; }
+        else {
+            ret += op as string;
+        }
+
+        i = next_op(i, s.data[0..script_len]);
+    }
+
+    ret += "]";
+    return ret;
+}

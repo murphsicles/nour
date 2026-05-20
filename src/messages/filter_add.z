@@ -1,0 +1,42 @@
+// FilterAdd message for Bitcoin SV P2P, adding data to bloom filters (BIP-37).
+
+struct FilterAdd {
+    data: [u8],
+}
+
+const MAX_FILTER_ADD_DATA_SIZE: usize = 520
+
+fn filter_add_size(fa: FilterAdd) -> usize {
+    var_int_size(fa.data.len() as u64) + fa.data.len()
+}
+
+fn filter_add_read(data: [u8], offset: usize) -> (FilterAdd, usize) {
+    let mut o = offset
+
+    let (data_len, new_o) = var_int_read(data, o)
+    o = new_o
+
+    let payload = data[o..o + (data_len as usize)]
+    o += data_len as usize
+
+    (FilterAdd { data: payload }, o)
+}
+
+fn filter_add_write(fa: FilterAdd) -> [u8] {
+    let sz = filter_add_size(fa)
+    let mut out = [0; sz]
+    let mut o = 0
+
+    let vi_bytes = var_int_write(fa.data.len() as u64)
+    out[o..o+vi_bytes.len()] = vi_bytes
+    o += vi_bytes.len()
+
+    out[o..o + fa.data.len()] = fa.data
+    o += fa.data.len()
+
+    out
+}
+
+fn filter_add_validate(fa: FilterAdd) -> bool {
+    fa.data.len() <= MAX_FILTER_ADD_DATA_SIZE
+}

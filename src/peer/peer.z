@@ -1,0 +1,479 @@
+//! Peer connection implementation for Bitcoin SV P2P.
+use @async
+use @atomic
+use @io
+use @net/socket
+use @sync/mutex
+use @sys/clock
+use log.{debug, error, info, warn}
+use messages.{Message, MessageHeader, NODE_BITCOIN_CASH, NODE_NETWORK, Ping, Version}
+use network.NetworkConfig
+use peer.atomic_reader.AtomicReader
+use util.{Error, Result, secs_since}
+
+/// Time to wait for the initial TCP connection, in seconds.
+const CONNECT_TIMEOUT: u64 = 5
+/// Time to wait for handshake messages before failing, in seconds.
+const HANDSHAKE_READ_TIMEOUT: u64 = 3
+
+// ── Event types ────────────────────────────────────────────────────
+
+/// Event emitted when a connection is established with the peer.
+pub struct PeerConnected {
+    /// The connected peer's unique id.
+    peer_id: u64,
+    /// Peer IP address.
+    ip: IpAddr,
+    /// Peer port.
+    port: u16,
+}
+
+/// Event emitted when the connection with the peer is terminated.
+pub struct PeerDisconnected {
+    /// The disconnected peer's unique id.
+    peer_id: u64,
+    /// Peer IP address.
+    ip: IpAddr,
+    /// Peer port.
+    port: u16,
+}
+
+/// Event emitted when the peer receives a network message.
+pub struct PeerMessage {
+    /// The peer's unique id.
+    peer_id: u64,
+    /// Peer IP address.
+    ip: IpAddr,
+    /// Peer port.
+    port: u16,
+    /// The message received.
+    message: Message,
+}
+
+// ── PeerFilter ─────────────────────────────────────────────────────
+
+/// Filters peers based on their version information before connecting.
+pub struct PeerFilter {
+    /// Function that checks if a peer is connectable based on version.
+    check: func(Version) -> bool,
+}
+
+pub func PeerFilter.new(check: func(Version) -> bool) -> PeerFilter {
+    return PeerFilter { check }
+}
+
+/// Filters out all peers except for Bitcoin SV full nodes.
+pub struct SVPeerFilter {
+    /// Minimum start height for chain sync.
+    min_start_height: i32,
+}
+
+pub func SVPeerFilter.new(min_start_height: i32) -> SVPeerFilter {
+    return SVPeerFilter { min_start_height }
+}
+
+/// Check if a peer is connectable per SV filter rules.
+pub func (self: SVPeerFilter) connectable(version: Version) -> bool {
+    return version.user_agent.contains("Bitcoin SV")
+        && version.start_height >= self.min_start_height
+        && (version.services & (NODE_BITCOIN_CASH | NODE_NETWORK)) != 0
+}
+
+// ── Counter for unique peer IDs ────────────────────────────────────
+
+var next_peer_id: u64 = 1
+let peer_id_mutex: Mutex = Mutex.new()
+
+func allocate_peer_id() -> u64 {
+    peer_id_mutex.lock()
+    let id: u64 = next_peer_id
+    next_peer_id += 1
+    peer_id_mutex.unlock()
+    return id
+}
+
+// ── Peer ───────────────────────────────────────────────────────────
+
+/// Node on the network to send and receive messages.
+///
+/// Sets up a connection, responds to pings, and stores basic properties.
+/// Network messages received are published to the registered message callback.
+/// Messages may be sent via send() from any thread.
+pub struct Peer {
+    /// Unique id for this connection.
+    id: u64,
+    /// IP address.
+    ip: IpAddr,
+    /// Port.
+    port: u16,
+    /// Network configuration.
+    network: NetworkConfig,
+    /// Callback fired when connected.
+    on_connected: ?func(PeerConnected),
+    /// Callback fired when disconnected.
+    on_disconnected: ?func(PeerDisconnected),
+    /// Callback fired on each received message.
+    on_message: ?func(PeerMessage),
+    /// TCP stream for writing.
+    tcp_writer: ?@socket.TcpStream,
+    /// Whether the peer is connected.
+    connected: @atomic.Bool,
+    /// Connected flag (non-atomic shadow for thread-safe drop path).
+    connected_flag: bool,
+    /// Time difference in seconds between our time and theirs.
+    time_delta: i64,
+    /// Minimum fee peer accepts (sats/1000bytes).
+    minfee: u64,
+    /// Whether peer announces new blocks with headers.
+    sendheaders: bool,
+    /// Whether compact blocks are supported.
+    sendcmpct: bool,
+    /// Version message received during handshake.
+    version: ?Version,
+}
+
+pub func Peer.new(
+    ip: IpAddr,
+    port: u16,
+    network: NetworkConfig,
+) -> Peer {
+    return Peer {
+        id: allocate_peer_id(),
+        ip,
+        port,
+        network,
+        on_connected: none,
+        on_disconnected: none,
+        on_message: none,
+        tcp_writer: none,
+        connected: @atomic.Bool.new(false),
+        connected_flag: false,
+        time_delta: 0,
+        minfee: 0,
+        sendheaders: false,
+        sendcmpct: false,
+        version: none,
+    }
+}
+
+/// Register the connected event callback.
+pub func (self: Peer) set_on_connected(cb: func(PeerConnected)) {
+    self.on_connected = cb
+}
+
+/// Register the disconnected event callback.
+pub func (self: Peer) set_on_disconnected(cb: func(PeerDisconnected)) {
+    self.on_disconnected = cb
+}
+
+/// Register the message callback.
+pub func (self: Peer) set_on_message(cb: func(PeerMessage)) {
+    self.on_message = cb
+}
+
+/// Connect to a peer, perform handshake, and start the read loop.
+/// This spawns an async task and returns immediately.
+pub func Peer.connect(
+    ip: IpAddr,
+    port: u16,
+    network: NetworkConfig,
+    version: Version,
+    filter: SVPeerFilter,
+) -> Peer {
+    let peer: Peer = Peer.new(ip, port, network)
+
+    let peer_ref: *Peer = &peer
+
+    info("[Peer " ++ string(peer.id) ++ "] Connecting to " ++ string(ip) ++ ":" ++ string(port))
+
+    @async.spawn(func() {
+        let connect_result: @io.Result<@socket.TcpStream> = socket.TcpStream.connect_timeout(
+            ip, port, CONNECT_TIMEOUT,
+        )
+
+        if connect_result.is_err() {
+            error("[Peer " ++ string(peer_ref.id) ++ "] TCP connect failed: " ++ connect_result.unwrap_err().message())
+            peer_ref.disconnect_internal()
+            return
+        }
+
+        let tcp_stream: @socket.TcpStream = connect_result.unwrap()
+        tcp_stream.set_nodelay(true)
+        tcp_stream.set_read_timeout(HANDSHAKE_READ_TIMEOUT)
+
+        // Perform handshake
+        let handshake_result: @io.Result<@socket.TcpStream> = peer_ref.handshake(tcp_stream, version, filter)
+        if handshake_result.is_err() {
+            error("[Peer " ++ string(peer_ref.id) ++ "] Handshake failed: " ++ handshake_result.unwrap_err().message())
+            peer_ref.disconnect_internal()
+            return
+        }
+
+        let stream_for_reading: @socket.TcpStream = handshake_result.unwrap()
+
+        // Peer is now connected
+        peer_ref.connected.store(true)
+        peer_ref.connected_flag = true
+        info("[Peer " ++ string(peer_ref.id) ++ "] Connected to " ++ string(ip) ++ ":" ++ string(port))
+
+        if peer_ref.on_connected.is_some() {
+            peer_ref.on_connected.unwrap()(PeerConnected {
+                peer_id: peer_ref.id,
+                ip,
+                port,
+            })
+        }
+
+        // Start message read loop
+        let magic: [u8; 4] = peer_ref.network.magic()
+        let mut partial: ?MessageHeader = none
+        let mut reader: AtomicReader = AtomicReader.new(stream_for_reading.as_reader())
+
+        loop {
+            // Check connection flag before each blocking read
+            if !peer_ref.connected.load() {
+                break
+            }
+
+            let message_result: @io.Result<Message>
+            if partial.is_some() {
+                message_result = Message.read_partial(reader, partial.unwrap())
+            } else {
+                message_result = Message.read(reader, magic)
+            }
+
+            // Check after read too
+            if !peer_ref.connected.load() {
+                break
+            }
+
+            if message_result.is_ok() {
+                let message: Message = message_result.unwrap()
+                if message.is_partial() {
+                    partial = message.get_partial_header()
+                } else {
+                    debug("[Peer " ++ string(peer_ref.id) ++ "] Read " ++ string(message))
+                    partial = none
+
+                    // Handle internal messages
+                    let handle_result: @io.Result = peer_ref.handle_message(message)
+                    if handle_result.is_err() {
+                        error("[Peer " ++ string(peer_ref.id) ++ "] Error handling message: " ++ handle_result.unwrap_err().message())
+                        peer_ref.disconnect_internal()
+                        break
+                    }
+
+                    // Emit to callback
+                    if peer_ref.on_message.is_some() {
+                        peer_ref.on_message.unwrap()(PeerMessage {
+                            peer_id: peer_ref.id,
+                            ip,
+                            port,
+                            message,
+                        })
+                    }
+                }
+            } else {
+                let err: @io.Error = message_result.unwrap_err()
+                // Timeout / WouldBlock are non-fatal
+                if err.kind() == @io.ErrorKind.TimedOut || err.kind() == @io.ErrorKind.WouldBlock {
+                    continue
+                }
+                error("[Peer " ++ string(peer_ref.id) ++ "] Error reading message: " ++ err.message())
+                peer_ref.disconnect_internal()
+                break
+            }
+        }
+    })
+
+    return peer
+}
+
+/// Internal handshake logic.
+func (self: Peer) handshake(
+    tcp_stream: @socket.TcpStream,
+    version: Version,
+    filter: SVPeerFilter,
+) -> @io.Result<@socket.TcpStream> {
+    let magic: [u8; 4] = self.network.magic()
+
+    // Write our version
+    let our_version_msg: Message = Message.Version(version)
+    debug("[Peer " ++ string(self.id) ++ "] Write " ++ string(our_version_msg))
+    let write_result: @io.Result = our_version_msg.write(tcp_stream, magic)
+    if write_result.is_err() {
+        return write_result
+    }
+
+    // Read their version
+    let read_result: @io.Result<Message> = Message.read(tcp_stream.as_reader(), magic)
+    if read_result.is_err() {
+        return read_result
+    }
+    let msg: Message = read_result.unwrap()
+    debug("[Peer " ++ string(self.id) ++ "] Read " ++ string(msg))
+
+    let their_version: Version
+    if msg.is_version() {
+        their_version = msg.get_version()
+    } else {
+        return Err(@io.Error.new(@io.ErrorKind.InvalidData, "Unexpected command"))
+    }
+
+    // Apply filter
+    if !filter.connectable(their_version) {
+        return Err(@io.Error.new(@io.ErrorKind.ConnectionRefused, "Peer filtered out"))
+    }
+
+    let now: i64 = secs_since()
+    self.time_delta = now - their_version.timestamp
+    self.version = their_version
+
+    // Read their verack
+    let verack_result: @io.Result<Message> = Message.read(tcp_stream.as_reader(), magic)
+    if verack_result.is_err() {
+        return verack_result
+    }
+    let their_verack: Message = verack_result.unwrap()
+    debug("[Peer " ++ string(self.id) ++ "] Read " ++ string(their_verack))
+    if !their_verack.is_verack() {
+        return Err(@io.Error.new(@io.ErrorKind.InvalidData, "Unexpected command"))
+    }
+
+    // Write our verack
+    debug("[Peer " ++ string(self.id) ++ "] Write Verack")
+    let verack_write: @io.Result = Message.Verack.write(tcp_stream, magic)
+    if verack_write.is_err() {
+        return verack_write
+    }
+
+    // Write a ping to help with connection setup
+    let ping: Message = Message.Ping(Ping {
+        nonce: u64(secs_since()),
+    })
+    debug("[Peer " ++ string(self.id) ++ "] Write " ++ string(ping))
+    let ping_write: @io.Result = ping.write(tcp_stream, magic)
+    if ping_write.is_err() {
+        return ping_write
+    }
+
+    // Clone the stream for writing, and save it
+    let clone_result: @io.Result<@socket.TcpStream> = tcp_stream.try_clone()
+    if clone_result.is_err() {
+        return clone_result
+    }
+    self.tcp_writer = clone_result.unwrap()
+
+    // Remove read timeout for long-running read loop
+    tcp_stream.set_read_timeout(0)
+
+    return Ok(tcp_stream)
+}
+
+/// Internal disconnect (called from the async task).
+func (self: Peer) disconnect_internal() {
+    self.connected.store(false)
+    self.connected_flag = false
+    info("[Peer " ++ string(self.id) ++ "] Disconnecting")
+
+    if self.tcp_writer.is_some() {
+        let tcp_stream: @socket.TcpStream = self.tcp_writer.unwrap()
+        let shutdown_result: @io.Result = tcp_stream.shutdown(@socket.Shutdown.Both)
+        if shutdown_result.is_err() {
+            warn("[Peer " ++ string(self.id) ++ "] Shutdown error: " ++ shutdown_result.unwrap_err().message())
+        }
+    }
+
+    if self.on_disconnected.is_some() {
+        self.on_disconnected.unwrap()(PeerDisconnected {
+            peer_id: self.id,
+            ip: self.ip,
+            port: self.port,
+        })
+    }
+}
+
+/// Send a message to the peer.
+pub func (self: Peer) send(message: Message) -> Result {
+    if !self.connected.load() {
+        return Err(Error.IllegalState("Not connected"))
+    }
+
+    if self.tcp_writer.is_none() {
+        return Err(Error.IllegalState("No tcp stream"))
+    }
+
+    let tcp_stream: @socket.TcpStream = self.tcp_writer.unwrap()
+    let magic: [u8; 4] = self.network.magic()
+
+    debug("[Peer " ++ string(self.id) ++ "] Write " ++ string(message))
+    let write_result: @io.Result = message.write(tcp_stream, magic)
+    if write_result.is_err() {
+        self.disconnect_internal()
+        return Err(Error.IOError(write_result.unwrap_err()))
+    }
+
+    let flush_result: @io.Result = tcp_stream.flush()
+    if flush_result.is_err() {
+        self.disconnect_internal()
+        return Err(Error.IOError(flush_result.unwrap_err()))
+    }
+
+    return Ok
+}
+
+/// Disconnect and disable the peer.
+pub func (self: Peer) disconnect() {
+    self.disconnect_internal()
+}
+
+/// Returns whether the peer is connected.
+pub func (self: Peer) is_connected() -> bool {
+    return self.connected.load()
+}
+
+/// Returns the time difference in seconds between our time and theirs.
+pub func (self: Peer) get_time_delta() -> i64 {
+    return self.time_delta
+}
+
+/// Returns the minimum fee this peer accepts in sats/1000bytes.
+pub func (self: Peer) get_minfee() -> u64 {
+    return self.minfee
+}
+
+/// Returns whether this peer may announce new blocks with headers.
+pub func (self: Peer) get_sendheaders() -> bool {
+    return self.sendheaders
+}
+
+/// Returns whether compact blocks are supported.
+pub func (self: Peer) get_sendcmpct() -> bool {
+    return self.sendcmpct
+}
+
+/// Gets the version message received during the handshake.
+pub func (self: Peer) get_version() -> Result<Version> {
+    if self.version.is_some() {
+        return Ok(self.version.unwrap())
+    }
+    return Err(Error.IllegalState("Not connected"))
+}
+
+/// Handle internal messages (pings, feefilter, etc.).
+func (self: Peer) handle_message(message: Message) -> @io.Result {
+    if message.is_feefilter() {
+        self.minfee = message.get_feefilter().minfee
+    } else if message.is_ping() {
+        let pong: Message = Message.Pong(message.get_ping())
+        let send_result: Result = self.send(pong)
+        if send_result.is_err() {
+            return Err(@io.Error.new(@io.ErrorKind.Other, send_result.unwrap_err().message()))
+        }
+    } else if message.is_sendheaders() {
+        self.sendheaders = true
+    } else if message.is_sendcmpct() {
+        self.sendcmpct = message.get_sendcmpct().use_cmpctblock()
+    }
+    return Ok
+}

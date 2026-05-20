@@ -1,0 +1,43 @@
+// Extended network address for Bitcoin SV P2P node discovery.
+
+struct NodeAddrEx {
+    last_connected_time: u32,
+    addr: NodeAddr,
+}
+
+fn node_addr_ex_size() -> usize {
+    30
+}
+
+fn node_addr_ex_read(data: [u8], offset: usize) -> (NodeAddrEx, usize) {
+    let mut o = offset
+
+    let time_bytes = data[o..o+4]
+    let last_connected_time = (time_bytes[0] as u32) |
+                              ((time_bytes[1] as u32) << 8) |
+                              ((time_bytes[2] as u32) << 16) |
+                              ((time_bytes[3] as u32) << 24)
+    o += 4
+
+    let (addr, new_o) = node_addr_read(data, o)
+    o = new_o
+
+    (NodeAddrEx { last_connected_time, addr }, o)
+}
+
+fn node_addr_ex_write(na: NodeAddrEx) -> [u8] {
+    let mut out = [0; 30]
+    let mut o = 0
+
+    out[o] = (na.last_connected_time & 0xff) as u8
+    out[o+1] = ((na.last_connected_time >> 8) & 0xff) as u8
+    out[o+2] = ((na.last_connected_time >> 16) & 0xff) as u8
+    out[o+3] = ((na.last_connected_time >> 24) & 0xff) as u8
+    o += 4
+
+    let addr_bytes = node_addr_write(na.addr)
+    out[o..o+26] = addr_bytes
+    o += 26
+
+    out
+}

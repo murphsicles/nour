@@ -1,0 +1,177 @@
+// Bloom filter for SPV nodes in Bitcoin SV P2P to limit received transactions.
+use var_int;
+use crypto;
+
+// Maximum number of bytes in the bloom filter bit field.
+const BLOOM_FILTER_MAX_FILTER_SIZE: i64 = 36000;
+
+// Maximum number of hash functions for the bloom filter.
+const BLOOM_FILTER_MAX_HASH_FUNCS: i64 = 50;
+
+// Bloom filter used by SPV nodes to limit transactions received.
+struct BloomFilter {
+    // Filter bit field.
+    filter: []u8,
+    // Number of hash functions used.
+    num_hash_funcs: i64,
+    // Random tweak to generate the hash functions.
+    tweak: i64,
+}
+
+// Creates a new bloom filter with optimal size and hash function count.
+// Returns (BloomFilter, error_code) where 0 = success.
+fn BloomFilter_new(insert: f64, pr_false_pos: f64) -> (BloomFilter, i64) {
+    if insert <= 0.0 {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -1);
+    }
+    if !(0.0 < pr_false_pos && pr_false_pos < 1.0) {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -2);
+    }
+    let ln2: f64 = 0.6931471805599453;
+    let ln2_sq: f64 = ln2 * ln2;
+    let mut size: f64 = (-1.0 / ln2_sq) * insert * ln(pr_false_pos);
+    size = size / 8.0;
+    let mut filter_size: i64 = size as i64;
+    if filter_size > BLOOM_FILTER_MAX_FILTER_SIZE {
+        filter_size = BLOOM_FILTER_MAX_FILTER_SIZE;
+    }
+    if filter_size < 1 {
+        filter_size = 1;
+    }
+    let mut num_hash_funcs: f64 = (filter_size as f64) * 8.0 / insert * ln2;
+    let mut nf: i64 = num_hash_funcs as i64;
+    if nf > BLOOM_FILTER_MAX_HASH_FUNCS {
+        nf = BLOOM_FILTER_MAX_HASH_FUNCS;
+    }
+    if nf < 1 {
+        nf = 1;
+    }
+    let tweak: i64 = crypto::random_u32() as i64;
+    let mut filter: []u8 = [];
+    let mut i: i64 = 0;
+    while i < filter_size {
+        filter += 0u8;
+        i += 1;
+    }
+    return (BloomFilter { filter: filter, num_hash_funcs: nf, tweak: tweak }, 0);
+}
+
+// Adds data to the bloom filter.
+// Returns 0 on success, -1 if data too large (>520 bytes).
+fn BloomFilter_add(bf: *BloomFilter, data: []u8) -> i64 {
+    if len(data) > 520 {
+        return -1;
+    }
+    let bit_size: i64 = len((*bf).filter) * 8;
+    let mut i: i64 = 0;
+    while i < (*bf).num_hash_funcs {
+        let seed: i64 = (i * 0xFBA4C795) + (*bf).tweak;
+        let c: i64 = crypto::murmur3_32(data, seed) % bit_size;
+        let byte_idx: i64 = c / 8;
+        let bit_idx: i64 = c % 8;
+        (*bf).filter[byte_idx] = (*bf).filter[byte_idx] | (1u8 << bit_idx);
+        i += 1;
+    }
+    return 0;
+}
+
+// Probabilistically checks if the bloom filter contains the data.
+// False positives possible, but no false negatives.
+fn BloomFilter_contains(bf: *BloomFilter, data: []u8) -> bool {
+    let bit_size: i64 = len((*bf).filter) * 8;
+    let mut i: i64 = 0;
+    while i < (*bf).num_hash_funcs {
+        let seed: i64 = (i * 0xFBA4C795) + (*bf).tweak;
+        let c: i64 = crypto::murmur3_32(data, seed) % bit_size;
+        let byte_idx: i64 = c / 8;
+        let bit_idx: i64 = c % 8;
+        if (*bf).filter[byte_idx] & (1u8 << bit_idx) == 0 {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}
+
+// Validates the bloom filter against max size/funcs.
+// Returns 0 if valid, -1 if filter too long, -2 if too many hash funcs.
+fn BloomFilter_validate(bf: *BloomFilter) -> i64 {
+    if len((*bf).filter) > BLOOM_FILTER_MAX_FILTER_SIZE {
+        return -1;
+    }
+    if (*bf).num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
+        return -2;
+    }
+    return 0;
+}
+
+// Reads a BloomFilter from serialized bytes.
+// Returns (BloomFilter, new_pos) on success, or error on failure.
+fn BloomFilter_read(buf: []u8, pos: i64) -> (BloomFilter, i64) {
+    let (filter_len, new_pos): (i64, i64) = var_int::read(buf, pos);
+    if filter_len < 0 {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -1);
+    }
+    if filter_len > BLOOM_FILTER_MAX_FILTER_SIZE {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -2);
+    }
+    if new_pos + filter_len + 8 > len(buf) {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -3);
+    }
+    let mut filter: []u8 = [];
+    let mut i: i64 = 0;
+    while i < filter_len {
+        filter += buf[new_pos + i];
+        i += 1;
+    }
+    let pos2: i64 = new_pos + filter_len;
+    let mut num_hash_bytes: i64 = 0;
+    num_hash_bytes |= (buf[pos2] as i64);
+    num_hash_bytes |= (buf[pos2 + 1] as i64) << 8;
+    num_hash_bytes |= (buf[pos2 + 2] as i64) << 16;
+    num_hash_bytes |= (buf[pos2 + 3] as i64) << 24;
+    let num_hash_funcs: i64 = num_hash_bytes;
+    if num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
+        return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -4);
+    }
+    let pos3: i64 = pos2 + 4;
+    let mut tweak: i64 = 0;
+    tweak |= (buf[pos3] as i64);
+    tweak |= (buf[pos3 + 1] as i64) << 8;
+    tweak |= (buf[pos3 + 2] as i64) << 16;
+    tweak |= (buf[pos3 + 3] as i64) << 24;
+    return (BloomFilter { filter: filter, num_hash_funcs: num_hash_funcs, tweak: tweak }, pos3 + 4);
+}
+
+// Writes a BloomFilter to a buffer.
+// Returns new position or -1 if buffer too small.
+fn BloomFilter_write(bf: *BloomFilter, buf: []u8, pos: i64) -> i64 {
+    // Write filter length as varint
+    let pos2: i64 = var_int::write(len((*bf).filter), buf, pos);
+    if pos2 < 0 {
+        return -1;
+    }
+    // Write filter bytes
+    if pos2 + len((*bf).filter) + 8 > len(buf) {
+        return -1;
+    }
+    let mut i: i64 = 0;
+    while i < len((*bf).filter) {
+        buf[pos2 + i] = (*bf).filter[i];
+        i += 1;
+    }
+    let pos3: i64 = pos2 + len((*bf).filter);
+    // Write num_hash_funcs as u32 LE
+    let nhf: i64 = (*bf).num_hash_funcs;
+    buf[pos3] = (nhf & 0xff) as u8;
+    buf[pos3 + 1] = ((nhf >> 8) & 0xff) as u8;
+    buf[pos3 + 2] = ((nhf >> 16) & 0xff) as u8;
+    buf[pos3 + 3] = ((nhf >> 24) & 0xff) as u8;
+    // Write tweak as u32 LE
+    let tw: i64 = (*bf).tweak;
+    buf[pos3 + 4] = (tw & 0xff) as u8;
+    buf[pos3 + 5] = ((tw >> 8) & 0xff) as u8;
+    buf[pos3 + 6] = ((tw >> 16) & 0xff) as u8;
+    buf[pos3 + 7] = ((tw >> 24) & 0xff) as u8;
+    return pos3 + 8;
+}

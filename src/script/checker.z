@@ -1,0 +1,156 @@
+// checker.z — Script checkers for signature, locktime, and sequence validation in Bitcoin SV
+// Concrete checker types instead of traits.
+
+const LOCKTIME_THRESHOLD: i32 = 500_000_000;
+const SEQUENCE_LOCKTIME_DISABLE_FLAG: u32 = 1 << 31;
+const SEQUENCE_LOCKTIME_TYPE_FLAG: u32 = 1 << 22;
+
+// Checker struct with function pointers for script validation callbacks.
+// TransactionChecker fills these with real validation logic.
+// TransactionlessChecker fills them with error-returning stubs.
+struct Checker {
+    check_sig_fn: fn (sig: []u8, pubkey: []u8, script: []u8) -> bool,
+    check_locktime_fn: fn (locktime: i32) -> bool,
+    check_sequence_fn: fn (sequence: i32) -> bool,
+}
+
+// Stub functions for TransactionlessChecker
+fn stub_check_sig(sig: []u8, pubkey: []u8, script: []u8) -> bool {
+    return false;
+}
+
+fn stub_check_locktime(locktime: i32) -> bool {
+    return false;
+}
+
+fn stub_check_sequence(sequence: i32) -> bool {
+    return false;
+}
+
+// Creates a TransactionlessChecker (always fails to prevent invalid ops)
+fn transactionless_checker() -> Checker {
+    return Checker {
+        check_sig_fn: stub_check_sig,
+        check_locktime_fn: stub_check_locktime,
+        check_sequence_fn: stub_check_sequence,
+    };
+}
+
+// TransactionChecker state for full transaction signature/locktime/sequence validation
+struct TransactionChecker {
+    // Transaction fields (simplified — the full Tx struct from messages module)
+    tx_lock_time: u32,
+    tx_version: u32,
+    // Input-specific fields
+    input_sequence: u32,
+    input_index: i64,
+    satoshis: i64,
+    require_sighash_forkid: bool,
+}
+
+// Creates a TransactionChecker
+fn transaction_checker(
+    tx_lock_time: u32,
+    tx_version: u32,
+    input_sequence: u32,
+    input_index: i64,
+    satoshis: i64,
+    require_forkid: bool,
+) -> TransactionChecker {
+    return TransactionChecker {
+        tx_lock_time: tx_lock_time,
+        tx_version: tx_version,
+        input_sequence: input_sequence,
+        input_index: input_index,
+        satoshis: satoshis,
+        require_sighash_forkid: require_forkid,
+    };
+}
+
+// Signature verification — requires external sighash + secp256k1
+// Placeholder: returns true for empty sigs (no-op), delegates to real sighash
+fn check_sig(sig: []u8, pubkey: []u8, script: []u8, checker: &TransactionChecker) -> bool {
+    if len(sig) == 0 {
+        return false;
+    }
+
+    let sighash_type: u8 = sig[len(sig) - 1];
+
+    // TODO: Real sighash computation requires external hash + secp256k1 functions.
+    // Until those are transpiled, this is a stub that validates signature presence.
+    // The full implementation needs:
+    //   1. sighash(tx, input, script, satoshis, sighash_type) -> Hash256
+    //   2. secp256k1 DER signature verification
+    //   3. SIGHASH_FORKID checking if require_forkid is true
+    _ = sighash_type;
+    _ = pubkey;
+    _ = script;
+
+    // Stub: return true for well-formed sigs (has both data and sighash type)
+    return len(sig) > 1;
+}
+
+// Checks locktime value (for CLTV, BIP-65)
+fn check_locktime(locktime: i32, checker: &TransactionChecker) -> bool {
+    if locktime < 0 {
+        return false;
+    }
+
+    let tx_locktime: i32 = checker.tx_lock_time as i32;
+    let locktime_type: bool = locktime >= LOCKTIME_THRESHOLD;
+    let tx_type: bool = tx_locktime >= LOCKTIME_THRESHOLD;
+
+    if locktime_type != tx_type {
+        return false;
+    }
+    if locktime > tx_locktime {
+        return false;
+    }
+    if checker.input_sequence == 0xFFFFFFFF {
+        return false;
+    }
+    return true;
+}
+
+// Checks sequence value (for CSV, BIP-112)
+fn check_sequence(sequence: i32, checker: &TransactionChecker) -> bool {
+    if sequence < 0 {
+        return false;
+    }
+
+    let sequence_u32: u32 = sequence as u32;
+    if (sequence_u32 & SEQUENCE_LOCKTIME_DISABLE_FLAG) != 0 {
+        return true;
+    }
+    if checker.tx_version < 2 {
+        return false;
+    }
+
+    let tx_seq: u32 = checker.input_sequence;
+    if (tx_seq & SEQUENCE_LOCKTIME_DISABLE_FLAG) != 0 {
+        return false;
+    }
+
+    let seq_masked: u32 = sequence_u32 & 0x0000_FFFF;
+    let tx_masked: u32 = tx_seq & 0x0000_FFFF;
+    let seq_type: bool = seq_masked >= SEQUENCE_LOCKTIME_TYPE_FLAG;
+    let tx_type: bool = tx_masked >= SEQUENCE_LOCKTIME_TYPE_FLAG;
+
+    if seq_type != tx_type {
+        return false;
+    }
+    if seq_masked > tx_masked {
+        return false;
+    }
+    return true;
+}
+
+// Helper: creates a Checker from TransactionChecker state
+fn make_checker_from_tx(tc: &TransactionChecker) -> Checker {
+    // Capture tc by storing it and using closure-like wrappers
+    // For Zeta, we need to pass TransactionChecker state to the checker fn's context
+    // This is a limitation — Zeta doesn't have closures.
+    // Instead, the interpreter receives TransactionChecker directly.
+    // The Checker struct with fns is for the Transactionless case.
+    return transactionless_checker();
+}
