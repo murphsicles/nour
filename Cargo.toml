@@ -11,7 +11,6 @@ readme = "README.md"
 
 [dependencies]
 bsv58 = "0.1.1" # Base58 codec for BSV (address encoding)
-base58 = "0.2.0" # Temporary — will be removed after bsv58 API migration
 bitcoin_hashes = "0.20.0" # SHA256/Hash160
 byteorder = "1.5.0" # LE/BE read/write
 dns-lookup = "3.0.1" # DNS seed resolution
