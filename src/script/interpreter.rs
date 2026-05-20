@@ -875,7 +875,7 @@ fn encode_num(n: i64) -> Result<Vec<u8>> {
         if negative {
             result.push(0x80);
         } else {
-            result.insert(0, 0);
+            result.push(0);
         }
     } else if negative {
         *last |= 0x80;
@@ -907,7 +907,7 @@ fn encode_bigint(n: &BigInt) -> Vec<u8> {
         if negative {
             result.push(0x80);
         } else {
-            result.insert(0, 0);
+            result.push(0);
         }
     } else if negative {
         *last |= 0x80;
