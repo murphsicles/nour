@@ -420,7 +420,7 @@ mod tests {
                     index: 0,
                 },
                 unlock_script: Script(vec![]),
-                sequence: (499 | SEQUENCE_LOCKTIME_TYPE_FLAG) as u32,
+                sequence: (499 | SEQUENCE_LOCKTIME_TYPE_FLAG),
             }],
             outputs: vec![],
             lock_time: 0,
@@ -428,16 +428,16 @@ mod tests {
         let mut cache = SigHashCache::new();
         let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert_eq!(
-            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32)
+            c.check_sequence(500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32)
                 .unwrap_err()
                 .to_string(),
             "Script error: sequence greater than tx"
         );
-        tx.inputs[0].sequence = (500 | SEQUENCE_LOCKTIME_TYPE_FLAG) as u32;
+        tx.inputs[0].sequence = 500 | SEQUENCE_LOCKTIME_TYPE_FLAG;
         let mut cache = SigHashCache::new();
         let c = TransactionChecker::new(&tx, &mut cache, 0, 0, false);
         assert!(
-            c.check_sequence((500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32) as i32)
+            c.check_sequence(500 | SEQUENCE_LOCKTIME_TYPE_FLAG as i32)
                 .is_ok()
         );
     }

@@ -40,7 +40,7 @@ pub trait AsyncSerializable<T> {
 impl Serializable<[u8; 16]> for [u8; 16] {
     fn read(reader: &mut dyn Read) -> Result<[u8; 16]> {
         let mut d = [0; 16];
-        reader.read_exact(&mut d).map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut d).map_err(Error::IOError)?;
         Ok(d)
     }
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
@@ -51,7 +51,7 @@ impl Serializable<[u8; 16]> for [u8; 16] {
 impl Serializable<[u8; 32]> for [u8; 32] {
     fn read(reader: &mut dyn Read) -> Result<[u8; 32]> {
         let mut d = [0; 32];
-        reader.read_exact(&mut d).map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut d).map_err(Error::IOError)?;
         Ok(d)
     }
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {

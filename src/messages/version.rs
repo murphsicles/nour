@@ -86,26 +86,18 @@ impl Version {
 impl Serializable<Version> for Version {
     fn read(reader: &mut dyn Read) -> Result<Version> {
         let mut version = [0u8; 4];
-        reader
-            .read_exact(&mut version)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut version).map_err(Error::IOError)?;
         let version = u32::from_le_bytes(version);
         let mut services = [0u8; 8];
-        reader
-            .read_exact(&mut services)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut services).map_err(Error::IOError)?;
         let services = u64::from_le_bytes(services);
         let mut timestamp = [0u8; 8];
-        reader
-            .read_exact(&mut timestamp)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut timestamp).map_err(Error::IOError)?;
         let timestamp = i64::from_le_bytes(timestamp);
         let recv_addr = NodeAddr::read(reader)?;
         let tx_addr = NodeAddr::read(reader)?;
         let mut nonce = [0u8; 8];
-        reader
-            .read_exact(&mut nonce)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut nonce).map_err(Error::IOError)?;
         let nonce = u64::from_le_bytes(nonce);
         let user_agent_size = var_int::read(reader)? as usize;
         if user_agent_size > MAX_USER_AGENT_LEN {
@@ -117,15 +109,15 @@ impl Serializable<Version> for Version {
         let mut user_agent_bytes = vec![0; user_agent_size];
         reader
             .read_exact(&mut user_agent_bytes)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let user_agent = String::from_utf8(user_agent_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 user agent".to_string()))?;
         let mut start_height = [0u8; 4];
         reader
             .read_exact(&mut start_height)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let start_height = i32::from_le_bytes(start_height);
-        let relay = reader.read_u8().map_err(|e| Error::IOError(e))? == 0x01;
+        let relay = reader.read_u8().map_err(Error::IOError)? == 0x01;
         let ret = Version {
             version,
             services,
@@ -147,7 +139,7 @@ impl Serializable<Version> for Version {
         self.recv_addr.write(writer)?;
         self.tx_addr.write(writer)?;
         writer.write_all(&self.nonce.to_le_bytes())?;
-        var_int::write(self.user_agent.as_bytes().len() as u64, writer)?;
+        var_int::write(self.user_agent.len() as u64, writer)?;
         writer.write_all(self.user_agent.as_bytes())?;
         writer.write_all(&self.start_height.to_le_bytes())?;
         writer.write_u8(if self.relay { 0x01 } else { 0x00 })?;
@@ -240,8 +232,8 @@ impl Payload<Version> for Version {
     fn size(&self) -> usize {
         33 + self.recv_addr.size()
             + self.tx_addr.size()
-            + var_int::size(self.user_agent.as_bytes().len() as u64)
-            + self.user_agent.as_bytes().len()
+            + var_int::size(self.user_agent.len() as u64)
+            + self.user_agent.len()
     }
 }
 

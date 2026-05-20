@@ -36,9 +36,7 @@ impl InvVect {
 impl Serializable<InvVect> for InvVect {
     fn read(reader: &mut dyn Read) -> Result<InvVect> {
         let mut obj_type = [0u8; 4];
-        reader
-            .read_exact(&mut obj_type)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut obj_type).map_err(Error::IOError)?;
         let obj_type = u32::from_le_bytes(obj_type);
         let hash = Hash256::read(reader)?;
         Ok(InvVect { obj_type, hash })

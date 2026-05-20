@@ -56,7 +56,7 @@ impl MessageHeader {
     /// `Error::BadData` if checksum is invalid; `Error::IOError` if read fails.
     pub fn payload(&self, reader: &mut dyn Read) -> Result<Vec<u8>> {
         let mut p = vec![0; self.payload_size as usize];
-        reader.read_exact(&mut p).map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut p).map_err(Error::IOError)?;
         let hash = bh_sha256d::Hash::hash(&p).to_byte_array();
         let checksum = [hash[0], hash[1], hash[2], hash[3]];
         if checksum != self.checksum {
@@ -84,18 +84,13 @@ impl MessageHeader {
 impl Serializable<MessageHeader> for MessageHeader {
     fn read(reader: &mut dyn Read) -> Result<MessageHeader> {
         let mut p = [0; Self::SIZE];
-        reader.read_exact(&mut p).map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut p).map_err(Error::IOError)?;
         let mut c = Cursor::new(p);
         let mut ret = MessageHeader::default();
-        c.read_exact(&mut ret.magic)
-            .map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.command)
-            .map_err(|e| Error::IOError(e))?;
-        ret.payload_size = c
-            .read_u32::<LittleEndian>()
-            .map_err(|e| Error::IOError(e))?;
-        c.read_exact(&mut ret.checksum)
-            .map_err(|e| Error::IOError(e))?;
+        c.read_exact(&mut ret.magic).map_err(Error::IOError)?;
+        c.read_exact(&mut ret.command).map_err(Error::IOError)?;
+        ret.payload_size = c.read_u32::<LittleEndian>().map_err(Error::IOError)?;
+        c.read_exact(&mut ret.checksum).map_err(Error::IOError)?;
         Ok(ret)
     }
 

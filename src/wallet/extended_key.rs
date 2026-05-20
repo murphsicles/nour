@@ -2,8 +2,8 @@
 
 use crate::network::Network;
 use crate::util::{Error, Result, Serializable};
-use bsv58;
 use bitcoin_hashes::{Hash, HashEngine, sha256d as bh_sha256d};
+use bsv58;
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -109,7 +109,8 @@ impl ExtendedKey {
     /// `Error::BadData` if invalid length or checksum.
     pub fn decode(s: &str) -> Result<ExtendedKey> {
         // bsv58::decode_full with checksum validation returns data without checksum
-        let v = bsv58::decode_full(s, true).map_err(|e| Error::BadData(format!("Base58 decode error: {:?}", e)))?;
+        let v = bsv58::decode_full(s, true)
+            .map_err(|e| Error::BadData(format!("Base58 decode error: {:?}", e)))?;
         if v.len() != 78 {
             return Err(Error::BadData("Invalid extended key length".to_string()));
         }
@@ -199,7 +200,7 @@ impl ExtendedKey {
             let tweak = SecretKey::from_byte_array(il.try_into().expect("il is 32 bytes"))?;
             let child_secret = secret_key.add_tweak(&tweak.into())?;
             child_key.0[45] = 0; // Private prefix
-            child_key.0[46..78].copy_from_slice(&child_secret.secret_bytes().as_ref());
+            child_key.0[46..78].copy_from_slice(child_secret.secret_bytes().as_ref());
         } else {
             let pubkey = PublicKey::from_slice(&self.key())?;
             let tweak = SecretKey::from_byte_array(il.try_into().expect("il is 32 bytes"))?;
@@ -213,9 +214,7 @@ impl ExtendedKey {
 impl Serializable<ExtendedKey> for ExtendedKey {
     fn read(reader: &mut dyn Read) -> Result<ExtendedKey> {
         let mut data = [0u8; 78];
-        reader
-            .read_exact(&mut data)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut data).map_err(Error::IOError)?;
         Ok(ExtendedKey(data))
     }
 
@@ -246,7 +245,7 @@ pub fn derive_extended_key(
     let path_parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
     for part in path_parts {
         let is_hardened = part.ends_with('H') || part.ends_with('\'');
-        let index_str = part.trim_end_matches(|c| c == 'H' || c == '\'');
+        let index_str = part.trim_end_matches(['H', '\'']);
         let index: u32 = index_str
             .parse()
             .map_err(|_| Error::BadData("Invalid derivation index".to_string()))?;
@@ -288,7 +287,7 @@ pub fn extended_key_from_seed(seed: &[u8], network: Network) -> Result<ExtendedK
     key.0[9..13].copy_from_slice(&[0; 4]); // child number
     key.0[13..45].copy_from_slice(chain_code);
     key.0[45] = 0; // private prefix
-    key.0[46..78].copy_from_slice(&secret_key.secret_bytes().as_ref());
+    key.0[46..78].copy_from_slice(secret_key.secret_bytes().as_ref());
     Ok(key)
 }
 

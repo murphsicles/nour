@@ -168,10 +168,10 @@ impl Peer {
         self.connected.store(false, Ordering::Relaxed);
         info!("{:?} Disconnecting", self);
         let mut tcp_stream = self.tcp_writer.lock().unwrap();
-        if let Some(tcp_stream) = tcp_stream.as_mut() {
-            if let Err(e) = tcp_stream.shutdown(Shutdown::Both) {
-                warn!("{:?} Problem shutting down tcp stream: {:?}", self, e);
-            }
+        if let Some(tcp_stream) = tcp_stream.as_mut()
+            && let Err(e) = tcp_stream.shutdown(Shutdown::Both)
+        {
+            warn!("{:?} Problem shutting down tcp stream: {:?}", self, e);
         }
         if let Some(peer) = self.strong_self() {
             self.disconnected_event.next(&PeerDisconnected { peer });

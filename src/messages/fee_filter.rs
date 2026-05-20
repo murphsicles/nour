@@ -21,9 +21,7 @@ impl FeeFilter {
 impl Serializable<FeeFilter> for FeeFilter {
     fn read(reader: &mut dyn Read) -> Result<FeeFilter> {
         let mut minfee = [0u8; 8];
-        reader
-            .read_exact(&mut minfee)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut minfee).map_err(Error::IOError)?;
         Ok(FeeFilter {
             minfee: u64::from_le_bytes(minfee),
         })

@@ -32,7 +32,7 @@ impl BlockLocator {
     /// # Errors
     /// `Error::BadData` if version < MIN_SUPPORTED_PROTOCOL_VERSION.
     pub fn validate(&self) -> Result<()> {
-        if self.version < MIN_SUPPORTED_PROTOCOL_VERSION as u32 {
+        if self.version < MIN_SUPPORTED_PROTOCOL_VERSION {
             return Err(Error::BadData(format!(
                 "Unsupported protocol version: {}",
                 self.version
@@ -51,9 +51,7 @@ impl BlockLocator {
 impl Serializable<BlockLocator> for BlockLocator {
     fn read(reader: &mut dyn Read) -> Result<BlockLocator> {
         let mut version = [0u8; 4];
-        reader
-            .read_exact(&mut version)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut version).map_err(Error::IOError)?;
         let version = u32::from_le_bytes(version);
         let num_hashes = var_int::read(reader)?;
         if num_hashes > MAX_BLOCK_LOCATOR_HASHES {
@@ -155,21 +153,21 @@ mod tests {
     #[test]
     fn validate() {
         let p = BlockLocator {
-            version: MIN_SUPPORTED_PROTOCOL_VERSION as u32,
+            version: MIN_SUPPORTED_PROTOCOL_VERSION,
             block_locator_hashes: vec![NO_HASH_STOP; 500],
             hash_stop: NO_HASH_STOP,
         };
         assert!(p.validate().is_ok());
 
         let mut p = p.clone();
-        p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32 - 1;
+        p.version = MIN_SUPPORTED_PROTOCOL_VERSION - 1;
         assert_eq!(
             p.validate().unwrap_err().to_string(),
             format!("Bad data: Unsupported protocol version: {}", p.version)
         );
 
         let mut p = p.clone();
-        p.version = MIN_SUPPORTED_PROTOCOL_VERSION as u32;
+        p.version = MIN_SUPPORTED_PROTOCOL_VERSION;
         p.block_locator_hashes = vec![NO_HASH_STOP; MAX_BLOCK_LOCATOR_HASHES as usize + 1];
         assert_eq!(
             p.validate().unwrap_err().to_string(),

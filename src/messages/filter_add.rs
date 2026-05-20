@@ -35,9 +35,7 @@ impl Serializable<FilterAdd> for FilterAdd {
     fn read(reader: &mut dyn Read) -> Result<FilterAdd> {
         let data_len = var_int::read(reader)?;
         let mut data = vec![0; data_len as usize];
-        reader
-            .read_exact(&mut data)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut data).map_err(Error::IOError)?;
         Ok(FilterAdd { data })
     }
 

@@ -102,7 +102,7 @@ impl MerkleBlock {
             let h = self.consume_hash(hash_idx)?;
             let matched = bit == 1;
             if matched {
-                matches.push(h.clone());
+                matches.push(h);
             }
             Ok((h, matched))
         } else {
@@ -130,7 +130,7 @@ impl MerkleBlock {
         if *idx >= self.hashes.len() {
             return Err(Error::BadData("Hashes exhausted".to_string()));
         }
-        let h = self.hashes[*idx].clone();
+        let h = self.hashes[*idx];
         *idx += 1;
         Ok(h)
     }
@@ -153,9 +153,7 @@ impl Serializable<MerkleBlock> for MerkleBlock {
         }
         let flags_len = var_int::read(reader)?;
         let mut flags = vec![0; flags_len as usize];
-        reader
-            .read_exact(&mut flags)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut flags).map_err(Error::IOError)?;
         Ok(MerkleBlock {
             header,
             total_transactions,
@@ -294,7 +292,7 @@ mod tests {
         );
         // Duplicate transactions (adjusted for small tree)
         let hash_left = Hash256([1; 32]);
-        let hash_right = hash_left.clone(); // Dup
+        let hash_right = hash_left; // Dup
         let computed = hash_pair(&hash_left, &hash_right);
         let header = BlockHeader {
             version: 12345,
@@ -307,7 +305,7 @@ mod tests {
         let merkle_block = MerkleBlock {
             header,
             total_transactions: 2,
-            hashes: vec![hash_left.clone(), hash_right], // Both leaves
+            hashes: vec![hash_left, hash_right], // Both leaves
             flags: vec![0b00000111], // root=1, left=1, right=1 (lsb first: 111 binary=7)
         };
         assert_eq!(
@@ -322,7 +320,7 @@ mod tests {
         let header = BlockHeader {
             version: 12345,
             prev_hash: Hash256([0; 32]),
-            merkle_root: h.clone(),
+            merkle_root: h,
             timestamp: 66,
             bits: 4488,
             nonce: 9999,

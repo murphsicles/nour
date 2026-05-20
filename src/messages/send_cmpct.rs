@@ -26,11 +26,9 @@ impl SendCmpct {
 }
 impl Serializable<SendCmpct> for SendCmpct {
     fn read(reader: &mut dyn Read) -> Result<SendCmpct> {
-        let enable = reader.read_u8().map_err(|e| Error::IOError(e))?;
+        let enable = reader.read_u8().map_err(Error::IOError)?;
         let mut version = [0u8; 8];
-        reader
-            .read_exact(&mut version)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut version).map_err(Error::IOError)?;
         let version = u64::from_le_bytes(version);
         Ok(SendCmpct { enable, version })
     }

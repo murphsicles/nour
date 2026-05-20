@@ -28,7 +28,7 @@ impl Serializable<Headers> for Headers {
         let mut headers = Vec::with_capacity(n as usize);
         for _ in 0..n {
             headers.push(BlockHeader::read(reader)?);
-            let txn_count = reader.read_u8().map_err(|e| Error::IOError(e))?;
+            let txn_count = reader.read_u8().map_err(Error::IOError)?;
             if txn_count != 0 {
                 return Err(Error::BadData("Non-zero tx count in header".to_string()));
             }

@@ -46,7 +46,7 @@ pub fn check_unlock_script(unlock_script: &[u8]) -> bool {
         return false;
     }
     let sig_len = unlock_script[0];
-    if sig_len < OP_PUSH + 71 || sig_len > OP_PUSH + 73 {
+    if !(OP_PUSH + 71..=OP_PUSH + 73).contains(&sig_len) {
         return false;
     }
     let i = next_op(0, unlock_script);

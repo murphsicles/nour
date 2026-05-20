@@ -27,9 +27,7 @@ impl NodeAddrEx {
 impl Serializable<NodeAddrEx> for NodeAddrEx {
     fn read(reader: &mut dyn Read) -> Result<NodeAddrEx> {
         let mut time = [0u8; 4];
-        reader
-            .read_exact(&mut time)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut time).map_err(Error::IOError)?;
         let last_connected_time = u32::from_le_bytes(time);
         let addr = NodeAddr::read(reader)?;
         Ok(NodeAddrEx {

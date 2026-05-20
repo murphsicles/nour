@@ -291,15 +291,15 @@ mod tests {
         s.append_data(&[]).unwrap();
         assert_eq!(s.0.len(), 1);
         let mut s = Script::new();
-        s.append_data(&vec![0; 1]).unwrap();
+        s.append_data(&[0; 1]).unwrap();
         assert_eq!(s.0[0], OP_PUSH + 1);
         assert_eq!(s.0.len(), 2);
         let mut s = Script::new();
-        s.append_data(&vec![0; 75]).unwrap();
+        s.append_data(&[0; 75]).unwrap();
         assert_eq!(s.0[0], OP_PUSH + 75);
         assert_eq!(s.0.len(), 76);
         let mut s = Script::new();
-        s.append_data(&vec![0; 76]).unwrap();
+        s.append_data(&[0; 76]).unwrap();
         assert_eq!(s.0[0], OP_PUSHDATA1);
         assert_eq!(s.0[1], 76);
         assert_eq!(s.0.len(), 78);

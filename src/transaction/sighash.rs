@@ -162,7 +162,7 @@ fn bip143_sighash(
     // 9. nLockTime
     s.write_u32::<LittleEndian>(tx.lock_time)?;
     // 10. sighash_type
-    s.write_u32::<LittleEndian>(((FORK_ID as u32) << 8) | (sighash_type as u32))?;
+    s.write_u32::<LittleEndian>((FORK_ID << 8) | (sighash_type as u32))?;
     Ok(sha256d(&s))
 }
 /// Legacy sighash (pre-2017).
@@ -305,9 +305,9 @@ mod tests {
             }],
             outputs: vec![TxOut {
                 satoshis: 49990000,
-                lock_script: Script(
-                    hex::decode("76a9147865b0b301119fc3eadc7f3406ff1339908e46d488ac")?.into(),
-                ),
+                lock_script: Script(hex::decode(
+                    "76a9147865b0b301119fc3eadc7f3406ff1339908e46d488ac",
+                )?),
             }],
             lock_time: 0,
         };

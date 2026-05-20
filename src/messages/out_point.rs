@@ -36,14 +36,10 @@ impl OutPoint {
 impl Serializable<OutPoint> for OutPoint {
     fn read(reader: &mut dyn Read) -> Result<OutPoint> {
         let mut hash_bytes = [0u8; 32];
-        reader
-            .read_exact(&mut hash_bytes)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut hash_bytes).map_err(Error::IOError)?;
         let hash = Hash256(hash_bytes);
         let mut index = [0u8; 4];
-        reader
-            .read_exact(&mut index)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut index).map_err(Error::IOError)?;
         let index = u32::from_le_bytes(index);
         Ok(OutPoint { hash, index })
     }
