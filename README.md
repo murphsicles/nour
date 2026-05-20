@@ -5,7 +5,7 @@ A Zeta library for building Bitcoin SV (BSV) applications and infrastructure —
 [![Zorbs.io](https://img.shields.io/badge/zorbs.io-nour-cyan?logo=zeta)](https://zorbs.io/nour)
 [![License](https://img.shields.io/badge/license-Open%20BSV-blue)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-murphsicles/nour-181717?logo=github)](https://github.com/murphsicles/nour)
-[![Build Status](https://github.com/murphsicles/nour/actions/workflows/ci.yml/badge.svg)](https://github.com/murphsicles/nour/actions)
+[![GitHub last commit](https://img.shields.io/github/last-commit/murphsicles/nour?logo=github)](https://github.com/murphsicles/nour)
 
 ## Features
 
