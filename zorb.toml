@@ -1,5 +1,5 @@
 [package]
-name = "@bsv/nour"
+name = "nour"
 version = "0.1.0"
 edition = "2026"
 description = "High-performance Bitcoin SV toolkit — transactions, scripts, P2P, wallets, addresses"
@@ -9,21 +9,21 @@ keywords = ["bitcoin-sv", "blockchain", "crypto", "transactions", "p2p", "bsv"]
 categories = ["cryptography::bitcoin", "network-programming::p2p"]
 
 [dependencies]
-@crypto/bsv58 = "0.1"
-@crypto/bitcoin-hashes = "0.17"
-@io/byteorder = "1.5"
-@net/dns-lookup = "3.0"
-@data/hex = "0.4"
-@collections/indexmap = "2.9"
-@std/log = "0.4"
-@crypto/murmur3 = "0.5"
-@math/num-bigint = "0.4"
-@math/num-traits = "0.2"
-@crypto/rand = "0.9"
-@crypto/ripemd = "0.1"
-@crypto/secp256k1 = "0.31"
-@data/snowflake = "1.3"
-@async/tokio = { version = "1.48", optional = true }
+"@crypto/bsv58" = "0.1"
+"@crypto/bitcoin-hashes" = "0.17"
+"@io/byteorder" = "1.5"
+"@net/dns-lookup" = "3.0"
+"@data/hex" = "0.4"
+"@collections/indexmap" = "2.9"
+"@std/log" = "0.4"
+"@crypto/murmur3" = "0.5"
+"@math/num-bigint" = "0.4"
+"@math/num-traits" = "0.2"
+"@crypto/rand" = "0.9"
+"@crypto/ripemd" = "0.1"
+"@crypto/secp256k1" = "0.31"
+"@data/snowflake" = "1.3"
+"@async/tokio" = { version = "1.48", optional = true }
 
 [features]
-async = ["@async/tokio"]
+"async" = ["@async/tokio"]
