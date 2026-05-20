@@ -44,7 +44,7 @@ impl Serializable<TxOut> for TxOut {
         let mut satoshis_bytes = [0u8; 8];
         reader
             .read_exact(&mut satoshis_bytes)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let satoshis = i64::from_le_bytes(satoshis_bytes);
         let script_len = var_int::read(reader)? as usize;
         if script_len > MAX_LOCK_SCRIPT_LEN {
@@ -56,7 +56,7 @@ impl Serializable<TxOut> for TxOut {
         let mut lock_script = vec![0; script_len];
         reader
             .read_exact(&mut lock_script)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         Ok(TxOut {
             satoshis,
             lock_script: Script(lock_script),

@@ -159,11 +159,11 @@ impl Message {
         match Self::read_partial(reader, &header) {
             Ok(msg) => Ok(msg),
             Err(e) => {
-                if let Error::IOError(e) = &e {
-                    if e.kind() == io::ErrorKind::TimedOut || e.kind() == io::ErrorKind::WouldBlock
-                    {
-                        return Ok(Message::Partial(header));
-                    }
+                if let Error::IOError(e) = &e
+                    && (e.kind() == io::ErrorKind::TimedOut
+                        || e.kind() == io::ErrorKind::WouldBlock)
+                {
+                    return Ok(Message::Partial(header));
                 }
                 Err(e)
             }

@@ -5,11 +5,17 @@ use crate::util::{Error, Result, hash160, lshift, rshift, sha256d};
 use bitcoin_hashes::{ripemd160 as bh_ripemd160, sha1 as bh_sha1, sha256 as bh_sha256};
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
-use std::borrow::Cow;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 const STACK_CAPACITY: usize = 1000;
 const ALT_STACK_CAPACITY: usize = 1000;
+
+/// Convert bytes to a shared reference-counted slice.
+/// Cloning is O(1) — just an atomic increment.
+fn to_shared(bytes: &[u8]) -> Rc<[u8]> {
+    Rc::from(bytes)
+}
 
 /// Execute the script with genesis rules
 pub const NO_FLAGS: u32 = 0x00;
@@ -18,9 +24,9 @@ pub const NO_FLAGS: u32 = 0x00;
 pub const PREGENESIS_RULES: u32 = 0x01;
 
 /// Executes a script
-pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Result<()> {
-    let mut stack: VecDeque<Cow<'a, [u8]>> = VecDeque::with_capacity(STACK_CAPACITY);
-    let mut alt_stack: VecDeque<Cow<'a, [u8]>> = VecDeque::with_capacity(ALT_STACK_CAPACITY);
+pub fn eval<T: Checker>(script: &[u8], checker: &mut T, flags: u32) -> Result<()> {
+    let mut stack: VecDeque<Rc<[u8]>> = VecDeque::with_capacity(STACK_CAPACITY);
+    let mut alt_stack: VecDeque<Rc<[u8]>> = VecDeque::with_capacity(ALT_STACK_CAPACITY);
     let mut branch_exec: Vec<bool> = Vec::new();
     let mut check_index = 0;
     let mut i = 0;
@@ -32,39 +38,39 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             }
         }
         match script[i] {
-            OP_0 => stack.push_back(encode_num(0)?.into()),
-            OP_1NEGATE => stack.push_back(encode_num(-1)?.into()),
-            OP_1 => stack.push_back(encode_num(1)?.into()),
-            OP_2 => stack.push_back(encode_num(2)?.into()),
-            OP_3 => stack.push_back(encode_num(3)?.into()),
-            OP_4 => stack.push_back(encode_num(4)?.into()),
-            OP_5 => stack.push_back(encode_num(5)?.into()),
-            OP_6 => stack.push_back(encode_num(6)?.into()),
-            OP_7 => stack.push_back(encode_num(7)?.into()),
-            OP_8 => stack.push_back(encode_num(8)?.into()),
-            OP_9 => stack.push_back(encode_num(9)?.into()),
-            OP_10 => stack.push_back(encode_num(10)?.into()),
-            OP_11 => stack.push_back(encode_num(11)?.into()),
-            OP_12 => stack.push_back(encode_num(12)?.into()),
-            OP_13 => stack.push_back(encode_num(13)?.into()),
-            OP_14 => stack.push_back(encode_num(14)?.into()),
-            OP_15 => stack.push_back(encode_num(15)?.into()),
-            OP_16 => stack.push_back(encode_num(16)?.into()),
+            OP_0 => stack.push_back(Rc::from(encode_num(0)?)),
+            OP_1NEGATE => stack.push_back(Rc::from(encode_num(-1)?)),
+            OP_1 => stack.push_back(Rc::from(encode_num(1)?)),
+            OP_2 => stack.push_back(Rc::from(encode_num(2)?)),
+            OP_3 => stack.push_back(Rc::from(encode_num(3)?)),
+            OP_4 => stack.push_back(Rc::from(encode_num(4)?)),
+            OP_5 => stack.push_back(Rc::from(encode_num(5)?)),
+            OP_6 => stack.push_back(Rc::from(encode_num(6)?)),
+            OP_7 => stack.push_back(Rc::from(encode_num(7)?)),
+            OP_8 => stack.push_back(Rc::from(encode_num(8)?)),
+            OP_9 => stack.push_back(Rc::from(encode_num(9)?)),
+            OP_10 => stack.push_back(Rc::from(encode_num(10)?)),
+            OP_11 => stack.push_back(Rc::from(encode_num(11)?)),
+            OP_12 => stack.push_back(Rc::from(encode_num(12)?)),
+            OP_13 => stack.push_back(Rc::from(encode_num(13)?)),
+            OP_14 => stack.push_back(Rc::from(encode_num(14)?)),
+            OP_15 => stack.push_back(Rc::from(encode_num(15)?)),
+            OP_16 => stack.push_back(Rc::from(encode_num(16)?)),
             len @ 1..=75 => {
                 remains(i + 1, len as usize, script)?;
-                stack.push_back(Cow::Borrowed(&script[i + 1..i + 1 + len as usize]));
+                stack.push_back(to_shared(&script[i + 1..i + 1 + len as usize]));
             }
             OP_PUSHDATA1 => {
                 remains(i + 1, 1, script)?;
                 let len = script[i + 1] as usize;
                 remains(i + 2, len, script)?;
-                stack.push_back(Cow::Borrowed(&script[i + 2..i + 2 + len]));
+                stack.push_back(to_shared(&script[i + 2..i + 2 + len]));
             }
             OP_PUSHDATA2 => {
                 remains(i + 1, 2, script)?;
                 let len = u16::from_le_bytes([script[i + 1], script[i + 2]]) as usize;
                 remains(i + 3, len, script)?;
-                stack.push_back(Cow::Borrowed(&script[i + 3..i + 3 + len]));
+                stack.push_back(to_shared(&script[i + 3..i + 3 + len]));
             }
             OP_PUSHDATA4 => {
                 remains(i + 1, 4, script)?;
@@ -75,7 +81,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     script[i + 4],
                 ]) as usize;
                 remains(i + 5, len, script)?;
-                stack.push_back(Cow::Borrowed(&script[i + 5..i + 5 + len]));
+                stack.push_back(to_shared(&script[i + 5..i + 5 + len]));
             }
             OP_NOP => {}
             OP_IF => branch_exec.push(pop_bool(&mut stack)?),
@@ -89,7 +95,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 branch_exec[len - 1] = !branch_exec[len - 1];
             }
             OP_ENDIF => {
-                if branch_exec.len() == 0 {
+                if branch_exec.is_empty() {
                     let msg = "ENDIF found without matching IF".to_string();
                     return Err(Error::ScriptError(msg));
                 }
@@ -124,7 +130,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             }
             OP_DEPTH => {
                 let depth = stack.len() as i64;
-                stack.push_back(encode_num(depth)?.into());
+                stack.push_back(Rc::from(encode_num(depth)?));
             }
             OP_DROP => {
                 check_stack_size(1, &stack)?;
@@ -233,14 +239,14 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             OP_CAT => {
                 check_stack_size(2, &stack)?;
                 let top = stack.pop_back().expect("stack underflow");
-                let mut second = stack.pop_back().expect("stack underflow").into_owned();
-                second.extend_from_slice(&*top);
-                stack.push_back(Cow::Owned(second));
+                let mut second = stack.pop_back().expect("stack underflow").to_vec();
+                second.extend_from_slice(&top);
+                stack.push_back(Rc::from(second));
             }
             OP_SPLIT => {
                 check_stack_size(2, &stack)?;
                 let n = pop_num(&mut stack)?;
-                let x = stack.pop_back().expect("stack underflow").into_owned();
+                let x = stack.pop_back().expect("stack underflow").to_vec();
                 if n < 0 {
                     let msg = "OP_SPLIT failed, n negative".to_string();
                     return Err(Error::ScriptError(msg));
@@ -248,20 +254,20 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     let msg = "OP_SPLIT failed, n out of range".to_string();
                     return Err(Error::ScriptError(msg));
                 } else if n == 0 {
-                    stack.push_back(encode_num(0)?.into());
-                    stack.push_back(Cow::Owned(x));
+                    stack.push_back(Rc::from(encode_num(0)?));
+                    stack.push_back(Rc::from(x));
                 } else if (n as usize) == x.len() {
-                    stack.push_back(Cow::Owned(x));
-                    stack.push_back(encode_num(0)?.into());
+                    stack.push_back(Rc::from(x));
+                    stack.push_back(Rc::from(encode_num(0)?));
                 } else {
-                    stack.push_back(Cow::Owned(x[..(n as usize)].to_vec()));
-                    stack.push_back(Cow::Owned(x[(n as usize)..].to_vec()));
+                    stack.push_back(Rc::from(x[..(n as usize)].to_vec()));
+                    stack.push_back(Rc::from(x[(n as usize)..].to_vec()));
                 }
             }
             OP_SIZE => {
                 check_stack_size(1, &stack)?;
                 let len = stack[stack.len() - 1].len() as i64;
-                stack.push_back(encode_num(len)?.into());
+                stack.push_back(Rc::from(encode_num(len)?));
             }
             OP_AND => {
                 check_stack_size(2, &stack)?;
@@ -275,7 +281,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 for i in 0..a.len() {
                     result.push(a[i] & b[i]);
                 }
-                stack.push_back(Cow::Owned(result));
+                stack.push_back(Rc::from(result));
             }
             OP_OR => {
                 check_stack_size(2, &stack)?;
@@ -289,7 +295,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 for i in 0..a.len() {
                     result.push(a[i] | b[i]);
                 }
-                stack.push_back(Cow::Owned(result));
+                stack.push_back(Rc::from(result));
             }
             OP_XOR => {
                 check_stack_size(2, &stack)?;
@@ -303,40 +309,40 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 for i in 0..a.len() {
                     result.push(a[i] ^ b[i]);
                 }
-                stack.push_back(Cow::Owned(result));
+                stack.push_back(Rc::from(result));
             }
             OP_INVERT => {
                 check_stack_size(1, &stack)?;
-                let mut v = stack.pop_back().expect("stack underflow").into_owned();
+                let mut v = stack.pop_back().expect("stack underflow").to_vec();
                 v.iter_mut().for_each(|byte| *byte = !*byte);
-                stack.push_back(Cow::Owned(v));
+                stack.push_back(Rc::from(v));
             }
             OP_LSHIFT => {
                 check_stack_size(2, &stack)?;
                 let n = pop_num(&mut stack)?;
-                let v = stack.pop_back().expect("stack underflow").into_owned();
+                let v = stack.pop_back().expect("stack underflow").to_vec();
                 if n < 0 {
                     let msg = "n must be non-negative".to_string();
                     return Err(Error::ScriptError(msg));
                 }
-                stack.push_back(Cow::Owned(lshift(&v, n as usize)));
+                stack.push_back(Rc::from(lshift(&v, n as usize)));
             }
             OP_RSHIFT => {
                 check_stack_size(2, &stack)?;
                 let n = pop_num(&mut stack)?;
-                let v = stack.pop_back().expect("stack underflow").into_owned();
+                let v = stack.pop_back().expect("stack underflow").to_vec();
                 if n < 0 {
                     let msg = "n must be non-negative".to_string();
                     return Err(Error::ScriptError(msg));
                 }
-                stack.push_back(Cow::Owned(rshift(&v, n as usize)));
+                stack.push_back(Rc::from(rshift(&v, n as usize)));
             }
             OP_EQUAL => {
                 check_stack_size(2, &stack)?;
                 let a = stack.pop_back().expect("stack underflow");
                 let b = stack.pop_back().expect("stack underflow");
                 let equal = a == b;
-                stack.push_back(encode_num(equal as i64)?.into());
+                stack.push_back(Rc::from(encode_num(equal as i64)?));
             }
             OP_EQUALVERIFY => {
                 check_stack_size(2, &stack)?;
@@ -350,19 +356,19 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x += 1;
-                stack.push_back(encode_bigint(&x).into());
+                stack.push_back(Rc::from(encode_bigint(&x)));
             }
             OP_1SUB => {
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x -= 1;
-                stack.push_back(encode_bigint(&x).into());
+                stack.push_back(Rc::from(encode_bigint(&x)));
             }
             OP_NEGATE => {
                 check_stack_size(1, &stack)?;
                 let mut x = pop_bigint(&mut stack)?;
                 x = -x;
-                stack.push_back(encode_bigint(&x).into());
+                stack.push_back(Rc::from(encode_bigint(&x)));
             }
             OP_ABS => {
                 check_stack_size(1, &stack)?;
@@ -370,7 +376,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 if x < BigInt::zero() {
                     x = -x;
                 }
-                stack.push_back(encode_bigint(&x).into());
+                stack.push_back(Rc::from(encode_bigint(&x)));
             }
             OP_NOT => {
                 check_stack_size(1, &stack)?;
@@ -380,7 +386,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&not_x).into());
+                stack.push_back(Rc::from(encode_bigint(&not_x)));
             }
             OP_0NOTEQUAL => {
                 check_stack_size(1, &stack)?;
@@ -390,28 +396,28 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::one()
                 };
-                stack.push_back(encode_bigint(&not_zero).into());
+                stack.push_back(Rc::from(encode_bigint(&not_zero)));
             }
             OP_ADD => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let sum = a + b;
-                stack.push_back(encode_bigint(&sum).into());
+                stack.push_back(Rc::from(encode_bigint(&sum)));
             }
             OP_SUB => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let difference = a - b;
-                stack.push_back(encode_bigint(&difference).into());
+                stack.push_back(Rc::from(encode_bigint(&difference)));
             }
             OP_MUL => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let product = a * b;
-                stack.push_back(encode_bigint(&product).into());
+                stack.push_back(Rc::from(encode_bigint(&product)));
             }
             OP_DIV => {
                 check_stack_size(2, &stack)?;
@@ -422,7 +428,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     return Err(Error::ScriptError(msg));
                 }
                 let quotient = a / b;
-                stack.push_back(encode_bigint(&quotient).into());
+                stack.push_back(Rc::from(encode_bigint(&quotient)));
             }
             OP_MOD => {
                 check_stack_size(2, &stack)?;
@@ -433,7 +439,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                     return Err(Error::ScriptError(msg));
                 }
                 let remainder = a % b;
-                stack.push_back(encode_bigint(&remainder).into());
+                stack.push_back(Rc::from(encode_bigint(&remainder)));
             }
             OP_BOOLAND => {
                 check_stack_size(2, &stack)?;
@@ -444,7 +450,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_BOOLOR => {
                 check_stack_size(2, &stack)?;
@@ -455,7 +461,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_NUMEQUAL => {
                 check_stack_size(2, &stack)?;
@@ -466,7 +472,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_NUMEQUALVERIFY => {
                 check_stack_size(2, &stack)?;
@@ -486,21 +492,21 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_LESSTHAN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let result = if a < b { BigInt::one() } else { BigInt::zero() };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_GREATERTHAN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let result = if a > b { BigInt::one() } else { BigInt::zero() };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_LESSTHANOREQUAL => {
                 check_stack_size(2, &stack)?;
@@ -511,7 +517,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_GREATERTHANOREQUAL => {
                 check_stack_size(2, &stack)?;
@@ -522,21 +528,21 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_MIN => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let result = if a < b { a } else { b };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_MAX => {
                 check_stack_size(2, &stack)?;
                 let b = pop_bigint(&mut stack)?;
                 let a = pop_bigint(&mut stack)?;
                 let result = if a > b { a } else { b };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_WITHIN => {
                 check_stack_size(3, &stack)?;
@@ -548,12 +554,12 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                 } else {
                     BigInt::zero()
                 };
-                stack.push_back(encode_bigint(&result).into());
+                stack.push_back(Rc::from(encode_bigint(&result)));
             }
             OP_NUM2BIN => {
                 check_stack_size(2, &stack)?;
                 let m = pop_bigint(&mut stack)?;
-                let mut n = stack.pop_back().expect("stack underflow").into_owned();
+                let mut n = stack.pop_back().expect("stack underflow").to_vec();
                 if m < BigInt::one() {
                     let msg = format!("OP_NUM2BIN failed. m too small: {}", m);
                     return Err(Error::ScriptError(msg));
@@ -580,62 +586,62 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
                         j -= 1;
                     }
                 }
-                v[0] |= neg as u8;
-                stack.push_back(Cow::Owned(v));
+                v[0] |= neg;
+                stack.push_back(Rc::from(v));
             }
             OP_BIN2NUM => {
                 check_stack_size(1, &stack)?;
-                let mut v = stack.pop_back().expect("stack underflow").into_owned();
+                let mut v = stack.pop_back().expect("stack underflow").to_vec();
                 v.reverse();
                 let n = decode_bigint(&v);
-                stack.push_back(encode_bigint(&n).into());
+                stack.push_back(Rc::from(encode_bigint(&n)));
             }
             OP_RIPEMD160 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().expect("stack underflow");
                 let h = bh_ripemd160::Hash::hash(v.as_ref()).to_byte_array();
-                stack.push_back(Cow::Owned(h.to_vec()));
+                stack.push_back(Rc::from(h.to_vec()));
             }
             OP_SHA1 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().expect("stack underflow");
                 let h = bh_sha1::Hash::hash(v.as_ref()).to_byte_array();
-                stack.push_back(Cow::Owned(h.to_vec()));
+                stack.push_back(Rc::from(h.to_vec()));
             }
             OP_SHA256 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().expect("stack underflow");
                 let h = bh_sha256::Hash::hash(v.as_ref()).to_byte_array();
-                stack.push_back(Cow::Owned(h.to_vec()));
+                stack.push_back(Rc::from(h.to_vec()));
             }
             OP_HASH160 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().expect("stack underflow");
                 let h = hash160(v.as_ref());
-                stack.push_back(Cow::Owned(h.0.to_vec()));
+                stack.push_back(Rc::from(h.0.to_vec()));
             }
             OP_HASH256 => {
                 check_stack_size(1, &stack)?;
                 let v = stack.pop_back().expect("stack underflow");
                 let h = sha256d(v.as_ref());
-                stack.push_back(Cow::Owned(h.0.to_vec()));
+                stack.push_back(Rc::from(h.0.to_vec()));
             }
             OP_CODESEPARATOR => check_index = i + 1, // Set after the opcode
             OP_CHECKSIG => {
                 check_stack_size(2, &stack)?;
-                let pubkey = stack.pop_back().expect("stack underflow").into_owned();
-                let sig = stack.pop_back().expect("stack underflow").into_owned();
+                let pubkey = stack.pop_back().expect("stack underflow").to_vec();
+                let sig = stack.pop_back().expect("stack underflow").to_vec();
                 let mut cleaned_script = script[check_index..].to_vec();
                 if prefork(&sig) {
                     cleaned_script = remove_sig(&sig, &cleaned_script);
                 }
                 let success = checker.check_sig(&sig, &pubkey, &cleaned_script)?;
-                stack.push_back(encode_num(success as i64)?.into());
+                stack.push_back(Rc::from(encode_num(success as i64)?));
             }
             OP_CHECKSIGVERIFY => {
                 check_stack_size(2, &stack)?;
-                let pubkey = stack.pop_back().expect("stack underflow").into_owned();
-                let sig = stack.pop_back().expect("stack underflow").into_owned();
+                let pubkey = stack.pop_back().expect("stack underflow").to_vec();
+                let sig = stack.pop_back().expect("stack underflow").to_vec();
                 let mut cleaned_script = script[check_index..].to_vec();
                 if prefork(&sig) {
                     cleaned_script = remove_sig(&sig, &cleaned_script);
@@ -646,7 +652,7 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
             }
             OP_CHECKMULTISIG => {
                 let success = check_multisig(&mut stack, checker, &script[check_index..])?;
-                stack.push_back(encode_num(success as i64)?.into());
+                stack.push_back(Rc::from(encode_num(success as i64)?));
             }
             OP_CHECKMULTISIGVERIFY => {
                 if !check_multisig(&mut stack, checker, &script[check_index..])? {
@@ -689,10 +695,10 @@ pub fn eval<'a, T: Checker>(script: &'a [u8], checker: &mut T, flags: u32) -> Re
 }
 
 #[inline]
-fn check_multisig<'a, T: Checker>(
-    stack: &mut VecDeque<Cow<'a, [u8]>>,
+fn check_multisig<T: Checker>(
+    stack: &mut VecDeque<Rc<[u8]>>,
     checker: &mut T,
-    script: &'a [u8],
+    script: &[u8],
 ) -> Result<bool> {
     // Pop total (n) first (top of stack)
     let total = pop_num(stack)?;
@@ -707,7 +713,7 @@ fn check_multisig<'a, T: Checker>(
     check_stack_size(total as usize, stack)?;
     let mut keys = Vec::with_capacity(total as usize);
     for _ in 0..total {
-        keys.push(stack.pop_back().expect("stack underflow").into_owned());
+        keys.push(stack.pop_back().expect("stack underflow").to_vec());
     }
     // Pop required (m)
     let required = pop_num(stack)?;
@@ -718,7 +724,7 @@ fn check_multisig<'a, T: Checker>(
     check_stack_size(required as usize, stack)?;
     let mut sigs = Vec::with_capacity(required as usize);
     for _ in 0..required {
-        sigs.push(stack.pop_back().expect("stack underflow").into_owned());
+        sigs.push(stack.pop_back().expect("stack underflow").to_vec());
     }
     // Pop dummy (always required for the off-by-one)
     check_stack_size(1, stack)?;
@@ -750,7 +756,7 @@ fn check_multisig<'a, T: Checker>(
 
 #[inline]
 fn prefork(sig: &[u8]) -> bool {
-    sig.len() > 0 && sig[sig.len() - 1] & SIGHASH_FORKID == 0
+    !sig.is_empty() && sig[sig.len() - 1] & SIGHASH_FORKID == 0
 }
 
 #[inline]
@@ -775,7 +781,7 @@ fn remove_sig(sig: &[u8], script: &[u8]) -> Vec<u8> {
 }
 
 #[inline]
-fn check_stack_size<'a>(minsize: usize, stack: &VecDeque<Cow<'a, [u8]>>) -> Result<()> {
+fn check_stack_size(minsize: usize, stack: &VecDeque<Rc<[u8]>>) -> Result<()> {
     if stack.len() < minsize {
         let msg = format!("Stack too small: {}", minsize);
         return Err(Error::ScriptError(msg));
@@ -852,7 +858,7 @@ fn encode_num(n: i64) -> Result<Vec<u8>> {
     if n == 0 {
         return Ok(vec![]);
     }
-    let mut abs_n = n.abs() as u64;
+    let mut abs_n = n.unsigned_abs();
     let negative = n < 0;
     let mut result = vec![];
     while abs_n > 0 {
@@ -924,7 +930,7 @@ fn decode_bigint(v: &[u8]) -> BigInt {
     }
 }
 
-fn pop_num<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<i32> {
+fn pop_num(stack: &mut VecDeque<Rc<[u8]>>) -> Result<i32> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     let v = item.to_vec();
@@ -946,18 +952,18 @@ fn decode_num(v: &[u8]) -> Result<i32> {
     }
 }
 
-fn decode_bool<'a>(item: &Cow<'a, [u8]>) -> bool {
+fn decode_bool(item: &[u8]) -> bool {
     !item.is_empty() && item[item.len() - 1] != 0x80 && item.iter().any(|&b| b != 0)
 }
 
-fn pop_bigint<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<BigInt> {
+fn pop_bigint(stack: &mut VecDeque<Rc<[u8]>>) -> Result<BigInt> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     let v = item.to_vec();
     Ok(decode_bigint(&v))
 }
 
-fn pop_bool<'a>(stack: &mut VecDeque<Cow<'a, [u8]>>) -> Result<bool> {
+fn pop_bool(stack: &mut VecDeque<Rc<[u8]>>) -> Result<bool> {
     check_stack_size(1, stack)?;
     let item = stack.pop_back().expect("stack underflow");
     Ok(decode_bool(&item))
@@ -973,7 +979,7 @@ mod tests {
         let mut s = Script::new();
         s.append(OP_PUSH + 3);
         s.append_slice(&[1, 2, 3]);
-        let mut checker = TransactionlessChecker::default();
+        let mut checker = TransactionlessChecker;
         assert!(eval(&s.0, &mut checker, NO_FLAGS).is_ok());
     }
 }

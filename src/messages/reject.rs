@@ -65,10 +65,10 @@ impl Serializable<Reject> for Reject {
         let mut message_bytes = vec![0; message_size];
         reader
             .read_exact(&mut message_bytes)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let message = String::from_utf8(message_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 message".to_string()))?;
-        let code = reader.read_u8().map_err(|e| Error::IOError(e))?;
+        let code = reader.read_u8().map_err(Error::IOError)?;
         let reason_size = var_int::read(reader)? as usize;
         if reason_size > MAX_REASON_LEN {
             return Err(Error::BadData(format!("Reason too long: {}", reason_size)));
@@ -76,13 +76,13 @@ impl Serializable<Reject> for Reject {
         let mut reason_bytes = vec![0; reason_size];
         reader
             .read_exact(&mut reason_bytes)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let reason = String::from_utf8(reason_bytes)
             .map_err(|_| Error::BadData("Invalid UTF8 reason".to_string()))?;
         let mut data = vec![];
         if message == "block" || message == "tx" {
             let mut d = [0u8; 32];
-            reader.read_exact(&mut d).map_err(|e| Error::IOError(e))?;
+            reader.read_exact(&mut d).map_err(Error::IOError)?;
             data = d.to_vec();
         }
         Ok(Reject {
@@ -94,10 +94,10 @@ impl Serializable<Reject> for Reject {
     }
 
     fn write(&self, writer: &mut dyn Write) -> io::Result<()> {
-        var_int::write(self.message.as_bytes().len() as u64, writer)?;
+        var_int::write(self.message.len() as u64, writer)?;
         writer.write_all(self.message.as_bytes())?;
         writer.write_u8(self.code)?;
-        var_int::write(self.reason.as_bytes().len() as u64, writer)?;
+        var_int::write(self.reason.len() as u64, writer)?;
         writer.write_all(self.reason.as_bytes())?;
         writer.write_all(&self.data)?;
         Ok(())
@@ -157,11 +157,11 @@ impl AsyncSerializable<Reject> for Reject {
 
 impl Payload<Reject> for Reject {
     fn size(&self) -> usize {
-        var_int::size(self.message.as_bytes().len() as u64)
-            + self.message.as_bytes().len()
+        var_int::size(self.message.len() as u64)
+            + self.message.len()
             + 1
-            + var_int::size(self.reason.as_bytes().len() as u64)
-            + self.reason.as_bytes().len()
+            + var_int::size(self.reason.len() as u64)
+            + self.reason.len()
             + self.data.len()
     }
 }

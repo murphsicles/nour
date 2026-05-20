@@ -48,15 +48,11 @@ impl NodeAddr {
 
 impl Serializable<NodeAddr> for NodeAddr {
     fn read(reader: &mut dyn Read) -> Result<NodeAddr> {
-        let services = reader
-            .read_u64::<LittleEndian>()
-            .map_err(|e| Error::IOError(e))?;
+        let services = reader.read_u64::<LittleEndian>().map_err(Error::IOError)?;
         let mut ip = [0; 16];
-        reader.read_exact(&mut ip).map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut ip).map_err(Error::IOError)?;
         let ip = Ipv6Addr::from(ip);
-        let port = reader
-            .read_u16::<BigEndian>()
-            .map_err(|e| Error::IOError(e))?;
+        let port = reader.read_u16::<BigEndian>().map_err(Error::IOError)?;
         Ok(NodeAddr { services, ip, port })
     }
 

@@ -120,21 +120,17 @@ impl Serializable<BloomFilter> for BloomFilter {
             return Err(Error::BadData("Filter too long".to_string()));
         }
         let mut filter = vec![0; filter_len];
-        reader
-            .read_exact(&mut filter)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut filter).map_err(Error::IOError)?;
         let mut num_hash_funcs = [0u8; 4];
         reader
             .read_exact(&mut num_hash_funcs)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         if num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS {
             return Err(Error::BadData("Too many hash funcs".to_string()));
         }
         let mut tweak = [0u8; 4];
-        reader
-            .read_exact(&mut tweak)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut tweak).map_err(Error::IOError)?;
         let tweak = u32::from_le_bytes(tweak);
         Ok(BloomFilter {
             filter,
@@ -172,7 +168,7 @@ mod tests {
     fn write_read() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
         for i in 0..5 {
-            bf.add(&vec![i as u8; 32]).unwrap();
+            bf.add(&[i as u8; 32]).unwrap();
         }
         let mut v = Vec::new();
         bf.write(&mut v).unwrap();
@@ -182,9 +178,9 @@ mod tests {
     #[test]
     fn contains() {
         let mut bf = BloomFilter::new(20000.0, 0.001).unwrap();
-        bf.add(&vec![5u8; 32]).unwrap();
-        assert!(bf.contains(&vec![5u8; 32]));
-        assert!(!bf.contains(&vec![6u8; 32]));
+        bf.add(&[5u8; 32]).unwrap();
+        assert!(bf.contains(&[5u8; 32]));
+        assert!(!bf.contains(&[6u8; 32]));
     }
 
     #[test]

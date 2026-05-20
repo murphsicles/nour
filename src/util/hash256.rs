@@ -50,9 +50,7 @@ impl From<Sha256dHash> for Hash256 {
 impl Serializable<Hash256> for Hash256 {
     fn read(reader: &mut dyn Read) -> Result<Hash256> {
         let mut bytes = [0; 32];
-        reader
-            .read_exact(&mut bytes)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut bytes).map_err(Error::IOError)?;
         Ok(Hash256(bytes))
     }
 

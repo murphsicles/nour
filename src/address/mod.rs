@@ -52,7 +52,7 @@ pub fn encode_address(_network: Network, version: u8, payload: &[u8]) -> Result<
 #[must_use]
 #[inline]
 pub fn decode_address(input: &str) -> Result<(u8, Vec<u8>)> {
-    let bytes = input.from_base58().map_err(|e| Error::FromBase58Error(e))?;
+    let bytes = input.from_base58().map_err(Error::FromBase58Error)?;
     if bytes.len() != 25 {
         return Err(Error::BadData("Invalid address length".to_string()));
     }

@@ -18,9 +18,7 @@ impl Ping {
 impl Serializable<Ping> for Ping {
     fn read(reader: &mut dyn Read) -> Result<Ping> {
         let mut nonce = [0u8; 8];
-        reader
-            .read_exact(&mut nonce)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut nonce).map_err(Error::IOError)?;
         Ok(Ping {
             nonce: u64::from_le_bytes(nonce),
         })

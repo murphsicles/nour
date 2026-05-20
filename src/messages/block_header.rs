@@ -79,7 +79,7 @@ impl BlockHeader {
     /// `Error::BadArgument` if difficulty exponent out of range (3-32).
     fn difficulty_target(&self) -> Result<Hash256> {
         let exp = (self.bits >> 24) as usize;
-        if exp < 3 || exp > 32 {
+        if !(3..=32).contains(&exp) {
             return Err(Error::BadArgument(format!(
                 "Difficulty exponent out of range: {}",
                 exp
@@ -102,26 +102,18 @@ impl BlockHeader {
 impl Serializable<BlockHeader> for BlockHeader {
     fn read(reader: &mut dyn Read) -> Result<BlockHeader> {
         let mut version = [0u8; 4];
-        reader
-            .read_exact(&mut version)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut version).map_err(Error::IOError)?;
         let version = u32::from_le_bytes(version);
         let prev_hash = Hash256::read(reader)?;
         let merkle_root = Hash256::read(reader)?;
         let mut timestamp = [0u8; 4];
-        reader
-            .read_exact(&mut timestamp)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut timestamp).map_err(Error::IOError)?;
         let timestamp = u32::from_le_bytes(timestamp);
         let mut bits = [0u8; 4];
-        reader
-            .read_exact(&mut bits)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut bits).map_err(Error::IOError)?;
         let bits = u32::from_le_bytes(bits);
         let mut nonce = [0u8; 4];
-        reader
-            .read_exact(&mut nonce)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut nonce).map_err(Error::IOError)?;
         let nonce = u32::from_le_bytes(nonce);
         Ok(BlockHeader {
             version,

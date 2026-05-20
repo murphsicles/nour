@@ -46,11 +46,9 @@ impl Serializable<TxIn> for TxIn {
         let mut unlock_script = vec![0; script_len];
         reader
             .read_exact(&mut unlock_script)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let mut sequence = [0u8; 4];
-        reader
-            .read_exact(&mut sequence)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut sequence).map_err(Error::IOError)?;
         let sequence = u32::from_le_bytes(sequence);
         Ok(TxIn {
             prev_output,

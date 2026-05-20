@@ -164,9 +164,7 @@ impl Tx {
 impl Serializable<Tx> for Tx {
     fn read(reader: &mut dyn Read) -> Result<Tx> {
         let mut version = [0u8; 4];
-        reader
-            .read_exact(&mut version)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut version).map_err(Error::IOError)?;
         let version = u32::from_le_bytes(version);
         let n_inputs = var_int::read(reader)?;
         if n_inputs > MAX_INPUTS {
@@ -185,9 +183,7 @@ impl Serializable<Tx> for Tx {
             outputs.push(TxOut::read(reader)?);
         }
         let mut lock_time = [0u8; 4];
-        reader
-            .read_exact(&mut lock_time)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut lock_time).map_err(Error::IOError)?;
         let lock_time = u32::from_le_bytes(lock_time);
         Ok(Tx {
             version,

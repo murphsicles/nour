@@ -37,20 +37,16 @@ impl Serializable<FilterLoad> for FilterLoad {
     fn read(reader: &mut dyn Read) -> Result<FilterLoad> {
         let num_filters = var_int::read(reader)?;
         let mut filter = vec![0; num_filters as usize];
-        reader
-            .read_exact(&mut filter)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut filter).map_err(Error::IOError)?;
         let mut num_hash_funcs = [0u8; 4];
         reader
             .read_exact(&mut num_hash_funcs)
-            .map_err(|e| Error::IOError(e))?;
+            .map_err(Error::IOError)?;
         let num_hash_funcs = u32::from_le_bytes(num_hash_funcs) as usize;
         let mut tweak = [0u8; 4];
-        reader
-            .read_exact(&mut tweak)
-            .map_err(|e| Error::IOError(e))?;
+        reader.read_exact(&mut tweak).map_err(Error::IOError)?;
         let tweak = u32::from_le_bytes(tweak);
-        let flags = reader.read_u8().map_err(|e| Error::IOError(e))?;
+        let flags = reader.read_u8().map_err(Error::IOError)?;
         Ok(FilterLoad {
             bloom_filter: BloomFilter {
                 filter,
