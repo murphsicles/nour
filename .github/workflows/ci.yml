@@ -15,10 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install LLVM + Clang
+      - name: Install LLVM + Clang (matching zetac binary — LLVM 21)
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm clang
+          # Add LLVM official repo for LLVM 21 (zetac built against this)
+          sudo apt-get install -y wget gnupg
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm.asc
+          sudo add-apt-repository -y "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-21 clang-21 libllvm21
+          # Symlink so llc/clang are in PATH
+          sudo ln -sf /usr/bin/llc-21 /usr/local/bin/llc
+          sudo ln -sf /usr/bin/clang-21 /usr/local/bin/clang
 
       - name: Setup Zeta compiler
         run: |
@@ -44,7 +52,7 @@ jobs:
               exit 1
             fi
           fi
-          zetac --help || echo "(help not a flag)"
+          zetac --help 2>&1 || true
 
       - name: Build library
         run: |
