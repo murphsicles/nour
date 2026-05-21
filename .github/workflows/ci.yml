@@ -24,24 +24,23 @@ jobs:
         run: |
           # Download pre-built zetac from GitHub releases
           ZETAC_URL="https://github.com/murphsicles/zeta/releases/download/${ZETA_VERSION}/zetac-linux-x64"
+          echo "Downloading zetac from $ZETAC_URL..."
           if curl -sLf "$ZETAC_URL" -o /tmp/zetac; then
             chmod +x /tmp/zetac
             sudo mv /tmp/zetac /usr/local/bin/zetac
+            echo "zetac downloaded and installed"
           else
-            # Fallback: build from source
-            echo "Pre-built not found, building from source..."
-            git clone --depth 1 --branch ${ZETA_VERSION} https://github.com/murphsicles/zeta.git /tmp/zeta-src
+            echo "Pre-built not found at $ZETAC_URL, building from source..."
+            git clone --depth 1 https://github.com/murphsicles/zeta.git /tmp/zeta-src
             cd /tmp/zeta-src
-            # Build zetac (Rust source expected in src/)
+            git fetch origin ${ZETA_VERSION}
+            git checkout ${ZETA_VERSION} || git checkout main
             if [ -f Cargo.toml ]; then
               cargo build --release
               sudo cp target/release/zetac /usr/local/bin/zetac
-            elif ls *.rs >/dev/null 2>&1; then
-              # Non-cargo - compile directly
-              rustc -O src/main.rs -o /tmp/zetac
-              sudo mv /tmp/zetac /usr/local/bin/zetac
             else
-              echo "Need zetac binary - please upload to GitHub releases"
+              echo "ERROR: Need zetac binary - upload to GitHub releases"
+              echo "URL tested: $ZETAC_URL"
               exit 1
             fi
           fi
