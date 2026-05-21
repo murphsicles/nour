@@ -1,5 +1,5 @@
 [package]
-name = "nour"
+name = "@crypto/nour"
 version = "1.0.3"
 edition = "2026"
 description = "High-performance Bitcoin SV toolkit — transactions, scripts, P2P, wallets, addresses"
