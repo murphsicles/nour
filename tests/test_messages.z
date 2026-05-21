@@ -1,0 +1,265 @@
+// Tests for the nour::messages module — serialization round-trips and field validation.
+// Run with: zeta run tests/test_messages.z
+
+use messages.{Ping, Version, MessageHeader, OutPoint, TxIn, TxOut, NodeAddr}
+use messages.{ping_read, ping_write, version_read, version_write}
+use messages.{message_header_read, message_header_write, message_header_size}
+use messages.{out_point_read, out_point_write, out_point_size}
+use messages.{tx_in_read, tx_in_write, tx_out_read, tx_out_write}
+use messages.{UNKNOWN_IP, NODE_NETWORK, PROTOCOL_VERSION}
+use messages.{MAX_USER_AGENT_LEN, NO_CHECKSUM, MESSAGE_HEADER_SIZE}
+use messages.{commands}
+
+// ── Helper ──────────────────────────────────────────────────────────
+
+fn bytes_eq(a: [u8], b: [u8]) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i = 0
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false
+        }
+        i += 1
+    }
+    true
+}
+
+fn report(name: string, ok: bool) {
+    if ok {
+        println("  PASS: " ++ name)
+    } else {
+        println("  FAIL: " ++ name)
+    }
+}
+
+var g_pass: u64 = 0
+var g_fail: u64 = 0
+
+fn check(name: string, ok: bool) {
+    if ok {
+        g_pass += 1
+        println("  PASS: " ++ name)
+    } else {
+        g_fail += 1
+        println("  FAIL: " ++ name)
+    }
+}
+
+// ── Test 1: Ping message round-trip ─────────────────────────────────
+
+fn test_ping_roundtrip() {
+    println("\n── Test 1: Ping message round-trip ──")
+
+    let original = Ping { nonce: 42 }
+    let bytes = ping_write(original)
+    let (decoded, _) = ping_read(bytes, 0)
+
+    check("Ping nonce matches", decoded.nonce == 42)
+    check("Ping serialized size", bytes.len() == 8)
+}
+
+// ── Test 2: Version message round-trip ──────────────────────────────
+
+fn test_version_roundtrip() {
+    println("\n── Test 2: Version message round-trip ──")
+
+    let recv_addr = NodeAddr { services: NODE_NETWORK, ip: UNKNOWN_IP, port: 8333 }
+    let tx_addr = NodeAddr { services: NODE_NETWORK, ip: UNKNOWN_IP, port: 8333 }
+    let user_agent = [] as [u8]
+
+    let original = Version {
+        version: PROTOCOL_VERSION,
+        services: NODE_NETWORK,
+        timestamp: 1700000000,
+        recv_addr,
+        tx_addr,
+        nonce: 123456789,
+        user_agent,
+        start_height: 0,
+        relay: true,
+    }
+
+    let bytes = version_write(original)
+    let (decoded, _) = version_read(bytes, 0)
+
+    check("Version field matches", decoded.version == PROTOCOL_VERSION)
+    check("Nonce field matches", decoded.nonce == 123456789)
+    check("Relay field matches", decoded.relay == true)
+    check("Start height matches", decoded.start_height == 0)
+    check("User agent empty", decoded.user_agent.len() == 0)
+}
+
+// ── Test 3: MessageHeader serialization ─────────────────────────────
+
+fn test_message_header() {
+    println("\n── Test 3: MessageHeader serialization ──")
+
+    let magic: [u8] = [0xe3, 0xe1, 0xf3, 0xe8]   // BSV mainnet magic
+    let command: [u8] = commands::PING
+    let payload: [u8] = [0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]  // nonce=42 LE
+    let checksum: [u8] = [0xde, 0xad, 0xbe, 0xef]  // dummy checksum
+
+    let header = MessageHeader {
+        magic,
+        command,
+        payload_size: payload.len() as u32,
+        checksum,
+    }
+
+    let bytes = message_header_write(header)
+    let (decoded, _) = message_header_read(bytes, 0)
+
+    check("Header size matches", bytes.len() == MESSAGE_HEADER_SIZE)
+    check("Magic matches", bytes_eq(decoded.magic, magic))
+    check("Command matches", bytes_eq(decoded.command, command))
+    check("Payload size matches", decoded.payload_size == payload.len() as u32)
+    check("Checksum matches", bytes_eq(decoded.checksum, checksum))
+}
+
+// ── Test 4: VarInt encoding at boundaries ───────────────────────────
+
+fn test_varint_boundaries() {
+    println("\n── Test 4: VarInt boundary encoding ──")
+
+    // 1-byte: values 0..=252
+    check("VarInt 0 → 1 byte", var_int_size(0) == 1)
+    check("VarInt 252 → 1 byte", var_int_size(252) == 1)
+
+    // 3-byte: values 253..=65535  (prefix 0xfd)
+    check("VarInt 253 → 3 bytes", var_int_size(253) == 3)
+    check("VarInt 65535 → 3 bytes", var_int_size(65535) == 3)
+
+    // 5-byte: values 65536..=4294967295  (prefix 0xfe)
+    check("VarInt 65536 → 5 bytes", var_int_size(65536) == 5)
+    check("VarInt 4294967295 → 5 bytes", var_int_size(4294967295) == 5)
+
+    // 9-byte: values > 4294967295  (prefix 0xff)
+    check("VarInt 4294967296 → 9 bytes", var_int_size(4294967296) == 9)
+    check("VarInt max u64 → 9 bytes", var_int_size(18446744073709551615) == 9)
+
+    // Round-trip test at each boundary
+    // 252 — single byte
+    let b252 = var_int_write(252)
+    let (v252, _) = var_int_read(b252, 0)
+    check("VarInt round-trip 252", v252 == 252)
+
+    // 253 — 3-byte threshold
+    let b253 = var_int_write(253)
+    let (v253, _) = var_int_read(b253, 0)
+    check("VarInt round-trip 253", v253 == 253)
+
+    // 65535 — 3-byte max
+    let b65535 = var_int_write(65535)
+    let (v65535, _) = var_int_read(b65535, 0)
+    check("VarInt round-trip 65535", v65535 == 65535)
+
+    // 65536 — 5-byte threshold
+    let b65536 = var_int_write(65536)
+    let (v65536, _) = var_int_read(b65536, 0)
+    check("VarInt round-trip 65536", v65536 == 65536)
+
+    // 4294967295 — 5-byte max
+    let b4294967295 = var_int_write(4294967295)
+    let (v4294967295, _) = var_int_read(b4294967295, 0)
+    check("VarInt round-trip 4294967295", v4294967295 == 4294967295)
+
+    // 4294967296 — 9-byte threshold
+    let b4294967296 = var_int_write(4294967296)
+    let (v4294967296, _) = var_int_read(b4294967296, 0)
+    check("VarInt round-trip 4294967296", v4294967296 == 4294967296)
+}
+
+// ── Test 5: TxIn/TxOut structure ───────────────────────────────────
+
+fn test_txin_txout() {
+    println("\n── Test 5: TxIn/TxOut structure ──")
+
+    // Build an OutPoint with a known hash
+    let op_hash: [u8] = [0; 32]
+    op_hash[0] = 0xab
+    op_hash[31] = 0xcd
+    let outpoint = OutPoint { hash: op_hash, index: 0 }
+
+    let unlock_script: [u8] = [0x76, 0xa9, 0x14]  // OP_DUP OP_HASH160 OP_PUSH...
+    let txin = TxIn {
+        prev_output: outpoint,
+        unlock_script,
+        sequence: 0xffffffff,
+    }
+
+    let lock_script: [u8] = [0x88, 0xac]  // OP_EQUALVERIFY OP_CHECKSIG
+    let txout = TxOut {
+        satoshis: 5000000000,  // 50 BSV
+        lock_script,
+    }
+
+    // Serialize TxIn
+    let in_bytes = tx_in_write(txin)
+    let (txin_decoded, _) = tx_in_read(in_bytes, 0)
+
+    check("TxIn sequence matches", txin_decoded.sequence == 0xffffffff)
+    check("TxIn unlock_script matches", bytes_eq(txin_decoded.unlock_script, unlock_script))
+    check("TxIn prev_output.index matches", txin_decoded.prev_output.index == 0)
+    check("TxIn prev_output.hash[0] matches", txin_decoded.prev_output.hash[0] == 0xab)
+    check("TxIn prev_output.hash[31] matches", txin_decoded.prev_output.hash[31] == 0xcd)
+
+    // Serialize TxOut
+    let out_bytes = tx_out_write(txout)
+    let (txout_decoded, _) = tx_out_read(out_bytes, 0)
+
+    check("TxOut satoshis matches", txout_decoded.satoshis == 5000000000)
+    check("TxOut lock_script matches", bytes_eq(txout_decoded.lock_script, lock_script))
+}
+
+// ── Test 6: OutPoint structure ─────────────────────────────────────
+
+fn test_outpoint() {
+    println("\n── Test 6: OutPoint structure ──")
+
+    // Create an OutPoint with a specific hash and index
+    let hash: [u8] = [0; 32]
+    hash[0] = 0x01
+    hash[1] = 0x02
+    hash[15] = 0xff
+    hash[31] = 0xaa
+
+    let op = OutPoint { hash, index: 7 }
+
+    let bytes = out_point_write(op)
+    let (decoded, _) = out_point_read(bytes, 0)
+
+    check("OutPoint size matches", bytes.len() == out_point_size())
+    check("OutPoint index matches", decoded.index == 7)
+    check("OutPoint hash[0] matches", decoded.hash[0] == 0x01)
+    check("OutPoint hash[15] matches", decoded.hash[15] == 0xff)
+    check("OutPoint hash[31] matches", decoded.hash[31] == 0xaa)
+}
+
+// ── Main ───────────────────────────────────────────────────────────
+
+fn main() -> u64 {
+    println("===== nour::messages test suite =====")
+
+    test_ping_roundtrip()
+    test_version_roundtrip()
+    test_message_header()
+    test_varint_boundaries()
+    test_txin_txout()
+    test_outpoint()
+
+    let total = g_pass + g_fail
+    println("\n────── Summary ──────")
+    println("  Total: " ++ total as string)
+    println("  Pass:  " ++ g_pass as string)
+    println("  Fail:  " ++ g_fail as string)
+
+    if g_fail > 0 {
+        println("  ❌ SOME TESTS FAILED")
+        return 1
+    }
+
+    println("  ✅ ALL TESTS PASSED")
+    return 0
+}

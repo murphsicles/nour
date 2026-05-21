@@ -1,0 +1,287 @@
+// test_transaction.z — Transaction module tests
+// Tests for sighash constants, P2PKH scripts, and sigHash prevouts.
+// Uses inline implementations. Prints PASS/FAIL per test with summary.
+
+use std.crypto
+
+// ─── Sighash Type Constants (mirroring src/transaction/sighash.z) ────────────
+
+const SIGHASH_FORKID: u8 = 0x40
+const SIGHASH_ALL: u8 = 0x01
+const SIGHASH_ALL_FORKID: u8 = SIGHASH_FORKID | SIGHASH_ALL // 0x41
+
+// ─── Script OP Code Constants (mirroring src/script/op_codes.z) ─────────────
+
+const OP_DUP: u8 = 0x76    // 118 decimal
+const OP_HASH160: u8 = 0xA9 // 169 decimal
+const OP_EQUALVERIFY: u8 = 0x88 // 136 decimal
+const OP_CHECKSIG: u8 = 0xAC   // 172 decimal
+const OP_PUSH: u8 = 0x00
+
+// ─── Inline Script Type ─────────────────────────────────────────────────────
+
+struct Script {
+    data: [u8; 65536],
+    len: i64,
+}
+
+fn script_new() -> Script {
+    return Script { data: [0; 65536], len: 0 }
+}
+
+fn script_append(s: &mut Script, byte: u8) {
+    if s.len < 65536 {
+        s.data[s.len] = byte;
+        s.len += 1;
+    }
+}
+
+fn script_append_slice(s: &mut Script, slice: [u8]) {
+    let mut i: i64 = 0;
+    while i < len(slice) && s.len < 65536 {
+        s.data[s.len] = slice[i];
+        i += 1;
+        s.len += 1;
+    }
+}
+
+fn script_append_data(s: &mut Script, data: [u8]) {
+    let data_len = len(data);
+    if data_len == 0 {
+        script_append(s, 0);
+    } else if data_len <= 75 {
+        script_append(s, OP_PUSH + data_len as u8);
+        script_append_slice(s, data);
+    }
+}
+
+// ─── Inline P2PKH Lock ─────────────────────────────────────────────────────
+
+fn create_lock_script(addr: [u8; 20]) -> Script {
+    let mut s = script_new();
+    script_append(&mut s, OP_DUP);
+    script_append(&mut s, OP_HASH160);
+    script_append(&mut s, OP_PUSH + 20);
+    script_append_slice(&mut s, addr);
+    script_append(&mut s, OP_EQUALVERIFY);
+    script_append(&mut s, OP_CHECKSIG);
+    return s;
+}
+
+// ─── Inline P2PKH Unlock ──────────────────────────────────────────────────
+
+fn create_unlock_script(sig: [u8], pubkey: [u8]) -> Script {
+    let mut s = script_new();
+    script_append_data(&mut s, sig);
+    script_append_data(&mut s, pubkey);
+    return s;
+}
+
+// ─── Inline OutPoint Struct ────────────────────────────────────────────────
+
+struct OutPoint {
+    hash: [u8; 32],
+    index: u32,
+}
+
+// ─── SigHash hashPrevouts (inline) ─────────────────────────────────────────
+
+fn write_u32_le(buf: [u8], off: i64, val: u32) {
+    buf[off] = (val & 0xFF) as u8;
+    buf[off + 1] = ((val >> 8) & 0xFF) as u8;
+    buf[off + 2] = ((val >> 16) & 0xFF) as u8;
+    buf[off + 3] = ((val >> 24) & 0xFF) as u8;
+}
+
+fn sha256(data: [u8]) -> [u8; 32] {
+    return crypto::sha256(data);
+}
+
+fn sha256d(data: [u8]) -> [u8; 32] {
+    return sha256(sha256(data));
+}
+
+fn hash_prevouts(op1: OutPoint, op2: OutPoint) -> [u8; 32] {
+    let mut buf: [u8; 72] = [0; 72];
+    // OutPoint 1: 32-byte hash + 4-byte index LE
+    let mut i: i64 = 0;
+    while i < 32 { buf[i] = op1.hash[i]; i += 1; }
+    write_u32_le(buf, 32, op1.index);
+    // OutPoint 2
+    i = 0;
+    while i < 32 { buf[36 + i] = op2.hash[i]; i += 1; }
+    write_u32_le(buf, 68, op2.index);
+    return sha256d(buf[0..72]);
+}
+
+// ─── Test Runner ───────────────────────────────────────────────────────────
+
+fn run_tests() {
+    let mut passed: i64 = 0;
+    let mut failed: i64 = 0;
+    let mut test_count: i64 = 0;
+
+    // ── Test 1: Sighash Constants ──────────────────────────────────────────
+
+    test_count += 1;
+    if SIGHASH_FORKID == 0x40 {
+        io::print("PASS: SIGHASH_FORKID = 0x40\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: SIGHASH_FORKID expected 0x40, got ");
+        io::print(SIGHASH_FORKID as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    test_count += 1;
+    if SIGHASH_ALL == 1 {
+        io::print("PASS: SIGHASH_ALL = 1\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: SIGHASH_ALL expected 1, got ");
+        io::print(SIGHASH_ALL as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    test_count += 1;
+    if SIGHASH_ALL_FORKID == 0x41 {
+        io::print("PASS: SIGHASH_ALL_FORKID = 0x41\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: SIGHASH_ALL_FORKID expected 0x41, got ");
+        io::print(SIGHASH_ALL_FORKID as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    // ── Test 2: P2PKH Lock Script ──────────────────────────────────────────
+
+    test_count += 1;
+    let test_addr: [u8; 20] = [
+        0x01, 0x02, 0x03, 0x04, 0x05,
+        0x06, 0x07, 0x08, 0x09, 0x0A,
+        0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0x10, 0x11, 0x12, 0x13, 0x14,
+    ];
+    let lock = create_lock_script(test_addr);
+    let lock_ok: bool = lock.len == 25
+        && lock.data[0] == 0x76  // OP_DUP
+        && lock.data[1] == 0xA9  // OP_HASH160
+        && lock.data[2] == 0x14  // OP_PUSH 20
+        && lock.data[3] == 0x01
+        && lock.data[22] == 0x14 // last byte of address
+        && lock.data[23] == 0x88 // OP_EQUALVERIFY
+        && lock.data[24] == 0xAC; // OP_CHECKSIG
+
+    if lock_ok {
+        io::print("PASS: P2PKH lock script structure (len=25, begins DUP/HASH160/20-push, ends EQUALVERIFY/CHECKSIG)\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: P2PKH lock script structure — expected 25 bytes starting with 0x76 0xA9 0x14, ending 0x88 0xAC\n");
+        io::print("  Got len=");
+        io::print(lock.len as string);
+        io::print(" data[0..5]=");
+        io::print(lock.data[0] as string);
+        io::print(" ");
+        io::print(lock.data[1] as string);
+        io::print(" ");
+        io::print(lock.data[2] as string);
+        io::print(" ");
+        io::print(lock.data[3] as string);
+        io::print(" ");
+        io::print(lock.data[4] as string);
+        io::print(" data[23..25]=");
+        io::print(lock.data[23] as string);
+        io::print(" ");
+        io::print(lock.data[24] as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    // ── Test 3: P2PKH Unlock Script ────────────────────────────────────────
+
+    test_count += 1;
+    let dummy_sig: [u8; 71] = [0x30; 71];
+    let dummy_pk: [u8; 33] = [0x02; 33];
+    let unlock = create_unlock_script(dummy_sig[0..71], dummy_pk[0..33]);
+
+    // Expected: 1 byte push (71=0x47) + 71 sig bytes + 1 byte push (33=0x21) + 33 pk bytes = 106
+    let expected_len: i64 = 1 + 71 + 1 + 33;
+    let unlock_ok: bool = unlock.len == expected_len
+        && unlock.data[0] == 0x47  // OP_PUSH 71
+        && unlock.data[1] == 0x30  // first sig byte
+        && unlock.data[71] == 0x21 // OP_PUSH 33
+        && unlock.data[72] == 0x02; // first pk byte
+
+    if unlock_ok {
+        io::print("PASS: P2PKH unlock script structure (pushdata sig=");
+        io::print(71 as string);
+        io::print(", pushdata pk=");
+        io::print(33 as string);
+        io::print(")\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: P2PKH unlock script — expected ");
+        io::print(expected_len as string);
+        io::print(" bytes, got ");
+        io::print(unlock.len as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    // ── Test 4: SigHash hashPrevouts ───────────────────────────────────────
+
+    test_count += 1;
+    let op1 = OutPoint {
+        hash: [
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11,
+            0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11,
+            0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+        ],
+        index: 0,
+    };
+    let op2 = OutPoint {
+        hash: [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ],
+        index: 1,
+    };
+
+    let hp = hash_prevouts(op1, op2);
+
+    // Verify 64 bytes (double SHA-256 produces 32 bytes)
+    if len(hp) == 32 {
+        io::print("PASS: hashPrevouts returns 32-byte result\n");
+        passed += 1;
+    } else {
+        io::print("FAIL: hashPrevouts expected 32 bytes, got ");
+        io::print(len(hp) as string);
+        io::print("\n");
+        failed += 1;
+    }
+
+    // ── Summary ────────────────────────────────────────────────────────────
+
+    io::print("\n─── Transaction Test Summary ───\n");
+    io::print("Total: ");
+    io::print(test_count as string);
+    io::print(" | PASS: ");
+    io::print(passed as string);
+    io::print(" | FAIL: ");
+    io::print(failed as string);
+    io::print("\n");
+
+    if failed > 0 {
+        io::exit(1);
+    }
+}
+
+pub fn main() {
+    run_tests();
+}

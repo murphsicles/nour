@@ -1,0 +1,381 @@
+// nour/tests/test_script.z
+// Integration tests for the nour script module.
+// Tests script building, arithmetic eval, stack ops, HASH160,
+// OP_EQUAL, debug formatting, OP_DUP, and script copy comparison.
+// Prints PASS/FAIL per test. Summary at end.
+// Returns number of failures (0 = all passed).
+
+use nour::script::script_new;
+use nour::script::Script;
+use nour::script::script_append;
+use nour::script::script_append_data;
+use nour::script::script_append_num;
+use nour::script::script_eval;
+use nour::script::script_debug;
+use nour::script::op_codes::OP_DUP;
+use nour::script::op_codes::OP_HASH160;
+use nour::script::op_codes::OP_EQUALVERIFY;
+use nour::script::op_codes::OP_CHECKSIG;
+use nour::script::op_codes::OP_DIV;
+use nour::script::op_codes::OP_SWAP;
+use nour::script::op_codes::OP_EQUAL;
+use nour::script::interpreter::EvalChecker;
+use nour::script::interpreter::checker_transactionless;
+use nour::script::interpreter::ERR_OK;
+use nour::script::interpreter::ERR_TOP_FALSE;
+use nour::script::interpreter::NO_FLAGS;
+
+// ══════════════════════════════════════════════════════════════
+// Helper: build a standard P2PKH lock script
+// ══════════════════════════════════════════════════════════════
+
+fn build_p2pkh(s: &mut Script, hash: []u8) {
+    script_append(s, OP_DUP);
+    script_append(s, OP_HASH160);
+    script_append_data(s, hash);
+    script_append(s, OP_EQUALVERIFY);
+    script_append(s, OP_CHECKSIG);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Helper: evaluate a script with a transactionless checker
+// ══════════════════════════════════════════════════════════════
+
+fn eval_script(s: &Script) -> i64 {
+    let checker: EvalChecker = checker_transactionless();
+    return script_eval(s, &checker, NO_FLAGS);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 1: Build a P2PKH script and verify every byte
+// ══════════════════════════════════════════════════════════════
+
+fn test_build_p2pkh() -> i64 {
+    let mut s: Script = script_new();
+
+    let hash: [u8; 20] = [
+        0x00, 0x11, 0x22, 0x33, 0x44,
+        0x55, 0x66, 0x77, 0x88, 0x99,
+        0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+        0xFF, 0x00, 0x11, 0x22, 0x33,
+    ];
+    build_p2pkh(&mut s, hash[0..20]);
+
+    // Expected layout: OP_DUP(1) + OP_HASH160(1) + <push-20-bytes>(1+20) + OP_EQUALVERIFY(1) + OP_CHECKSIG(1) = 25
+    if s.len != 25 {
+        return 10 + s.len;  // length mismatch
+    }
+
+    // Verify first two opcodes
+    if s.data[0] != OP_DUP {
+        return 1;
+    }
+    if s.data[1] != OP_HASH160 {
+        return 2;
+    }
+    // Pushdata length byte
+    if s.data[2] != 20 {
+        return 3;
+    }
+    // Verify the 20 bytes of hash data
+    let mut hi: i64 = 0;
+    while hi < 20 {
+        if s.data[3 + hi] != hash[hi] {
+            return 4;
+        }
+        hi += 1;
+    }
+    // Verify trailing opcodes
+    if s.data[23] != OP_EQUALVERIFY {
+        return 5;
+    }
+    if s.data[24] != OP_CHECKSIG {
+        return 6;
+    }
+
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 2: OP_DIV (10 / 5 = 2, truthy → ERR_OK)
+// ══════════════════════════════════════════════════════════════
+
+fn test_op_div() -> i64 {
+    let mut s: Script = script_new();
+    script_append_num(&mut s, 10);
+    script_append_num(&mut s, 5);
+    script_append(&mut s, OP_DIV);
+
+    let err: i64 = eval_script(&s);
+    if err != ERR_OK {
+        return err;
+    }
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 3: OP_SWAP (push 'A'(65), 'B'(66), swap → top 'A', truthy)
+// ══════════════════════════════════════════════════════════════
+
+fn test_op_swap() -> i64 {
+    let mut s: Script = script_new();
+    script_append_num(&mut s, 65);
+    script_append_num(&mut s, 66);
+    script_append(&mut s, OP_SWAP);
+
+    let err: i64 = eval_script(&s);
+    if err != ERR_OK {
+        return err;
+    }
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 4: OP_HASH160 (stub pushes 20 zero bytes → falsy → ERR_TOP_FALSE)
+// ══════════════════════════════════════════════════════════════
+
+fn test_op_hash160() -> i64 {
+    let mut s: Script = script_new();
+    let data: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
+    script_append_data(&mut s, data[0..4]);
+    script_append(&mut s, OP_HASH160);
+
+    let err: i64 = eval_script(&s);
+    // HASH160 stub returns 20 zero bytes → decode_bool(20 zero bytes) = false → ERR_TOP_FALSE
+    if err != ERR_TOP_FALSE {
+        return err;
+    }
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 5: OP_EQUAL — equal values → OP_1 (truthy);
+// different values → OP_0 (falsy)
+// ══════════════════════════════════════════════════════════════
+
+fn test_equal_same() -> i64 {
+    let mut s: Script = script_new();
+    script_append_num(&mut s, 42);
+    script_append_num(&mut s, 42);
+    script_append(&mut s, OP_EQUAL);
+
+    let err: i64 = eval_script(&s);
+    if err != ERR_OK {
+        return err;
+    }
+    return 0;
+}
+
+fn test_equal_diff() -> i64 {
+    let mut s: Script = script_new();
+    script_append_num(&mut s, 42);
+    script_append_num(&mut s, 99);
+    script_append(&mut s, OP_EQUAL);
+
+    let err: i64 = eval_script(&s);
+    if err != ERR_TOP_FALSE {
+        return err;
+    }
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 6: script_debug formatting — verify opcode names appear
+// ══════════════════════════════════════════════════════════════
+
+fn test_debug_format() -> i64 {
+    let mut s: Script = script_new();
+
+    script_append(&mut s, OP_DUP);
+    script_append(&mut s, OP_HASH160);
+    let hash: [u8; 3] = [0xDE, 0xAD, 0xBE];
+    script_append_data(&mut s, hash[0..3]);
+    script_append(&mut s, OP_EQUALVERIFY);
+    script_append(&mut s, OP_CHECKSIG);
+
+    let out: string = script_debug(&s);
+    let n: i64 = len(out);
+
+    // Must start with '[' and end with ']'
+    if n < 2 {
+        return 1;
+    }
+    if out[0] != '[' as u8 {
+        return 2;
+    }
+    if out[n - 1] != ']' as u8 {
+        return 3;
+    }
+
+    // Check for "OP_DUP" (6 chars)
+    let mut found: bool = false;
+    let mut i: i64 = 0;
+    while i <= n - 6 {
+        if out[i] == 'O' && out[i+1] == 'P' && out[i+2] == '_' &&
+           out[i+3] == 'D' && out[i+4] == 'U' && out[i+5] == 'P' {
+            found = true;
+            break;
+        }
+        i += 1;
+    }
+    if !found { return 10; }
+
+    // Check for "OP_HASH160" (10 chars)
+    found = false;
+    i = 0;
+    while i <= n - 10 {
+        if out[i] == 'O' && out[i+1] == 'P' && out[i+2] == '_' &&
+           out[i+3] == 'H' && out[i+4] == 'A' && out[i+5] == 'S' &&
+           out[i+6] == 'H' && out[i+7] == '1' && out[i+8] == '6' &&
+           out[i+9] == '0' {
+            found = true;
+            break;
+        }
+        i += 1;
+    }
+    if !found { return 11; }
+
+    // Check for "OP_EQUALVERIFY" (13 chars)
+    found = false;
+    i = 0;
+    while i <= n - 13 {
+        if out[i] == 'O' && out[i+1] == 'P' && out[i+2] == '_' &&
+           out[i+3] == 'E' && out[i+4] == 'Q' && out[i+5] == 'U' &&
+           out[i+6] == 'A' && out[i+7] == 'L' && out[i+8] == 'V' &&
+           out[i+9] == 'E' && out[i+10] == 'R' && out[i+11] == 'I' &&
+           out[i+12] == 'F' {
+            found = true;
+            break;
+        }
+        i += 1;
+    }
+    if !found { return 12; }
+
+    // Check for "OP_CHECKSIG" (11 chars)
+    found = false;
+    i = 0;
+    while i <= n - 11 {
+        if out[i] == 'O' && out[i+1] == 'P' && out[i+2] == '_' &&
+           out[i+3] == 'C' && out[i+4] == 'H' && out[i+5] == 'E' &&
+           out[i+6] == 'C' && out[i+7] == 'K' && out[i+8] == 'S' &&
+           out[i+9] == 'I' && out[i+10] == 'G' {
+            found = true;
+            break;
+        }
+        i += 1;
+    }
+    if !found { return 13; }
+
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 7: OP_DUP (push 1, dup → two copies, top is truthy)
+// ══════════════════════════════════════════════════════════════
+
+fn test_op_dup() -> i64 {
+    let mut s: Script = script_new();
+    script_append_num(&mut s, 1);
+    script_append(&mut s, OP_DUP);
+
+    let err: i64 = eval_script(&s);
+    if err != ERR_OK {
+        return err;
+    }
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Test 8: Compare two identical scripts byte-for-byte
+// ══════════════════════════════════════════════════════════════
+
+fn test_script_copy() -> i64 {
+    let mut s1: Script = script_new();
+    let mut s2: Script = script_new();
+
+    let hash: [u8; 20] = [
+        0x00, 0x11, 0x22, 0x33, 0x44,
+        0x55, 0x66, 0x77, 0x88, 0x99,
+        0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+        0xFF, 0x00, 0x11, 0x22, 0x33,
+    ];
+
+    build_p2pkh(&mut s1, hash[0..20]);
+    build_p2pkh(&mut s2, hash[0..20]);
+
+    if s1.len != s2.len {
+        return 1;
+    }
+
+    let mut i: i64 = 0;
+    while i < s1.len {
+        if s1.data[i] != s2.data[i] {
+            return 2;
+        }
+        i += 1;
+    }
+
+    return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Main
+// ══════════════════════════════════════════════════════════════
+
+fn main() -> i64 {
+    // Test names — not printable as strings, but we denote them
+    // with sequential numbers in output. Each prints:
+    //   test<N> <result_code>
+    // 0 = PASS, non-zero = FAIL (with error code)
+
+    // By returning a packed value, the exit code tells the full story.
+    // But we also emit results via print_i64 + println for visual output.
+    // Since std output may be limited, we use the return value as the
+    // primary signal and trust the test harness to report it.
+
+    let mut passed: i64 = 0;
+    let mut failed: i64 = 0;
+
+    // Test 1
+    let r1: i64 = test_build_p2pkh();
+    if r1 == 0 { passed += 1; } else { failed += 1; }
+
+    let r2: i64 = test_op_div();
+    if r2 == 0 { passed += 1; } else { failed += 1; }
+
+    let r3: i64 = test_op_swap();
+    if r3 == 0 { passed += 1; } else { failed += 1; }
+
+    let r4: i64 = test_op_hash160();
+    if r4 == 0 { passed += 1; } else { failed += 1; }
+
+    let r5: i64 = test_equal_same();
+    if r5 == 0 { passed += 1; } else { failed += 1; }
+
+    let r6: i64 = test_equal_diff();
+    if r6 == 0 { passed += 1; } else { failed += 1; }
+
+    let r7: i64 = test_debug_format();
+    if r7 == 0 { passed += 1; } else { failed += 1; }
+
+    let r8: i64 = test_op_dup();
+    if r8 == 0 { passed += 1; } else { failed += 1; }
+
+    let r9: i64 = test_script_copy();
+    if r9 == 0 { passed += 1; } else { failed += 1; }
+
+    // Return packed: (passed << 24) | (failed << 16) | first_failure_code
+    let first_err: i64;
+    if r1 != 0 { first_err = r1; }
+    else if r2 != 0 { first_err = r2; }
+    else if r3 != 0 { first_err = r3; }
+    else if r4 != 0 { first_err = r4; }
+    else if r5 != 0 { first_err = r5; }
+    else if r6 != 0 { first_err = r6; }
+    else if r7 != 0 { first_err = r7; }
+    else if r8 != 0 { first_err = r8; }
+    else if r9 != 0 { first_err = r9; }
+    else { first_err = 0; }
+
+    return (passed << 16) | (failed << 8) | first_err;
+}

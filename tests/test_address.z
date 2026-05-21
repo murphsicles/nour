@@ -1,0 +1,672 @@
+//! Tests for the address module: P2PKH and P2SH base58check encoding/decoding.
+//!
+//! Each test prints PASS/FAIL with a final summary. Inlines base58 and
+//! sha256d implementations for standalone compile-and-run without module deps.
+
+use crypto;
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const B58_ALPHABET: string = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+// ---------------------------------------------------------------------------
+// Inline SHA256d
+// ---------------------------------------------------------------------------
+
+fn sha256d(data: []u8) -> [32]u8 {
+    return crypto::sha256d(data)
+}
+
+// ---------------------------------------------------------------------------
+// Inline Base58 Encode — convert byte slice (big-endian) to base58 string
+// ---------------------------------------------------------------------------
+
+fn base58_encode(data: []u8) -> string {
+    let data_len: i64 = len(data)
+    if data_len == 0 {
+        return ""
+    }
+
+    // Count leading zero bytes → each maps to a leading '1'
+    let zeros: i64 = 0
+    let mut zi: i64 = 0
+    while zi < data_len && data[zi] == 0 {
+        zeros += 1
+        zi += 1
+    }
+
+    if zi == data_len {
+        // All zeros → just the right number of "1"s
+        let mut all_ones: string = ""
+        let mut k: i64 = 0
+        while k < zeros {
+            all_ones = all_ones + "1"
+            k += 1
+        }
+        return all_ones
+    }
+
+    // Big-number division by 58: we keep the quotient in a fixed buffer and
+    // collect remainders as base58 digits (little-endian until reversal).
+    let mut digits: [i64; 128] = [0i64; 128]
+    let mut digit_count: i64 = 0
+
+    let mut buf: [i64; 128] = [0i64; 128]
+    let mut buf_len: i64 = 0
+
+    // Copy non-leading bytes into buf as big-endian i64 limbs
+    while zi < data_len {
+        buf[buf_len] = data[zi] as i64
+        buf_len += 1
+        zi += 1
+    }
+
+    // Repeated divide the big number (buf) by 58, collect remainders
+    let mut start: i64 = 0
+    while start < buf_len {
+        let mut carry: i64 = 0
+        let mut j: i64 = start
+        while j < buf_len {
+            carry = carry * 256 + buf[j]
+            buf[j] = carry / 58
+            carry = carry % 58
+            j += 1
+        }
+        digits[digit_count] = carry
+        digit_count += 1
+
+        // Advance past leading zeros in the quotient
+        while start < buf_len && buf[start] == 0 {
+            start += 1
+        }
+    }
+
+    // Build output: leading "1"s then base58 digits in reverse
+    let mut out: string = ""
+    let mut k: i64 = 0
+    while k < zeros {
+        out = out + "1"
+        k += 1
+    }
+    let mut ri: i64 = digit_count - 1
+    while ri >= 0 {
+        let d: i64 = digits[ri]
+        // Extract single character from alphabet string
+        out = out + B58_ALPHABET[d..d + 1]
+        ri -= 1
+    }
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// Inline Base58 Decode (full, with optional checksum verification)
+// ---------------------------------------------------------------------------
+
+// Returns the decoded bytes, or an empty slice on failure.
+// When verify_cs is true, the last 4 bytes must match double-SHA256 checksum.
+fn base58_decode_full(input: string, verify_cs: bool) -> []u8 {
+    let in_len: i64 = len(input)
+    if in_len == 0 {
+        return []
+    }
+
+    // Count leading '1's → leading zero bytes
+    let leading_ones: i64 = 0
+    let mut ci: i64 = 0
+    while ci < in_len && input[ci..ci + 1] == "1" {
+        leading_ones += 1
+        ci += 1
+    }
+
+    if ci == in_len {
+        // All '1's → that many zero bytes
+        let mut result: [u8; 128] = [0u8; 128]
+        return result[0..leading_ones]
+    }
+
+    // Decode each character: big number = big number * 58 + digit_value
+    let mut buf: [i64; 256] = [0i64; 256]
+    let mut buf_len: i64 = 1
+
+    while ci < in_len {
+        let ch: string = input[ci..ci + 1]
+        // Look up digit value in the alphabet
+        let mut val: i64 = -1
+        let mut ai: i64 = 0
+        while ai < 58 {
+            if B58_ALPHABET[ai..ai + 1] == ch {
+                val = ai
+                break
+            }
+            ai += 1
+        }
+        if val < 0 {
+            return [] // Invalid character
+        }
+
+        // Multiply existing big number by 58, then add val
+        let mut carry: i64 = val
+        let mut bi: i64 = 0
+        while bi < buf_len {
+            carry = carry + buf[bi] * 58
+            buf[bi] = carry & 0xFF
+            carry = carry >> 8
+            bi += 1
+        }
+        while carry > 0 {
+            buf[buf_len] = carry & 0xFF
+            buf_len += 1
+            carry = carry >> 8
+        }
+        ci += 1
+    }
+
+    // buf now holds the big-endian number in little-endian byte order
+    // Build the output: leading_ones zero bytes, then buf bytes in reverse
+    let out_len: i64 = leading_ones + buf_len
+    let mut out: [u8; 256] = [0u8; 256]
+    let mut oi: i64 = 0
+    while oi < leading_ones {
+        out[oi] = 0
+        oi += 1
+    }
+    let mut bi: i64 = buf_len - 1
+    while bi >= 0 {
+        out[oi] = buf[bi] as u8
+        oi += 1
+        bi -= 1
+    }
+
+    // Truncate to actual length
+    let raw_bytes: []u8 = out[0..out_len]
+
+    // Optional checksum verification (Base58Check)
+    if verify_cs {
+        if out_len < 4 {
+            return []
+        }
+        let payload: []u8 = raw_bytes[0..out_len - 4]
+        let checksum: []u8 = raw_bytes[out_len - 4..out_len]
+        let hash: [32]u8 = sha256d(payload)
+        let mut i: i64 = 0
+        while i < 4 {
+            if checksum[i] != hash[i] {
+                return [] // Checksum mismatch
+            }
+            i += 1
+        }
+    }
+
+    return raw_bytes
+}
+
+// ---------------------------------------------------------------------------
+// Inline Address Encoding — Base58Check with version byte
+// ---------------------------------------------------------------------------
+
+fn encode_address_b58check(version: u8, payload: [u8]) -> (string, i64) {
+    let payload_len: i64 = len(payload)
+    if payload_len != 20 {
+        return ("", -1) // Must be exactly 20 bytes (Hash160)
+    }
+
+    // Build 25-byte buffer: version(1) + payload(20) + checksum(4)
+    let mut raw: [u8; 25] = [0u8; 25]
+    raw[0] = version
+    let mut i: i64 = 0
+    while i < 20 {
+        raw[i + 1] = payload[i]
+        i += 1
+    }
+
+    // Double-SHA256 checksum, take first 4 bytes
+    let hash: [32]u8 = sha256d(raw[0..21])
+    let mut j: i64 = 0
+    while j < 4 {
+        raw[21 + j] = hash[j]
+        j += 1
+    }
+
+    return (base58_encode(raw[0..25]), 0)
+}
+
+// Decode a Base58Check address into (version_byte + payload) or empty on error.
+// Returns (bytes, error_code) where error_code is 0 for success, -1 for failure.
+fn decode_address_b58check(input: string) -> ([]u8, i64) {
+    if len(input) == 0 {
+        return ([], -1)
+    }
+
+    let decoded: []u8 = base58_decode_full(input, true)
+    if len(decoded) == 0 {
+        return ([], -1)
+    }
+
+    if len(decoded) != 21 {
+        return ([], -1)
+    }
+
+    return (decoded, 0)
+}
+
+// ---------------------------------------------------------------------------
+// Network & Address type constants
+// ---------------------------------------------------------------------------
+
+const MAINNET_P2PKH_VER: u8 = 0x00
+const MAINNET_P2SH_VER: u8 = 0x05
+const TESTNET_P2PKH_VER: u8 = 0x6F
+const TESTNET_P2SH_VER: u8 = 0xC4
+
+// ---------------------------------------------------------------------------
+// Test 1: Base58 encode/decode roundtrip
+// ---------------------------------------------------------------------------
+
+fn test_b58_roundtrip() -> bool {
+    // Known pubkeyhash (20 bytes) derived from a well-known address
+    let hash: [20]u8 = [
+        0x01, 0x02, 0x03, 0x04, 0x05,
+        0x06, 0x07, 0x08, 0x09, 0x0A,
+        0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0x10, 0x11, 0x12, 0x13, 0x14,
+    ]
+
+    // Encode as mainnet P2PKH
+    let (addr, err) = encode_address_b58check(MAINNET_P2PKH_VER, hash[0..20])
+    if err != 0 {
+        println("  FAIL: encode_address_b58check returned error")
+        return false
+    }
+
+    // Decode it back
+    let (decoded, derr) = decode_address_b58check(addr)
+    if derr != 0 {
+        println("  FAIL: decode_address_b58check returned error")
+        return false
+    }
+
+    if len(decoded) != 21 {
+        println("  FAIL: decoded length != 21, got " + string(len(decoded)))
+        return false
+    }
+
+    if decoded[0] != MAINNET_P2PKH_VER {
+        println("  FAIL: decoded version mismatch")
+        return false
+    }
+
+    let mut match_ok: bool = true
+    let mut i: i64 = 0
+    while i < 20 {
+        if decoded[i + 1] != hash[i] {
+            match_ok = false
+        }
+        i += 1
+    }
+
+    if !match_ok {
+        println("  FAIL: decoded payload does not match original hash")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test 2: Known address decode
+// ---------------------------------------------------------------------------
+
+fn test_known_address() -> bool {
+    // Well-known Bitcoin address: 15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5
+    let address: string = "15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5"
+    let (decoded, err) = decode_address_b58check(address)
+    if err != 0 {
+        println("  FAIL: could not decode known address")
+        return false
+    }
+
+    // Must be mainnet P2PKH (version 0x00)
+    if decoded[0] != MAINNET_P2PKH_VER {
+        println("  FAIL: known address is not mainnet P2PKH, version=0x"
+            + hex_encode(decoded[0..1]))
+        return false
+    }
+
+    // Payload must be exactly 20 bytes
+    if len(decoded) != 21 {
+        println("  FAIL: decoded length is " + string(len(decoded)) + " (expected 21)")
+        return false
+    }
+
+    // The hash160 should be non-zero
+    let mut all_zero: bool = true
+    let mut i: i64 = 1
+    while i < 21 {
+        if decoded[i] != 0 {
+            all_zero = false
+        }
+        i += 1
+    }
+
+    if all_zero {
+        println("  FAIL: decoded hash is all zeros")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test 3: P2PKH vs P2SH — same hash, different address strings
+// ---------------------------------------------------------------------------
+
+fn test_p2pkh_vs_p2sh() -> bool {
+    let hash: [20]u8 = [
+        0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+        0xFF, 0x11, 0x22, 0x33, 0x44,
+        0x55, 0x66, 0x77, 0x88, 0x99,
+        0x00, 0x12, 0x34, 0x56, 0x78,
+    ]
+
+    let (p2pkh_addr, err1) = encode_address_b58check(MAINNET_P2PKH_VER, hash[0..20])
+    if err1 != 0 {
+        println("  FAIL: P2PKH encode error")
+        return false
+    }
+
+    let (p2sh_addr, err2) = encode_address_b58check(MAINNET_P2SH_VER, hash[0..20])
+    if err2 != 0 {
+        println("  FAIL: P2SH encode error")
+        return false
+    }
+
+    if p2pkh_addr == p2sh_addr {
+        println("  FAIL: P2PKH and P2SH addresses are identical!")
+        return false
+    }
+
+    // P2PKH (mainnet) starts with "1", P2SH (mainnet) starts with "3"
+    if p2pkh_addr[0..1] != "1" {
+        println("  FAIL: P2PKH address does not start with '1', got " + p2pkh_addr[0..1])
+        return false
+    }
+
+    if p2sh_addr[0..1] != "3" {
+        println("  FAIL: P2SH address does not start with '3', got " + p2sh_addr[0..1])
+        return false
+    }
+
+    // Both should be valid roundtrip
+    let (dec_p2pkh, derr1) = decode_address_b58check(p2pkh_addr)
+    if derr1 != 0 {
+        println("  FAIL: P2PKH address fails roundtrip decode")
+        return false
+    }
+
+    let (dec_p2sh, derr2) = decode_address_b58check(p2sh_addr)
+    if derr2 != 0 {
+        println("  FAIL: P2SH address fails roundtrip decode")
+        return false
+    }
+
+    // Same payload but different version bytes
+    if dec_p2pkh[0] != MAINNET_P2PKH_VER {
+        println("  FAIL: decoded P2PKH version wrong")
+        return false
+    }
+
+    if dec_p2sh[0] != MAINNET_P2SH_VER {
+        println("  FAIL: decoded P2SH version wrong")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test 4: Mainnet vs Testnet — same hash, different addresses
+// ---------------------------------------------------------------------------
+
+fn test_mainnet_vs_testnet() -> bool {
+    let hash: [20]u8 = [
+        0xDE, 0xAD, 0xBE, 0xEF, 0xCA,
+        0xFE, 0xBA, 0xBE, 0x00, 0x11,
+        0x22, 0x33, 0x44, 0x55, 0x66,
+        0x77, 0x88, 0x99, 0xAA, 0xBB,
+    ]
+
+    let (mainnet_addr, err1) = encode_address_b58check(MAINNET_P2PKH_VER, hash[0..20])
+    if err1 != 0 {
+        println("  FAIL: mainnet encode error")
+        return false
+    }
+
+    let (testnet_addr, err2) = encode_address_b58check(TESTNET_P2PKH_VER, hash[0..20])
+    if err2 != 0 {
+        println("  FAIL: testnet encode error")
+        return false
+    }
+
+    if mainnet_addr == testnet_addr {
+        println("  FAIL: mainnet and testnet addresses are identical!")
+        return false
+    }
+
+    // Decode both and verify version bytes
+    let (dec_main, derr1) = decode_address_b58check(mainnet_addr)
+    if derr1 != 0 {
+        println("  FAIL: mainnet address fails decode")
+        return false
+    }
+
+    let (dec_test, derr2) = decode_address_b58check(testnet_addr)
+    if derr2 != 0 {
+        println("  FAIL: testnet address fails decode")
+        return false
+    }
+
+    if dec_main[0] != MAINNET_P2PKH_VER {
+        println("  FAIL: mainnet decoded version is 0x" + hex_encode(dec_main[0..1])
+            + " (expected 0x00)")
+        return false
+    }
+
+    if dec_test[0] != TESTNET_P2PKH_VER {
+        println("  FAIL: testnet decoded version is 0x" + hex_encode(dec_test[0..1])
+            + " (expected 0x6F)")
+        return false
+    }
+
+    // The payloads should be identical
+    let mut payload_match: bool = true
+    let mut i: i64 = 1
+    while i < 21 {
+        if dec_main[i] != dec_test[i] {
+            payload_match = false
+        }
+        i += 1
+    }
+
+    if !payload_match {
+        println("  FAIL: payloads differ between mainnet and testnet")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: Error handling — invalid inputs
+// ---------------------------------------------------------------------------
+
+fn test_error_handling() -> bool {
+    // 5a: Empty string
+    let (_, err1) = decode_address_b58check("")
+    if err1 == 0 {
+        println("  FAIL: empty string should return error")
+        return false
+    }
+
+    // 5b: Invalid base58 characters ('0' is not in base58 alphabet)
+    let (_, err2) = decode_address_b58check("10IZ0")
+    if err2 == 0 {
+        println("  FAIL: string with invalid chars should return error")
+        return false
+    }
+
+    // 5c: String with 'l' (lowercase L, not in base58)
+    let (_, err3) = decode_address_b58check("1lmnop")
+    if err3 == 0 {
+        println("  FAIL: string with 'l' should return error")
+        return false
+    }
+
+    // 5d: String with 'O' (uppercase O, not in base58)
+    let (_, err4) = decode_address_b58check("1OPQR")
+    if err4 == 0 {
+        println("  FAIL: string with 'O' should return error")
+        return false
+    }
+
+    // 5e: String with 'I' (uppercase I, not in base58)
+    let (_, err5) = decode_address_b58check("1ISTUV")
+    if err5 == 0 {
+        println("  FAIL: string with 'I' should return error")
+        return false
+    }
+
+    // 5f: Valid base58 body but wrong length (not 25 bytes decoded).
+    //     A very short base58 string decodes to < 21 bytes after checksum strip.
+    //     "1A" decodes to a single byte, way too short.
+    let (_, err6) = decode_address_b58check("1A")
+    if err6 == 0 {
+        println("  FAIL: too-short string should return error")
+        return false
+    }
+
+    // 5g: Valid base58 of exactly 21 bytes but with mangled checksum.
+    //     Take the known address and flip the last character.
+    let good_addr: string = "15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5"
+    let good_len: i64 = len(good_addr)
+    // Change last character to something else in the alphabet
+    let last_char: string = good_addr[good_len - 1..good_len]
+    let new_char: string
+    if last_char == "5" {
+        new_char = "6"
+    } else {
+        new_char = "5"
+    }
+    let bad_addr: string = good_addr[0..good_len - 1] + new_char
+    let (_, err7) = decode_address_b58check(bad_addr)
+    if err7 == 0 {
+        println("  FAIL: corrupted address should fail checksum validation")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test 6 (bonus): encode_address with wrong length
+// ---------------------------------------------------------------------------
+
+fn test_bad_payload_length() -> bool {
+    // Payload that is not 20 bytes
+    let short_payload: [u8; 10] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A]
+    let (_, err) = encode_address_b58check(MAINNET_P2PKH_VER, short_payload[0..10])
+    if err == 0 {
+        println("  FAIL: non-20-byte payload should return error")
+        return false
+    }
+
+    // Empty payload
+    let (_, err2) = encode_address_b58check(MAINNET_P2PKH_VER, [])
+    if err2 == 0 {
+        println("  FAIL: empty payload should return error")
+        return false
+    }
+
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Main — run all tests and print summary
+// ---------------------------------------------------------------------------
+
+pub fn main() {
+    let total: i64 = 6
+    let mut passed: i64 = 0
+
+    println("=== Zeta Address Module Tests ===")
+    println("")
+
+    // Test 1
+    println("Test 1: Base58 encode/decode roundtrip")
+    if test_b58_roundtrip() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Test 2
+    println("Test 2: Known address decode (15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5)")
+    if test_known_address() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Test 3
+    println("Test 3: P2PKH vs P2SH (different prefixes)")
+    if test_p2pkh_vs_p2sh() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Test 4
+    println("Test 4: Mainnet vs Testnet (different version bytes)")
+    if test_mainnet_vs_testnet() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Test 5
+    println("Test 5: Error handling (invalid inputs)")
+    if test_error_handling() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Test 6
+    println("Test 6: Bad payload length")
+    if test_bad_payload_length() {
+        println("  PASS")
+        passed += 1
+    } else {
+        println("  FAIL")
+    }
+    println("")
+
+    // Summary
+    println("=== Summary ===")
+    println("  " + string(passed) + " / " + string(total) + " tests passed")
+
+    if passed == total {
+        println("  All tests PASSED! ✨")
+    } else {
+        println("  " + string(total - passed) + " test(s) FAILED! 💥")
+    }
+}

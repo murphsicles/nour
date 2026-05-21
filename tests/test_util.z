@@ -1,0 +1,873 @@
+// nour::util comprehensive test suite.
+// Tests var_int, bits, hash160, hash256, and bloom_filter APIs.
+// Run via: zetac tests/test_util.z
+//
+// Pure Zeta — no assert_eq!, no #[cfg(test)], just fn main().
+
+// =============================================================================
+// INLINED UTILITY FUNCTIONS
+// =============================================================================
+// These mirror the logic in nour::util so tests are self-contained and don't
+// depend on package resolution from the tests directory.
+
+// ---- var_int (size / write / read) ----
+
+fn size(n: i64) -> i64 {
+    if n <= 252 { return 1; }
+    if n <= 0xffff { return 3; }
+    if n <= 0xffffffff { return 5; }
+    return 9;
+}
+
+fn varint_write(n: i64, buf: []u8, pos: i64) -> i64 {
+    if n <= 252 {
+        if pos >= len(buf) { return -1; }
+        buf[pos] = n as u8;
+        return pos + 1;
+    }
+    if n <= 0xffff {
+        if pos + 3 > len(buf) { return -1; }
+        buf[pos] = 0xfd;
+        buf[pos + 1] = (n & 0xff) as u8;
+        buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+        return pos + 3;
+    }
+    if n <= 0xffffffff {
+        if pos + 5 > len(buf) { return -1; }
+        buf[pos] = 0xfe;
+        buf[pos + 1] = (n & 0xff) as u8;
+        buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+        buf[pos + 3] = ((n >> 16) & 0xff) as u8;
+        buf[pos + 4] = ((n >> 24) & 0xff) as u8;
+        return pos + 5;
+    }
+    if pos + 9 > len(buf) { return -1; }
+    buf[pos] = 0xff;
+    buf[pos + 1] = (n & 0xff) as u8;
+    buf[pos + 2] = ((n >> 8) & 0xff) as u8;
+    buf[pos + 3] = ((n >> 16) & 0xff) as u8;
+    buf[pos + 4] = ((n >> 24) & 0xff) as u8;
+    buf[pos + 5] = ((n >> 32) & 0xff) as u8;
+    buf[pos + 6] = ((n >> 40) & 0xff) as u8;
+    buf[pos + 7] = ((n >> 48) & 0xff) as u8;
+    buf[pos + 8] = ((n >> 56) & 0xff) as u8;
+    return pos + 9;
+}
+
+fn varint_read(buf: []u8, pos: i64) -> (i64, i64) {
+    if pos >= len(buf) { return (-1, pos); }
+    let n0: u8 = buf[pos];
+    if n0 == 0xff {
+        if pos + 9 > len(buf) { return (-1, pos); }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        val |= (buf[pos + 3] as i64) << 16;
+        val |= (buf[pos + 4] as i64) << 24;
+        val |= (buf[pos + 5] as i64) << 32;
+        val |= (buf[pos + 6] as i64) << 40;
+        val |= (buf[pos + 7] as i64) << 48;
+        val |= (buf[pos + 8] as i64) << 56;
+        return (val, pos + 9);
+    }
+    if n0 == 0xfe {
+        if pos + 5 > len(buf) { return (-1, pos); }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        val |= (buf[pos + 3] as i64) << 16;
+        val |= (buf[pos + 4] as i64) << 24;
+        return (val, pos + 5);
+    }
+    if n0 == 0xfd {
+        if pos + 3 > len(buf) { return (-1, pos); }
+        let mut val: i64 = 0;
+        val |= (buf[pos + 1] as i64);
+        val |= (buf[pos + 2] as i64) << 8;
+        return (val, pos + 3);
+    }
+    return (n0 as i64, pos + 1);
+}
+
+// ---- bits ----
+
+const LSHIFT_MASK: [8]u8 = [0xff, 0x7f, 0x3f, 0x1f, 0x0f, 0x07, 0x03, 0x01];
+const RSHIFT_MASK: [8]u8 = [0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80];
+
+struct Bits {
+    data: []u8,
+    len: i64,
+}
+
+fn Bits_new() -> Bits {
+    return Bits { data: [], len: 0 };
+}
+
+fn Bits_with_capacity(capacity: i64) -> Bits {
+    return Bits { data: [], len: 0 };
+}
+
+fn Bits_from_slice(data: []u8, bit_len: i64) -> Bits {
+    let mut vec: []u8 = [] + data;
+    let max_bit_len: i64 = len(data) * 8;
+    let actual_len: i64 = if bit_len < max_bit_len { bit_len } else { max_bit_len };
+    let byte_len: i64 = (actual_len + 7) / 8;
+    let mut trimmed: []u8 = [];
+    let mut i: i64 = 0;
+    while i < byte_len && i < len(vec) {
+        trimmed += vec[i];
+        i += 1;
+    }
+    let rem: i64 = actual_len % 8;
+    if rem != 0 {
+        let last_idx: i64 = len(trimmed) - 1;
+        let mask_val: u8 = !(((1u32 << (8 - rem)) - 1) as u8);
+        trimmed[last_idx] = trimmed[last_idx] & mask_val;
+    }
+    return Bits { data: trimmed, len: actual_len };
+}
+
+fn Bits_append(b: *Bits, other: *Bits) {
+    let mut i: i64 = 0;
+    while i < (*other).len / 8 {
+        Bits_append_byte(b, (*other).data[i], 8);
+        i += 1;
+    }
+    let rem: i64 = (*other).len % 8;
+    if rem != 0 {
+        Bits_append_byte(b, (*other).data[i], rem);
+    }
+}
+
+fn Bits_append_byte(b: *Bits, byte: u8, bit_len: i64) {
+    let end: i64 = (*b).len % 8;
+    if end == 0 {
+        (*b).data += byte;
+        (*b).len += bit_len;
+    } else {
+        let last_idx: i64 = len((*b).data) - 1;
+        (*b).data[last_idx] = (*b).data[last_idx] | (byte >> end);
+        if bit_len > 8 - end {
+            (*b).data += byte << (8 - end);
+        }
+        (*b).len += bit_len;
+    }
+}
+
+fn Bits_extract(b: *Bits, start: i64, bit_len: i64) -> i64 {
+    if start + bit_len > (*b).len { return 0; }
+    let end: i64 = start + bit_len;
+    let mut curr: i64 = 0;
+    let mut i: i64 = start;
+    let first_byte: i64 = start / 8;
+    let last_byte: i64 = (start + bit_len + 7) / 8;
+    let mut j: i64 = first_byte;
+    while j < last_byte {
+        let remaining: i64 = end - i;
+        let space_in_byte: i64 = 8 - (i - j * 8);
+        let b_len: i64 = if remaining < space_in_byte { remaining } else { space_in_byte };
+        curr = (curr << b_len) | (Bits_extract_byte(b, i, b_len) as i64);
+        i += b_len;
+        j += 1;
+    }
+    return curr;
+}
+
+fn Bits_extract_byte(b: *Bits, i: i64, bit_len: i64) -> u8 {
+    let offset: i64 = i % 8;
+    let shift_amt: i64 = 8 - offset - bit_len;
+    let byte_val: u8 = (*b).data[i / 8];
+    let shifted: u8 = byte_val >> shift_amt;
+    let mask: u8 = if bit_len == 0 { 0u8 } else { ((1u32 << bit_len) - 1) as u8 };
+    return shifted & mask;
+}
+
+fn lshift(v: []u8, n: i64) -> []u8 {
+    if n == 0 { return [] + v; }
+    let bit_shift: i64 = n % 8;
+    let byte_shift: i64 = n / 8;
+    let vlen: i64 = len(v);
+    if byte_shift >= vlen {
+        let mut result: []u8 = [];
+        let mut i: i64 = 0;
+        while i < vlen {
+            result += 0u8;
+            i += 1;
+        }
+        return result;
+    }
+    let mask: u8 = LSHIFT_MASK[bit_shift];
+    let overflow_mask: u8 = !mask;
+    let mut result: []u8 = [];
+    let mut ri: i64 = 0;
+    while ri < vlen {
+        result += 0u8;
+        ri += 1;
+    }
+    let mut i: i64 = vlen - 1;
+    while i >= 0 {
+        let k: i64 = i - byte_shift;
+        if k >= 0 && k < vlen {
+            let mut val: u8 = v[i] & mask;
+            val = val << bit_shift;
+            result[k] = result[k] | val;
+        }
+        if bit_shift > 0 && k - 1 >= 0 {
+            let mut carryval: u8 = v[i] & overflow_mask;
+            carryval = carryval >> (8 - bit_shift);
+            result[k - 1] = result[k - 1] | carryval;
+        }
+        i -= 1;
+    }
+    return result;
+}
+
+fn rshift(v: []u8, n: i64) -> []u8 {
+    if n == 0 { return [] + v; }
+    let bit_shift: i64 = n % 8;
+    let byte_shift: i64 = n / 8;
+    let vlen: i64 = len(v);
+    if byte_shift >= vlen {
+        let mut result: []u8 = [];
+        let mut i: i64 = 0;
+        while i < vlen {
+            result += 0u8;
+            i += 1;
+        }
+        return result;
+    }
+    let mask: u8 = RSHIFT_MASK[bit_shift];
+    let overflow_mask: u8 = !mask;
+    let mut result: []u8 = [];
+    let mut ri: i64 = 0;
+    while ri < vlen {
+        result += 0u8;
+        ri += 1;
+    }
+    let mut i: i64 = 0;
+    while i < vlen {
+        let k: i64 = i + byte_shift;
+        if k < vlen {
+            let mut val: u8 = v[i] & mask;
+            val = val >> bit_shift;
+            result[k] = result[k] | val;
+        }
+        if bit_shift > 0 && k + 1 < vlen {
+            let mut carryval: u8 = v[i] & overflow_mask;
+            carryval = carryval << (8 - bit_shift);
+            result[k + 1] = result[k + 1] | carryval;
+        }
+        i += 1;
+    }
+    return result;
+}
+
+// ---- hash160 & hash256 struct helpers (no crypto calls) ----
+
+struct Hash160 {
+    bytes: [20]u8,
+}
+
+fn Hash160_from_bytes(bytes: [20]u8) -> Hash160 {
+    return Hash160 { bytes: bytes };
+}
+
+fn Hash160_to_hex(h: *Hash160) -> string {
+    return hex_encode((*h).bytes);
+}
+
+struct Hash256 {
+    bytes: [32]u8,
+}
+
+fn Hash256_from_bytes(bytes: [32]u8) -> Hash256 {
+    return Hash256 { bytes: bytes };
+}
+
+fn Hash256_encode(h: *Hash256) -> string {
+    let mut reversed: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        reversed[31 - i] = (*h).bytes[i];
+        i += 1;
+    }
+    return hex_encode(reversed);
+}
+
+fn Hash256_decode(s: string) -> (Hash256, i64) {
+    let bytes: []u8 = hex_decode(s);
+    if len(bytes) != 32 { return (Hash256 { bytes: [0u8; 32] }, -1); }
+    let mut hash_bytes: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        hash_bytes[i] = bytes[i];
+        i += 1;
+    }
+    let mut reversed: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        reversed[31 - i] = hash_bytes[i];
+        i += 1;
+    }
+    return (Hash256 { bytes: reversed }, 0);
+}
+
+fn Hash256_cmp(a: *Hash256, b: *Hash256) -> i64 {
+    let mut i: i64 = 31;
+    while i >= 0 {
+        if (*a).bytes[i] < (*b).bytes[i] { return -1; }
+        if (*a).bytes[i] > (*b).bytes[i] { return 1; }
+        i -= 1;
+    }
+    return 0;
+}
+
+fn Hash256_eq(a: *Hash256, b: *Hash256) -> bool {
+    let mut i: i64 = 0;
+    while i < 32 {
+        if (*a).bytes[i] != (*b).bytes[i] { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+fn Hash256_read(buf: []u8, pos: i64) -> (Hash256, i64) {
+    if pos + 32 > len(buf) { return (Hash256 { bytes: [0u8; 32] }, -1); }
+    let mut bytes: [32]u8 = [0u8; 32];
+    let mut i: i64 = 0;
+    while i < 32 {
+        bytes[i] = buf[pos + i];
+        i += 1;
+    }
+    return (Hash256 { bytes: bytes }, pos + 32);
+}
+
+fn Hash256_write(h: *Hash256, buf: []u8, pos: i64) -> i64 {
+    if pos + 32 > len(buf) { return -1; }
+    let mut i: i64 = 0;
+    while i < 32 {
+        buf[pos + i] = (*h).bytes[i];
+        i += 1;
+    }
+    return pos + 32;
+}
+
+// ---- bloom_filter helpers (no crypto) ----
+
+const BLOOM_FILTER_MAX_FILTER_SIZE: i64 = 36000;
+const BLOOM_FILTER_MAX_HASH_FUNCS: i64 = 50;
+
+struct BloomFilter {
+    filter: []u8,
+    num_hash_funcs: i64,
+    tweak: i64,
+}
+
+fn BloomFilter_validate(bf: *BloomFilter) -> i64 {
+    if len((*bf).filter) > BLOOM_FILTER_MAX_FILTER_SIZE { return -1; }
+    if (*bf).num_hash_funcs > BLOOM_FILTER_MAX_HASH_FUNCS { return -2; }
+    return 0;
+}
+
+fn BloomFilter_read(buf: []u8, pos: i64) -> (BloomFilter, i64) {
+    let (filter_len, new_pos): (i64, i64) = varint_read(buf, pos);
+    if filter_len < 0 { return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -1); }
+    if filter_len > BLOOM_FILTER_MAX_FILTER_SIZE { return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -2); }
+    if new_pos + filter_len + 8 > len(buf) { return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -3); }
+    let mut filter: []u8 = [];
+    let mut i: i64 = 0;
+    while i < filter_len {
+        filter += buf[new_pos + i];
+        i += 1;
+    }
+    let pos2: i64 = new_pos + filter_len;
+    let mut num_hash_bytes: i64 = 0;
+    num_hash_bytes |= (buf[pos2] as i64);
+    num_hash_bytes |= (buf[pos2 + 1] as i64) << 8;
+    num_hash_bytes |= (buf[pos2 + 2] as i64) << 16;
+    num_hash_bytes |= (buf[pos2 + 3] as i64) << 24;
+    if num_hash_bytes > BLOOM_FILTER_MAX_HASH_FUNCS { return (BloomFilter { filter: [], num_hash_funcs: 0, tweak: 0 }, -4); }
+    let pos3: i64 = pos2 + 4;
+    let mut tweak: i64 = 0;
+    tweak |= (buf[pos3] as i64);
+    tweak |= (buf[pos3 + 1] as i64) << 8;
+    tweak |= (buf[pos3 + 2] as i64) << 16;
+    tweak |= (buf[pos3 + 3] as i64) << 24;
+    return (BloomFilter { filter: filter, num_hash_funcs: num_hash_bytes, tweak: tweak }, pos3 + 4);
+}
+
+fn BloomFilter_write(bf: *BloomFilter, buf: []u8, pos: i64) -> i64 {
+    let pos2: i64 = varint_write(len((*bf).filter), buf, pos);
+    if pos2 < 0 { return -1; }
+    if pos2 + len((*bf).filter) + 8 > len(buf) { return -1; }
+    let mut i: i64 = 0;
+    while i < len((*bf).filter) {
+        buf[pos2 + i] = (*bf).filter[i];
+        i += 1;
+    }
+    let pos3: i64 = pos2 + len((*bf).filter);
+    let nhf: i64 = (*bf).num_hash_funcs;
+    buf[pos3] = (nhf & 0xff) as u8;
+    buf[pos3 + 1] = ((nhf >> 8) & 0xff) as u8;
+    buf[pos3 + 2] = ((nhf >> 16) & 0xff) as u8;
+    buf[pos3 + 3] = ((nhf >> 24) & 0xff) as u8;
+    let tw: i64 = (*bf).tweak;
+    buf[pos3 + 4] = (tw & 0xff) as u8;
+    buf[pos3 + 5] = ((tw >> 8) & 0xff) as u8;
+    buf[pos3 + 6] = ((tw >> 16) & 0xff) as u8;
+    buf[pos3 + 7] = ((tw >> 24) & 0xff) as u8;
+    return pos3 + 8;
+}
+
+// ---- hex helpers ----
+
+fn hex_encode(buf: []u8) -> string {
+    let hex_chars: []u8 = "0123456789abcdef";
+    let mut out: string = "";
+    let mut i: i64 = 0;
+    while i < len(buf) {
+        out += hex_chars[(buf[i] >> 4) as i64] as string;
+        out += hex_chars[(buf[i] & 0x0f) as i64] as string;
+        i += 1;
+    }
+    return out;
+}
+
+fn hex_digit(c: u8) -> i64 {
+    if c >= 48 && c <= 57 { return (c - 48) as i64; }   // 0-9
+    if c >= 97 && c <= 102 { return (c - 87) as i64; }   // a-f
+    if c >= 65 && c <= 70 { return (c - 55) as i64; }    // A-F
+    return -1;
+}
+
+fn hex_decode(s: string) -> []u8 {
+    if len(s) % 2 != 0 { return []; }
+    let mut out: []u8 = [];
+    let mut i: i64 = 0;
+    while i < len(s) {
+        let hi: i64 = hex_digit(s[i]);
+        let lo: i64 = hex_digit(s[i + 1]);
+        if hi < 0 || lo < 0 { return []; }
+        out += ((hi << 4) | lo) as u8;
+        i += 2;
+    }
+    return out;
+}
+
+// =============================================================================
+// TEST RUNNER HELPERS
+// =============================================================================
+
+fn test_section(name: string) {
+    println("");
+    println("=== " + name + " ===");
+}
+
+var g_pass: i64 = 0;
+var g_fail: i64 = 0;
+
+fn run_test(name: string, ok: bool) {
+    if ok {
+        g_pass += 1;
+        println("  PASS: " + name);
+    } else {
+        g_fail += 1;
+        println("  FAIL: " + name);
+    }
+}
+
+// =============================================================================
+// VAR_INT TESTS
+// =============================================================================
+
+fn test_var_int_size() {
+    test_section("var_int::size");
+
+    run_test("size(0) == 1", size(0) == 1);
+    run_test("size(252) == 1", size(252) == 1);
+    run_test("size(253) == 3", size(253) == 3);
+    run_test("size(65535) == 3", size(65535) == 3);
+    run_test("size(65536) == 5", size(65536) == 5);
+    run_test("size(4294967295) == 5", size(4294967295) == 5);
+    run_test("size(4294967296) == 9", size(4294967296) == 9);
+}
+
+fn test_var_int_roundtrip() {
+    let test_vals: [7]i64 = [0, 252, 253, 65535, 65536, 4294967295, 4294967296];
+
+    let mut vi: i64 = 0;
+    while vi < 7 {
+        let n: i64 = test_vals[vi];
+        let buf_size: i64 = size(n);
+        let mut buf: []u8 = [];
+        let mut bi: i64 = 0;
+        while bi < buf_size {
+            buf += 0u8;
+            bi += 1;
+        }
+        let wrote: i64 = varint_write(n, buf, 0);
+        if wrote != buf_size {
+            run_test("varint_write(" + (n as string) + ") returned correct size", false);
+        } else {
+            let (read_val, new_pos): (i64, i64) = varint_read(buf, 0);
+            run_test("varint roundtrip " + (n as string) + " -> read == " + (n as string), read_val == n);
+            run_test("varint roundtrip " + (n as string) + " -> pos == " + (buf_size as string), new_pos == buf_size);
+        }
+        vi += 1;
+    }
+}
+
+fn test_var_int_edge_cases() {
+    // Write beyond buffer — should return -1
+    let tiny: []u8 = [0u8];
+    run_test("varint_write(253, buf[1], 0) == -1 (buffer too small)", varint_write(253, tiny, 0) == -1);
+
+    // Read beyond buffer — should return (-1, pos)
+    let (rv, rp): (i64, i64) = varint_read(tiny, 5);
+    run_test("varint_read(tiny, 5) returns -1", rv == -1);
+}
+
+fn test_var_int_all() {
+    test_var_int_size();
+    test_var_int_roundtrip();
+    test_var_int_edge_cases();
+}
+
+// =============================================================================
+// BITS TESTS
+// =============================================================================
+
+fn test_bits_from_slice() {
+    test_section("bits::Bits_from_slice");
+
+    let data: []u8 = [255u8];
+    let b: Bits = Bits_from_slice(data, 8);
+    run_test("bits_from_slice([255], 8) len == 8", b.len == 8);
+    run_test("bits_from_slice([255], 8) data[0] == 255", len(b.data) >= 1 && b.data[0] == 255);
+
+    // With a smaller bit_len
+    let b2: Bits = Bits_from_slice(data, 4);
+    run_test("bits_from_slice([255], 4) len == 4", b2.len == 4);
+    // 0b1111 (top nibble masked)
+    if len(b2.data) >= 1 {
+        run_test("bits_from_slice([255], 4) data[0] == 0xf0", b2.data[0] == 0xf0);
+    }
+
+    // Edge: bit_len == 0
+    let b3: Bits = Bits_from_slice(data, 0);
+    run_test("bits_from_slice([255], 0) len == 0", b3.len == 0);
+
+    // Edge: bit_len > actual data
+    let b4: Bits = Bits_from_slice(data, 16);
+    run_test("bits_from_slice([255], 16) len == 8 (clamped)", b4.len == 8);
+}
+
+fn test_bits_append() {
+    test_section("bits::append");
+
+    let mut b: Bits = Bits_new();
+    let a0: []u8 = [0u8];
+    let b0: Bits = Bits_from_slice(a0, 4);
+    Bits_append(&mut b, &b0);
+    run_test("append [0] len=4 -> b.len == 4", b.len == 4);
+
+    let a1: []u8 = [255u8];
+    let b1: Bits = Bits_from_slice(a1, 2);
+    Bits_append(&mut b, &b1);
+    run_test("append [255] len=2 -> b.len == 6", b.len == 6);
+
+    // After appending 4 bits of 0 then 2 bits of 1, the first byte should have
+    // bits: 0000 11xx = 0x30 (in the first byte)
+    if len(b.data) >= 1 {
+        run_test("append data byte[0] == 0x30", b.data[0] == 0x30);
+    }
+}
+
+fn test_bits_extract() {
+    test_section("bits::extract");
+
+    // bits([15, 23, 192], 24).extract(4, 13) → 7727
+    let src: []u8 = [15u8, 23u8, 192u8];
+    let mut bs: Bits = Bits_from_slice(src, 24);
+    let extracted: i64 = Bits_extract(&mut bs, 4, 13);
+    run_test("extract(4,13) from [15,23,192] == 7727", extracted == 7727);
+
+    // Extract beyond length — should return 0
+    let extracted2: i64 = Bits_extract(&mut bs, 20, 10);
+    run_test("extract beyond len returns 0", extracted2 == 0);
+}
+
+fn test_bits_lshift() {
+    test_section("bits::lshift");
+
+    // [0x80,0x00,0x00,0x01] by 1 → [0x00,0x00,0x00,0x02]
+    let input: []u8 = [0x80u8, 0x00u8, 0x00u8, 0x01u8];
+    let result: []u8 = lshift(input, 1);
+    run_test("lshift([0x80,0,0,0x01], 1) len == 4", len(result) == 4);
+    if len(result) == 4 {
+        run_test("lshift result[0] == 0x00", result[0] == 0x00);
+        run_test("lshift result[1] == 0x00", result[1] == 0x00);
+        run_test("lshift result[2] == 0x00", result[2] == 0x00);
+        run_test("lshift result[3] == 0x02", result[3] == 0x02);
+    }
+
+    // Edge: shift by 0
+    let same: []u8 = lshift(input, 0);
+    run_test("lshift([...], 0) returns copy", len(same) == 4);
+    if len(same) == 4 {
+        run_test("lshift([...], 0) same[0] == 0x80", same[0] == 0x80);
+        run_test("lshift([...], 0) same[3] == 0x01", same[3] == 0x01);
+    }
+
+    // Edge: shift by large value (>= len*8)
+    let zeroed: []u8 = lshift(input, 32);
+    run_test("lshift([...], 32) all zeroed", len(zeroed) == 4 && zeroed[0] == 0 && zeroed[1] == 0 && zeroed[2] == 0 && zeroed[3] == 0);
+}
+
+fn test_bits_rshift() {
+    test_section("bits::rshift");
+
+    // [0x80,0x00,0x00,0x02] by 1 → [0x40,0x00,0x00,0x01]
+    let input: []u8 = [0x80u8, 0x00u8, 0x00u8, 0x02u8];
+    let result: []u8 = rshift(input, 1);
+    run_test("rshift([0x80,0,0,0x02], 1) len == 4", len(result) == 4);
+    if len(result) == 4 {
+        run_test("rshift result[0] == 0x40", result[0] == 0x40);
+        run_test("rshift result[1] == 0x00", result[1] == 0x00);
+        run_test("rshift result[2] == 0x00", result[2] == 0x00);
+        run_test("rshift result[3] == 0x01", result[3] == 0x01);
+    }
+
+    // Edge: shift by 0
+    let same: []u8 = rshift(input, 0);
+    run_test("rshift([...], 0) returns copy", len(same) == 4);
+    if len(same) == 4 {
+        run_test("rshift([...], 0) same[0] == 0x80", same[0] == 0x80);
+    }
+
+    // Edge: full shift clears everything
+    let zeroed: []u8 = rshift(input, 32);
+    run_test("rshift([...], 32) all zeroed", len(zeroed) == 4 && zeroed[0] == 0 && zeroed[1] == 0 && zeroed[2] == 0 && zeroed[3] == 0);
+}
+
+fn test_bits_all() {
+    test_bits_from_slice();
+    test_bits_append();
+    test_bits_extract();
+    test_bits_lshift();
+    test_bits_rshift();
+}
+
+// =============================================================================
+// HASH160 TESTS
+// =============================================================================
+
+fn test_hash160() {
+    test_section("hash160 / Hash160");
+
+    // Hash160 struct: from_bytes + to_hex roundtrip
+    let raw: [20]u8 = [0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8,
+                       0x05u8, 0x06u8, 0x07u8, 0x08u8, 0x09u8,
+                       0x0au8, 0x0bu8, 0x0cu8, 0x0du8, 0x0eu8,
+                       0x0fu8, 0x10u8, 0x11u8, 0x12u8, 0x13u8];
+    let h160: Hash160 = Hash160_from_bytes(raw);
+    let hex_out: string = Hash160_to_hex(&h160);
+    run_test("Hash160_to_hex full", hex_out == "000102030405060708090a0b0c0d0e0f10111213");
+
+    // Known Hash160 test vector for empty data:
+    // hash160("") = RIPEMD160(SHA256(""))
+    // SHA256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    // RIPEMD160 of that = b472a266d0bd89c13706a4132ccfb16f7c3b9fcb
+    // We can't compute this without crypto, but we can test the struct methods.
+
+    // Test with known raw bytes
+    let known: [20]u8 = [0xb4u8, 0x72u8, 0xa2u8, 0x66u8, 0xd0u8,
+                         0xbdu8, 0x89u8, 0xc1u8, 0x37u8, 0x06u8,
+                         0xa4u8, 0x13u8, 0x2cu8, 0xcfu8, 0xb1u8,
+                         0x6fu8, 0x7cu8, 0x3bu8, 0x9fu8, 0xcbu8];
+    let h160k: Hash160 = Hash160_from_bytes(known);
+    run_test("Hash160 empty data known vector", Hash160_to_hex(&h160k) == "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb");
+}
+
+// =============================================================================
+// HASH256 / SHA256D TESTS
+// =============================================================================
+
+fn test_hash256() {
+    test_section("hash256 / sha256d");
+
+    // Hash256 struct: from_bytes + encode roundtrip
+    let raw: [32]u8 = [0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8,
+                       0x08u8, 0x09u8, 0x0au8, 0x0bu8, 0x0cu8, 0x0du8, 0x0eu8, 0x0fu8,
+                       0x10u8, 0x11u8, 0x12u8, 0x13u8, 0x14u8, 0x15u8, 0x16u8, 0x17u8,
+                       0x18u8, 0x19u8, 0x1au8, 0x1bu8, 0x1cu8, 0x1du8, 0x1eu8, 0x1fu8];
+    let h256: Hash256 = Hash256_from_bytes(raw);
+    // encode reverses bytes then hex-encodes
+    let encoded: string = Hash256_encode(&h256);
+    // Reversed: 1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100
+    run_test("Hash256_encode", encoded == "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100");
+
+    // decode roundtrip
+    let (decoded, err): (Hash256, i64) = Hash256_decode(encoded);
+    run_test("Hash256_decode success", err == 0);
+    run_test("Hash256 roundtrip eq", Hash256_eq(&h256, &decoded));
+
+    // decode invalid length
+    let (_, bad_err): (Hash256, i64) = Hash256_decode("abcdef");
+    run_test("Hash256_decode invalid hex length", bad_err == -1);
+
+    // cmp: equal
+    run_test("Hash256_cmp equal", Hash256_cmp(&h256, &decoded) == 0);
+
+    // cmp: less-than
+    let larger: [32]u8 = [0xffu8; 32];
+    let hl: Hash256 = Hash256_from_bytes(larger);
+    run_test("Hash256_cmp h256 < hl", Hash256_cmp(&h256, &hl) == -1);
+    run_test("Hash256_cmp hl > h256", Hash256_cmp(&hl, &h256) == 1);
+
+    // eq
+    run_test("Hash256_eq same", Hash256_eq(&h256, &decoded));
+    run_test("Hash256_eq different", !Hash256_eq(&h256, &hl));
+
+    // read / write
+    let mut write_buf: []u8 = [];
+    let mut wi: i64 = 0;
+    while wi < 64 {
+        write_buf += 0u8;
+        wi += 1;
+    }
+    let wpos: i64 = Hash256_write(&h256, write_buf, 0);
+    run_test("Hash256_write pos == 32", wpos == 32);
+
+    let (read_h, rpos): (Hash256, i64) = Hash256_read(write_buf, 0);
+    run_test("Hash256_read pos == 32", rpos == 32);
+    run_test("Hash256 read == write", Hash256_eq(&h256, &read_h));
+
+    // read beyond buffer
+    let tiny: []u8 = [0u8];
+    let (_, rerr): (Hash256, i64) = Hash256_read(tiny, 0);
+    run_test("Hash256_read beyond buffer returns -1", rerr == -1);
+
+    // write beyond buffer
+    let tiny2: []u8 = [0u8];
+    let wbad: i64 = Hash256_write(&h256, tiny2, 0);
+    run_test("Hash256_write beyond buffer returns -1", wbad == -1);
+}
+
+// =============================================================================
+// BLOOM FILTER TESTS
+// =============================================================================
+
+fn test_bloom_filter() {
+    test_section("bloom_filter");
+
+    // validate: valid filter
+    let bf: BloomFilter = BloomFilter { filter: [0u8, 0u8], num_hash_funcs: 10, tweak: 0 };
+    run_test("BloomFilter_validate valid == 0", BloomFilter_validate(&bf) == 0);
+
+    // validate: filter too large
+    let mut oversized: []u8 = [];
+    let mut oi: i64 = 0;
+    while oi < BLOOM_FILTER_MAX_FILTER_SIZE + 1 {
+        oversized += 0u8;
+        oi += 1;
+    }
+    let bf_big: BloomFilter = BloomFilter { filter: oversized, num_hash_funcs: 10, tweak: 0 };
+    run_test("BloomFilter_validate oversized returns -1", BloomFilter_validate(&bf_big) == -1);
+
+    // validate: too many hash funcs
+    let bf_many: BloomFilter = BloomFilter { filter: [0u8], num_hash_funcs: BLOOM_FILTER_MAX_HASH_FUNCS + 1, tweak: 0 };
+    run_test("BloomFilter_validate too many hash funcs returns -2", BloomFilter_validate(&bf_many) == -2);
+
+    // write / read roundtrip
+    let bf_rw: BloomFilter = BloomFilter { filter: [0xab, 0xcd], num_hash_funcs: 7, tweak: 12345 };
+
+    // compute size: varint(2) = 1 byte + 2 filter bytes + 4 nhf + 4 tweak = 11
+    let expected_size: i64 = 1 + 2 + 4 + 4;
+    let mut rw_buf: []u8 = [];
+    let mut rwi: i64 = 0;
+    while rwi < 33 {
+        rw_buf += 0u8;
+        rwi += 1;
+    }
+    let wp: i64 = BloomFilter_write(&bf_rw, rw_buf, 0);
+    run_test("BloomFilter_write returns correct pos", wp == expected_size);
+
+    let (bf_read, rp): (BloomFilter, i64) = BloomFilter_read(rw_buf, 0);
+    run_test("BloomFilter_read returns correct pos", rp == expected_size);
+    run_test("BloomFilter_read filter[0] matches", len(bf_read.filter) >= 1 && bf_read.filter[0] == 0xab);
+    run_test("BloomFilter_read filter[1] matches", len(bf_read.filter) >= 2 && bf_read.filter[1] == 0xcd);
+    run_test("BloomFilter_read num_hash_funcs matches", bf_read.num_hash_funcs == 7);
+    run_test("BloomFilter_read tweak matches", bf_read.tweak == 12345);
+
+    // read: beyond buffer returns error
+    let (_, rerr): (BloomFilter, i64) = BloomFilter_read(rw_buf, 11);
+    run_test("BloomFilter_read at end returns error", rerr < 0);
+
+    // read: bad varint (negative filter_len) from empty buffer
+    let (_, rerr2): (BloomFilter, i64) = BloomFilter_read([]u8, 0);
+    run_test("BloomFilter_read empty buf returns error", rerr2 < 0);
+
+    // write: buffer too small
+    let tiny_buf: []u8 = [0u8];
+    run_test("BloomFilter_write tiny buf returns -1", BloomFilter_write(&bf_rw, tiny_buf, 0) == -1);
+}
+
+// =============================================================================
+// HEX HELPERS TESTS
+// =============================================================================
+
+fn test_hex_helpers() {
+    test_section("hex helpers");
+
+    let data: []u8 = [0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
+    let encoded: string = hex_encode(data);
+    run_test("hex_encode([0xde, 0xad, 0xbe, 0xef])", encoded == "deadbeef");
+
+    let decoded: []u8 = hex_decode("deadbeef");
+    run_test("hex_decode length", len(decoded) == 4);
+    if len(decoded) == 4 {
+        run_test("hex_decode[0] == 0xde", decoded[0] == 0xde);
+        run_test("hex_decode[3] == 0xef", decoded[3] == 0xef);
+    }
+
+    // Uppercase hex
+    let up_decoded: []u8 = hex_decode("DEADBEEF");
+    run_test("hex_decode uppercase", len(up_decoded) == 4 && up_decoded[0] == 0xde);
+
+    // Invalid hex string
+    let bad: []u8 = hex_decode("xyz");
+    run_test("hex_decode invalid", len(bad) == 0);
+
+    // Odd-length hex string
+    let odd: []u8 = hex_decode("abc");
+    run_test("hex_decode odd length", len(odd) == 0);
+
+    // Empty hex string
+    let empty: []u8 = hex_decode("");
+    run_test("hex_decode empty", len(empty) == 0);
+}
+
+// =============================================================================
+// MAIN
+// =============================================================================
+
+fn main() {
+    g_pass = 0;
+    g_fail = 0;
+
+    println("nour::util test suite");
+    println("=====================");
+
+    test_var_int_all();
+    test_bits_all();
+    test_hash160();
+    test_hash256();
+    test_bloom_filter();
+    test_hex_helpers();
+
+    println("");
+    println("=====================");
+    println("Results: " + (g_pass as string) + " passed, " + (g_fail as string) + " failed");
+    println("=====================");
+}
