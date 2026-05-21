@@ -22,7 +22,7 @@ jobs:
 
       - name: Setup Zeta compiler
         run: |
-          # Try to download pre-built zetac from GitHub releases
+          # Download pre-built zetac from GitHub releases
           ZETAC_URL="https://github.com/murphsicles/zeta/releases/download/${ZETA_VERSION}/zetac-linux-x64"
           if curl -sLf "$ZETAC_URL" -o /tmp/zetac; then
             chmod +x /tmp/zetac
