@@ -1,6 +1,6 @@
 [package]
 name = "nour"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2026"
 description = "High-performance Bitcoin SV toolkit — transactions, scripts, P2P, wallets, addresses"
 license = "Open BSV"
