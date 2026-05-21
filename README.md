@@ -26,7 +26,7 @@ Add to your `zorb.toml`:
 
 ```toml
 [dependencies]
-nour = "0.1"
+"@crypto/nour" = "1.0"
 ```
 
 Then pull it down:
@@ -40,7 +40,7 @@ zorb install
 ### Encode a Base58 Address
 
 ```zeta
-use nour::address::{addr_encode, Network, AddressType};
+use crypto::nour::address::{addr_encode, Network, AddressType};
 
 let pubkeyhash: [u8; 20] = [0; 20];
 let addr = addr_encode(pubkeyhash, AddressType::P2PKH, Network::Mainnet);
@@ -50,7 +50,7 @@ print(addr);
 ### Decode a Base58 Address
 
 ```zeta
-use nour::address::{addr_decode, Network};
+use crypto::nour::address::{addr_decode, Network};
 
 let (pubkeyhash, addr_type) = addr_decode("15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5", Network::Mainnet);
 ```
@@ -58,9 +58,9 @@ let (pubkeyhash, addr_type) = addr_decode("15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5", 
 ### Connect to a Bitcoin SV Node
 
 ```zeta
-use nour::peer::{Peer, SVPeerFilter};
-use nour::messages::{Message, Ping, Version};
-use nour::network::Network;
+use crypto::nour::peer::{Peer, SVPeerFilter};
+use crypto::nour::messages::{Message, Ping, Version};
+use crypto::nour::network::Network;
 
 fn main() {
     let version = Version {
@@ -77,8 +77,8 @@ fn main() {
 ### Sign a Transaction
 
 ```zeta
-use nour::transaction::{generate_signature, SIGHASH_ALL_FORKID};
-use nour::script::{Script, script_debug};
+use crypto::nour::transaction::{generate_signature, SIGHASH_ALL_FORKID};
+use crypto::nour::script::{Script, script_debug};
 
 fn main() {
     let private_key: [u8; 32] = [0; 32];
