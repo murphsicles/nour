@@ -59,16 +59,16 @@ Handles encoding and decoding of BSV addresses.
 - `addr_decode(addr: string, network: Network) -> ([u8], AddressType)`: Decodes a Base58 address to public key hash and type.
   - Example:
     ```zeta
-    use nour::address::addr_decode;
-    use nour::network::Network;
+    use crypto::nour::address::addr_decode;
+    use crypto::nour::network::Network;
 
     let (pubkeyhash, addr_type) = addr_decode("15wpV72HRpAFPMmosR3jvGq7axU7t6ghX5", Network::Mainnet);
     ```
 - `addr_encode(pubkeyhash: [u8], addr_type: AddressType, network: Network) -> string`: Encodes a public key hash to a Base58 address.
   - Example:
     ```zeta
-    use nour::address::{addr_encode, AddressType};
-    use nour::network::Network;
+    use crypto::nour::address::{addr_encode, AddressType};
+    use crypto::nour::network::Network;
 
     let pubkeyhash: [u8; 20] = [0; 20];
     let addr = addr_encode(pubkeyhash, AddressType::P2PKH, Network::Mainnet);
@@ -143,7 +143,7 @@ Provides network configurations and seed node iteration.
 **Examples**:
 - Iterate through seed nodes:
     ```zeta
-    use nour::network::{network_config_new, seed_iter_next};
+    use crypto::nour::network::{network_config_new, seed_iter_next};
 
     let network = network_config_new(0); // Mainnet
     let mut iter = seed_iter_new(network);
@@ -170,9 +170,9 @@ Manages node connections and message sending/receiving.
 **Examples**:
 - Connect and send a ping:
     ```zeta
-    use nour::messages::{Message, Ping, Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION};
-    use nour::network::Network;
-    use nour::peer::{peer_connect, peer_send, SVPeerFilter};
+    use crypto::nour::messages::{Message, Ping, Version, NODE_BITCOIN_CASH, PROTOCOL_VERSION};
+    use crypto::nour::network::Network;
+    use crypto::nour::peer::{peer_connect, peer_send, SVPeerFilter};
 
     fn main() {
         let version = Version {
@@ -223,7 +223,7 @@ Handles script opcodes, stack evaluation, and signature checking.
 **Examples**:
 - Evaluate a simple script:
     ```zeta
-    use nour::script::{script_new, script_append, script_append_num, script_eval, TransactionlessChecker, NO_FLAGS, op_codes};
+    use crypto::nour::script::{script_new, script_append, script_append_num, script_eval, TransactionlessChecker, NO_FLAGS, op_codes};
 
     fn main() {
         let mut s = script_new();
@@ -257,9 +257,9 @@ Supports building and signing transactions.
 **Examples**:
 - Sign a P2PKH transaction input:
     ```zeta
-    use nour::transaction::{generate_signature, SIGHASH_ALL_FORKID};
-    use nour::transaction::p2pkh::{create_lock_script, create_unlock_script};
-    use nour::transaction::sighash::sighash;
+    use crypto::nour::transaction::{generate_signature, SIGHASH_ALL_FORKID};
+    use crypto::nour::transaction::p2pkh::{create_lock_script, create_unlock_script};
+    use crypto::nour::transaction::sighash::sighash;
 
     fn main() {
         let private_key: [u8; 32] = [0; 32];
@@ -299,7 +299,7 @@ Miscellaneous helpers and utilities.
 **Examples**:
 - Hashing:
     ```zeta
-    use nour::util::{hash160, sha256d};
+    use crypto::nour::util::{hash160, sha256d};
 
     fn main() {
         let data: [u8] = [0x74, 0x65, 0x73, 0x74]; // "test"
@@ -337,8 +337,8 @@ Wallet and key management with BIP-32 and BIP-39.
 **Examples**:
 - Derive a key from a seed:
     ```zeta
-    use nour::network::Network;
-    use nour::wallet::{extended_key_from_seed, derive_extended_key, encode_extended_key};
+    use crypto::nour::network::Network;
+    use crypto::nour::wallet::{extended_key_from_seed, derive_extended_key, encode_extended_key};
 
     fn main() {
         let seed: [u8; 64] = [0; 64]; // 512-bit seed

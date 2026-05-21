@@ -2,7 +2,7 @@
 
 A Zeta library for building Bitcoin SV (BSV) applications and infrastructure — P2P networking, address handling, transaction processing, script evaluation, node connections, and wallet management.
 
-[![Zorbs.io](https://img.shields.io/badge/zorbs.io-nour-cyan?logo=zeta)](https://zorbs.io/nour)
+[![Zorbs.io](https://img.shields.io/badge/zorbs.io-@crypto/nour-cyan?logo=zeta)](https://zorbs.io/@crypto/nour)
 [![License](https://img.shields.io/badge/license-Open%20BSV-blue)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-murphsicles/nour-181717?logo=github)](https://github.com/murphsicles/nour)
 [![GitHub last commit](https://img.shields.io/github/last-commit/murphsicles/nour?logo=github)](https://github.com/murphsicles/nour)
@@ -110,7 +110,7 @@ Performance-critical paths leverage Zeta's native capabilities:
 ## Module Structure
 
 ```
-nour/
+@crypto/nour/
 ├── zorb.toml
 ├── src/
 │   ├── lib.z          — Top-level module
@@ -127,6 +127,8 @@ nour/
 ## Original Rust Code
 
 The original Rust implementation is preserved on the [`rust`](https://github.com/murphsicles/nour/tree/rust) branch.
+
+Now available on zorbs.io as [`@crypto/nour`](https://zorbs.io/@crypto/nour).
 
 ## License
 
